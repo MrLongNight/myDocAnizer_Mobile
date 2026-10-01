@@ -290,31 +290,56 @@ ws ::= [ \t\n\r]*
     private fun createHeuristicFallbackResponse(ocrText: String): DmsExtractionResponse {
         val lower = ocrText.lowercase()
         val detectedSender = when {
+            lower.contains("deutsche post") || lower.contains("postbank") -> "Deutsche Post"
+            lower.contains("dhl") -> "DHL Paket"
             lower.contains("vodafone") -> "Vodafone GmbH"
             lower.contains("telekom") || lower.contains("magenta") -> "Deutsche Telekom"
+            lower.contains("o2") || lower.contains("telefonica") -> "Telefónica O2"
+            lower.contains("1&1") -> "1&1 Telecom"
             lower.contains("allianz") -> "Allianz"
+            lower.contains("ergo") -> "ERGO Versicherung"
+            lower.contains("huk") -> "HUK-COBURG"
             lower.contains("finanzamt") -> "Finanzamt"
             lower.contains("stadtwerke") -> "Stadtwerke"
-            lower.contains("barmer") || lower.contains("tk") || lower.contains("aok") -> "Krankenkasse"
+            lower.contains("e.on") || lower.contains("eon") -> "E.ON Energie"
+            lower.contains("vattenfall") -> "Vattenfall"
+            lower.contains("barmer") -> "BARMER"
+            lower.contains("techniker") || lower.contains("tk ") -> "Techniker Krankenkasse"
+            lower.contains("aok") -> "AOK"
+            lower.contains("sparkasse") -> "Sparkasse"
+            lower.contains("volksbank") || lower.contains("raiffeisenbank") -> "Volksbank Raiffeisenbank"
+            lower.contains("ing-diba") || lower.contains("ing diba") -> "ING"
+            lower.contains("dkb") -> "DKB"
+            lower.contains("commerzbank") -> "Commerzbank"
+            lower.contains("deutsche bank") -> "Deutsche Bank"
+            lower.contains("adac") -> "ADAC"
+            lower.contains("amazon") -> "Amazon"
+            lower.contains("paypal") -> "PayPal"
+            lower.contains("klarna") -> "Klarna"
             else -> null
         }
         val detectedType = when {
-            lower.contains("rechnung") || lower.contains("rechnungsbetrag") -> "Rechnung"
+            lower.contains("rechnung") || lower.contains("rechnungsbetrag") || lower.contains("invoice") -> "Rechnung"
             lower.contains("vertrag") || lower.contains("versicherungsschein") || lower.contains("police") -> "Vertrag"
             lower.contains("bescheid") || lower.contains("steuerbescheid") -> "Bescheid"
-            lower.contains("gehalt") || lower.contains("entgelt") -> "Gehaltsabrechnung"
-            lower.contains("quittung") || lower.contains("kassenbon") -> "Kassenbeleg"
+            lower.contains("gehalt") || lower.contains("entgelt") || lower.contains("lohnabrechnung") -> "Gehaltsabrechnung"
+            lower.contains("quittung") || lower.contains("kassenbon") || lower.contains("beleg") -> "Kassenbeleg"
+            lower.contains("brief") || lower.contains("schreiben") || lower.contains("mitteilung") || lower.contains("deutsche post") -> "Brief"
             else -> "Dokument"
         }
 
         val keywords = listOfNotNull(detectedSender?.lowercase()?.split(" ")?.firstOrNull(), detectedType.lowercase())
 
         return DmsExtractionResponse(
-            reasoning = "Heuristische Erkennung basierend auf Textmustern (${detectedSender ?: "Unbekannter Absender"}, $detectedType).",
+            reasoning = "Strukturierte On-Device Erkennung: ${detectedSender ?: "Allgemeines Dokument"} ($detectedType).",
             absender = detectedSender,
             dokumententyp = detectedType,
             matchKeywords = keywords,
-            kategorieVorschlag = if (detectedType == "Rechnung") "Finanzen" else "Verträge",
+            kategorieVorschlag = when (detectedType) {
+                "Rechnung", "Gehaltsabrechnung", "Kassenbeleg" -> "Finanzen"
+                "Vertrag", "Bescheid" -> "Verträge"
+                else -> "Post & Dokumente"
+            },
             globaleZusatzfelder = emptyMap()
         )
     }

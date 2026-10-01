@@ -231,16 +231,18 @@ fun SettingsView(
             }
         }
 
-        when (selectedSettingsTab) {
-            0 -> ScannerSettingsTab(viewModel)
-            1 -> PdfSettingsTab(viewModel)
-            2 -> IncomeExpenseSettingsTab(viewModel)
-            3 -> DocTypesSettingsTab(viewModel)
-            4 -> RulesAndAiSettingsTab(viewModel)
-            5 -> SecuritySettingsTab(viewModel)
-            6 -> P2pSyncTab(viewModel)
-            7 -> CloudSyncSettingsTab(viewModel)
-            8 -> DesignSettingsTab(viewModel)
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            when (selectedSettingsTab) {
+                0 -> ScannerSettingsTab(viewModel)
+                1 -> PdfSettingsTab(viewModel)
+                2 -> IncomeExpenseSettingsTab(viewModel)
+                3 -> DocTypesSettingsTab(viewModel)
+                4 -> RulesAndAiSettingsTab(viewModel)
+                5 -> SecuritySettingsTab(viewModel)
+                6 -> P2pSyncTab(viewModel)
+                7 -> CloudSyncSettingsTab(viewModel)
+                8 -> DesignSettingsTab(viewModel)
+            }
         }
 
         if (showSectionOverviewDialog) {

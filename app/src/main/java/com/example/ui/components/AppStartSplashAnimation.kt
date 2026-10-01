@@ -70,7 +70,7 @@ object SplashSoundSynthesizer {
         }
         Thread {
             try {
-                val file = File(appCtx.cacheDir, "splash_sound_v6.wav")
+                val file = File(appCtx.cacheDir, "splash_sound_v7.wav")
                 if (!file.exists()) {
                     val data = generateSamples()
                     writeWavFile(file, data)
@@ -378,7 +378,7 @@ fun AppStartSplashAnimation(
             SplashSoundSynthesizer.playPremiumSplashSound(context)
 
             // Feste Maximaldauer mit Fallback-Garantie
-            kotlinx.coroutines.withTimeoutOrNull(1500L) {
+            kotlinx.coroutines.withTimeoutOrNull(3500L) {
                 progressAnim.animateTo(
                     targetValue = 1f,
                     animationSpec = tween(durationMillis = totalDurationMs, easing = LinearEasing)

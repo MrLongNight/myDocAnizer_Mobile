@@ -124,29 +124,34 @@ fun RulesAndAiSettingsTab(
             )
         }
 
-        when (selectedTab) {
-            0 -> {
-                // TAB 1: Schlagwort-Regeln vor KI
-                RulesListContent(
-                    rules = docRules,
-                    onToggleRule = { id, enabled -> viewModel.toggleDocRule(id, enabled) },
-                    onEditRule = { rule -> editingRule = rule },
-                    onDeleteRule = { id -> viewModel.deleteDocRule(id) },
-                    onOpenAiAssistant = { showAiRuleDialog = true },
-                    onAddNewRule = { showCreateRuleDialog = true }
-                )
-            }
-            1 -> {
-                // TAB 2: HuggingFace On-Device Modelle
-                HuggingFaceModelsContent(
-                    viewModel = viewModel
-                )
-            }
-            2 -> {
-                // TAB 3: 100% Lokales Diagnose- & Inferenz-Audit-Log
-                AuditLogContent(
-                    viewModel = viewModel
-                )
+        Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            when (selectedTab) {
+                0 -> {
+                    // TAB 1: Schlagwort-Regeln vor KI
+                    RulesListContent(
+                        rules = docRules,
+                        onToggleRule = { id, enabled -> viewModel.toggleDocRule(id, enabled) },
+                        onEditRule = { rule -> editingRule = rule },
+                        onDeleteRule = { id -> viewModel.deleteDocRule(id) },
+                        onOpenAiAssistant = { showAiRuleDialog = true },
+                        onAddNewRule = { showCreateRuleDialog = true },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                1 -> {
+                    // TAB 2: HuggingFace On-Device Modelle
+                    HuggingFaceModelsContent(
+                        viewModel = viewModel,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                2 -> {
+                    // TAB 3: 100% Lokales Diagnose- & Inferenz-Audit-Log
+                    AuditLogContent(
+                        viewModel = viewModel,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
     }
@@ -207,11 +212,12 @@ fun RulesListContent(
     onEditRule: (DocRule) -> Unit,
     onDeleteRule: (String) -> Unit,
     onOpenAiAssistant: () -> Unit,
-    onAddNewRule: () -> Unit = {}
+    onAddNewRule: () -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     if (rules.isEmpty()) {
         Box(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = modifier.fillMaxSize().padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -384,7 +390,8 @@ fun RulesListContent(
 
 @Composable
 fun HuggingFaceModelsContent(
-    viewModel: DocAnizerViewModel
+    viewModel: DocAnizerViewModel,
+    modifier: Modifier = Modifier
 ) {
     val models by viewModel.availableModels.collectAsState()
     val hardwareInfo by viewModel.deviceHardwareInfo.collectAsState()
@@ -407,7 +414,7 @@ fun HuggingFaceModelsContent(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -1280,7 +1287,10 @@ fun EditRuleDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AuditLogContent(viewModel: DocAnizerViewModel) {
+fun AuditLogContent(
+    viewModel: DocAnizerViewModel,
+    modifier: Modifier = Modifier
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val auditLogs by viewModel.auditLogs.collectAsStateWithLifecycle()
     val availableModels by viewModel.availableModels.collectAsStateWithLifecycle()
@@ -1304,7 +1314,7 @@ fun AuditLogContent(viewModel: DocAnizerViewModel) {
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .testTag("audit_log_tab"),
         verticalArrangement = Arrangement.spacedBy(10.dp)

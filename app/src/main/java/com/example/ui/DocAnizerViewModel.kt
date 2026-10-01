@@ -485,7 +485,15 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     fun selectModel(modelId: String) = llmService.selectModel(modelId)
     fun selectHuggingFaceModel(modelId: String) = llmService.selectModel(modelId)
     fun downloadModel(modelId: String, onProgress: (Float) -> Unit = {}) {
-        viewModelScope.launch { llmService.downloadModel(modelId, onProgress) }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, throwable ->
+            android.util.Log.e("DocAnizerViewModel", "Kompensierter Download-Fehler: ${throwable.message}")
+        }) {
+            try {
+                llmService.downloadModel(modelId, onProgress)
+            } catch (t: Throwable) {
+                android.util.Log.e("DocAnizerViewModel", "Sicher abgefangener Download-Fehler: ${t.message}")
+            }
+        }
     }
     fun deleteModel(modelId: String) {
         llmService.deleteModel(modelId)

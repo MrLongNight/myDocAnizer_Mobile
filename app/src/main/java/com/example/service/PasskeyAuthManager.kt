@@ -21,7 +21,13 @@ import java.util.UUID
  */
 class PasskeyAuthManager(private val context: Context) {
 
-    private val credentialManager = CredentialManager.create(context)
+    private val credentialManager by lazy {
+        try {
+            CredentialManager.create(context)
+        } catch (_: Throwable) {
+            null
+        }
+    }
 
     /**
      * Erstellt eine standardkonforme WebAuthn JSON-Registrierungsanforderung (Registration JSON).
@@ -87,10 +93,11 @@ class PasskeyAuthManager(private val context: Context) {
         userName: String,
         rpId: String = "mydocanizer.local"
     ): Result<String> = withContext(Dispatchers.Main) {
+        val manager = credentialManager ?: return@withContext Result.failure(Exception("Credential Manager auf diesem Gerät nicht verfügbar."))
         try {
             val requestJson = createRegistrationJson(userName, rpId)
             val createRequest = CreatePublicKeyCredentialRequest(requestJson = requestJson)
-            val result = credentialManager.createCredential(activityContext, createRequest)
+            val result = manager.createCredential(activityContext, createRequest)
             Result.success("Passkey für '$userName' erfolgreich im Google Credential Manager / Hardware-Keystore registriert.")
         } catch (e: CreateCredentialCancellationException) {
             Result.failure(Exception("Passkey-Einrichtung vom Benutzer abgebrochen."))
@@ -108,11 +115,12 @@ class PasskeyAuthManager(private val context: Context) {
         activityContext: Context,
         rpId: String = "mydocanizer.local"
     ): Result<String> = withContext(Dispatchers.Main) {
+        val manager = credentialManager ?: return@withContext Result.failure(Exception("Credential Manager auf diesem Gerät nicht verfügbar."))
         try {
             val requestJson = createAuthenticationJson(rpId)
             val getOption = GetPublicKeyCredentialOption(requestJson = requestJson)
             val getRequest = GetCredentialRequest(listOf(getOption))
-            val result = credentialManager.getCredential(activityContext, getRequest)
+            val result = manager.getCredential(activityContext, getRequest)
             Result.success("Passkey-Authentifizierung erfolgreich!")
         } catch (e: GetCredentialCancellationException) {
             Result.failure(Exception("Passkey-Anmeldung abgebrochen."))
