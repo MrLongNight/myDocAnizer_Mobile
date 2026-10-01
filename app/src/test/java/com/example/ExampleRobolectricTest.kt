@@ -34,8 +34,17 @@ class ExampleRobolectricTest {
   @Test
   fun `launch MainActivity successfully without crash`() {
     val controller = Robolectric.buildActivity(MainActivity::class.java)
-    val activity = controller.setup().get()
+    val activity = controller.setup().visible().get()
     assertNotNull(activity)
+    assertFalse(activity.isFinishing)
+  }
+
+  @Test
+  fun `verify SplashSoundSynthesizer is safe in headless emulator`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    com.example.ui.components.SplashSoundSynthesizer.precompute(context)
+    com.example.ui.components.SplashSoundSynthesizer.playPremiumSplashSound(context)
+    com.example.ui.components.SplashSoundSynthesizer.stop()
   }
 
   @Test

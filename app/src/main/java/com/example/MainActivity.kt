@@ -10,6 +10,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -55,6 +56,12 @@ class MainActivity : FragmentActivity() {
             }
 
             var showSplash by rememberSaveable { mutableStateOf(true) }
+
+            // Unblockierbarer Sicherheits-Timer: Garantiert, dass der Splash-Screen in der Testumgebung/Emulator NIEMALS hängenbleibt
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.delay(2800L)
+                showSplash = false
+            }
 
             MyApplicationTheme(
                 darkTheme = isDark,
