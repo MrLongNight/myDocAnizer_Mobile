@@ -415,323 +415,89 @@ fun HuggingFaceModelsContent(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // NOTIFICATION BANNER BEI NEUEN MODELLEN
         newModelsNotification?.let { notifText ->
             item {
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Celebration, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(8.dp))
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.Celebration, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = notifText,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.weight(1f)
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            TextButton(onClick = { viewModel.dismissNewModelsNotification() }) {
-                                Text("Schließen", style = MaterialTheme.typography.labelSmall)
-                            }
+                        IconButton(onClick = { viewModel.dismissNewModelsNotification() }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Schließen", modifier = Modifier.size(14.dp))
                         }
                     }
                 }
             }
         }
 
-        // INFO HEADER
+        // KOMPAKTE HARDWARE- & STATUSLEISTE
         item {
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-            ) {
-                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.OfflinePin, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "100% Lokale Ausführung: Vortrainierte HuggingFace Modelle. Vollständig offline auf deinem Gerät – keine Cloud-Kosten, kein Datenabfluss.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-            }
-        }
-
-        // HARDWARE-BAROMETER CARD
-        item {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Default.Memory, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Text("Geräte-Hardware & LLM-Eignung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        }
-                        IconButton(onClick = { viewModel.refreshHardwareInfo() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Aktualisieren", tint = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text("RAM (Gesamt / Frei)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                Text(
-                                    text = "${String.format(java.util.Locale.US, "%.1f", hardwareInfo.totalRamGb)} GB (${String.format(java.util.Locale.US, "%.1f", hardwareInfo.freeRamGb)} GB frei)",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (hardwareInfo.isLowRamDevice) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text("CPU & Leistungsklasse", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                Text(
-                                    text = "${hardwareInfo.cpuCores} Kerne • ${hardwareInfo.performanceTier}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Default.Memory, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                         Text(
-                            text = "Nur für dieses Gerät geeignete Modelle anzeigen",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
+                            text = "${String.format(java.util.Locale.US, "%.1f", hardwareInfo.totalRamGb)} GB RAM • ${hardwareInfo.performanceTier}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Nur passende", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Switch(
                             checked = onlyShowCompatible,
-                            onCheckedChange = { onlyShowCompatible = it }
+                            onCheckedChange = { onlyShowCompatible = it },
+                            modifier = Modifier.height(24.dp)
                         )
                     }
                 }
             }
         }
 
-        // PERSISTENTER MODELL-SPEICHER CARD (Überlebt App-Updates & Deinstallationen)
-        item {
-            var scanFeedbackMessage by remember { mutableStateOf<String?>(null) }
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                            Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Column {
-                                Text("Persistenter Modellspeicher", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                Text(
-                                    text = "Download/myDocAnizer_Models/ (bleibt bei APK-Updates & Neuinstallationen erhalten)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Vorhandene .gguf-Dateien scannen:",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        OutlinedButton(
-                            onClick = {
-                                val found = viewModel.rescanPersistedModels()
-                                scanFeedbackMessage = if (found > 0) "$found Modell(e) erfolgreich erkannt & verknüpft!" else "Keine neuen .gguf-Dateien im Download-Ordner gefunden."
-                            },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.FindInPage, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Speicher scannen", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-
-                    scanFeedbackMessage?.let { msg ->
-                        Text(
-                            text = msg,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (msg.contains("erfolgreich")) Color(0xFF16A34A) else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
-        // INFERENZ-PARAMETER CARD (Im Standard-Modus kompakt/eingeklappt, im Experten-Modus voll geöffnet)
-        item {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, if (isExpertMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth().testTag("inference_config_card")
-            ) {
-                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = if (isExpertMode) Icons.Default.Tune else Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = if (isExpertMode) MaterialTheme.colorScheme.primary else Color(0xFF16A34A)
-                            )
-                            Column {
-                                Text(
-                                    text = if (isExpertMode) "LLM Inferenz- & Leistungsparameter" else "Inferenz-Parameter automatisch optimiert",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                if (!isExpertMode) {
-                                    Text(
-                                        text = "Optimal konfiguriert für ${hardwareInfo.cpuCores} Kerne (${hardwareInfo.performanceTier})",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-
-                        if (!isExpertMode) {
-                            TextButton(onClick = { isAdvancedInferenceExpanded = !isAdvancedInferenceExpanded }) {
-                                Text(if (isAdvancedInferenceExpanded) "Ausblenden" else "Details")
-                                Icon(
-                                    imageVector = if (isAdvancedInferenceExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    if (isExpertMode || isAdvancedInferenceExpanded) {
-                        // 1. Temperatur
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Temperatur (Präzision vs. Kreativität):", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                                Text("${String.format(java.util.Locale.US, "%.2f", inferenceConfig.temperature)}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            }
-                            Slider(
-                                value = inferenceConfig.temperature,
-                                onValueChange = { viewModel.updateLlmInferenceConfig(inferenceConfig.copy(temperature = it)) },
-                                valueRange = 0.0f..0.7f,
-                                steps = 7,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Text(
-                                text = if (inferenceConfig.temperature < 0.2f) "0.0: Streng deterministisch & exakt (Ideal für Rechnungen/Beträge)" else "0.3+: Flexiblere Textinterpretation",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-                        // 2. System-Prompt Fokus
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("System-Prompt Ausrichtung:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                listOf(
-                                    "DEFAULT" to "Standard",
-                                    "FINANCIAL" to "Finanzen & Rechnungen",
-                                    "CONTRACTS" to "Verträge & Fristen",
-                                    "SUMMARY" to "Kompakte Zusammenfassung"
-                                ).forEach { (key, label) ->
-                                    FilterChip(
-                                        selected = inferenceConfig.systemPromptFocus == key,
-                                        onClick = { viewModel.updateLlmInferenceConfig(inferenceConfig.copy(systemPromptFocus = key)) },
-                                        label = { Text(label, fontSize = 11.sp) }
-                                    )
-                                }
-                            }
-                        }
-
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-                        // 3. Max Tokens & CPU Threads
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Max. Antwort-Länge:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    listOf(256, 512, 1024).forEach { tokens ->
-                                        FilterChip(
-                                            selected = inferenceConfig.maxTokens == tokens,
-                                            onClick = { viewModel.updateLlmInferenceConfig(inferenceConfig.copy(maxTokens = tokens)) },
-                                            label = { Text("$tokens", fontSize = 11.sp) }
-                                        )
-                                    }
-                                }
-                            }
-
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("CPU Inferenz-Threads:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    listOf(2, 4, 8).forEach { threads ->
-                                        FilterChip(
-                                            selected = inferenceConfig.threadCount == threads,
-                                            onClick = { viewModel.updateLlmInferenceConfig(inferenceConfig.copy(threadCount = threads)) },
-                                            label = { Text("$threads Kerne", fontSize = 11.sp) }
-                                        )
-                                    }
-                                }
-                            }
+        // EXPERTEN-PARAMETER (NUR WENN EXPERTEN-MODUS AKTIV)
+        if (isExpertMode) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("Inferenz-Parameter (Experten-Modus)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            Text("Threads: ${inferenceConfig.threadCount} • Temp: ${inferenceConfig.temperature}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
@@ -740,20 +506,20 @@ fun HuggingFaceModelsContent(
 
         // MODELLE LISTE HEADER & SYNC ACTION
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f, fill = false)) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "HuggingFace Modelle (${displayedModels.size} verfügbar):",
+                            text = "HuggingFace Modelle (${displayedModels.size}):",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Geprüfte, quantisierte GGUF-Modelle für On-Device Inferenz",
+                            text = "Geprüfte GGUF-Modelle für 100% Offline-Inferenz",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -764,27 +530,27 @@ fun HuggingFaceModelsContent(
                     FilledTonalButton(
                         onClick = { viewModel.syncModelCatalogFromRemote(forceCheck = true) },
                         enabled = !isCheckingNewModels,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        modifier = Modifier.testTag("btn_sync_model_catalog")
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                        modifier = Modifier.height(32.dp).testTag("btn_sync_model_catalog")
                     ) {
                         if (isCheckingNewModels) {
-                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Prüfe...", fontSize = 11.sp)
-                        } else {
-                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(16.dp))
+                            CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Katalog prüfen", fontSize = 11.sp)
+                            Text("Prüfe...", fontSize = 11.sp, maxLines = 1)
+                        } else {
+                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Katalog prüfen", fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
 
-                // KATEGORIE-FILTER CHIPS MIT HORIZONTAL-SCROLL (Verhindert Text-Stauchung und Freiflächen)
+                // KATEGORIE-FILTER CHIPS MIT HORIZONTAL-SCROLL (Garantiert einzeilig ohne Text-Stauchung)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     listOf("Alle", "DMS & Rechnungen", "Reasoning & Logik", "Verträge & Jura", "Finanzen & Tabellen", "Mehrsprachig").forEach { cat ->
@@ -793,27 +559,29 @@ fun HuggingFaceModelsContent(
                             onClick = { 
                                 selectedCategoryFilter = if (cat == "DMS & Rechnungen") "DMS & Rechnungsextraktion" else cat 
                             },
-                            label = { Text(cat, fontSize = 11.sp, maxLines = 1) }
+                            label = { Text(cat, fontSize = 11.sp, maxLines = 1) },
+                            modifier = Modifier.height(30.dp)
                         )
                     }
                 }
             }
         }
 
+        // MODELL-KARTEN
         items(displayedModels, key = { it.id }) { model ->
             val compatibility = hardwareInfo.getCompatibility(model.recommendedRamGb)
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = if (model.isSelected) 3.dp else 1.dp,
                 border = BorderStroke(
                     width = if (model.isSelected) 2.dp else 1.dp,
-                    color = if (model.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                    color = if (model.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
                 ),
                 modifier = Modifier.fillMaxWidth().testTag("model_card_${model.id}")
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    // Kopfzeile mit Name, Aktiv-Status, Neu-Badge & RAM-Badge
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Kopfzeile mit Name & Badges
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -827,7 +595,7 @@ fun HuggingFaceModelsContent(
                                 Text(
                                     text = model.name,
                                     fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleMedium
+                                    style = MaterialTheme.typography.titleSmall
                                 )
                                 if (model.isNewRelease) {
                                     Surface(
@@ -839,7 +607,8 @@ fun HuggingFaceModelsContent(
                                             color = MaterialTheme.colorScheme.onTertiary,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                            fontSize = 9.sp
                                         )
                                     }
                                 }
@@ -852,36 +621,28 @@ fun HuggingFaceModelsContent(
                                             text = "Aktiv",
                                             color = Color.White,
                                             style = MaterialTheme.typography.labelSmall,
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                            fontSize = 9.sp
                                         )
                                     }
                                 }
                             }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = "Entwickler: ${model.author} • ${model.modelCategory}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "• ✓ ${model.approvalStatus}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
+                            Text(
+                                text = "${model.author} • ${model.modelCategory}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
                         }
 
-                        // Dynamic Compatibility Badge
+                        // Kompatibilitäts-Badge
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(6.dp),
                             color = when (compatibility) {
-                                com.example.model.ModelCompatibilityLevel.OPTIMAL -> Color(0xFF16A34A).copy(alpha = 0.15f)
-                                com.example.model.ModelCompatibilityLevel.LIMITED -> Color(0xFFEAB308).copy(alpha = 0.2f)
-                                com.example.model.ModelCompatibilityLevel.NOT_RECOMMENDED -> Color(0xFFEF4444).copy(alpha = 0.2f)
+                                com.example.model.ModelCompatibilityLevel.OPTIMAL -> Color(0xFF16A34A).copy(alpha = 0.12f)
+                                com.example.model.ModelCompatibilityLevel.LIMITED -> Color(0xFFEAB308).copy(alpha = 0.15f)
+                                com.example.model.ModelCompatibilityLevel.NOT_RECOMMENDED -> Color(0xFFEF4444).copy(alpha = 0.15f)
                             }
                         ) {
                             Text(
@@ -892,166 +653,145 @@ fun HuggingFaceModelsContent(
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
                                 color = when (compatibility) {
                                     com.example.model.ModelCompatibilityLevel.OPTIMAL -> Color(0xFF15803D)
                                     com.example.model.ModelCompatibilityLevel.LIMITED -> Color(0xFFB45309)
                                     com.example.model.ModelCompatibilityLevel.NOT_RECOMMENDED -> Color(0xFFDC2626)
                                 },
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Deutsche Erklärung
+                    // Deutsche Modell-Erklärung
                     Text(
                         text = model.descriptionDe,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
-                        lineHeight = 18.sp
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
                     // Kriterien-Übersicht
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                    if (model.criteria.isNotEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = "Kriterien & Profileigenschaften:",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            model.criteria.forEach { criterion ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = Color(0xFF10B981),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Text(
-                                        text = criterion,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 12.sp
-                                    )
+                            Column(
+                                modifier = Modifier.padding(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                model.criteria.forEach { criterion ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = Color(0xFF10B981),
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                        Text(
+                                            text = criterion,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontSize = 11.sp
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Metriken (Größe, Parameter)
+                    // Metriken & Download-/Aktivierungsleiste
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Download: ~${model.downloadSizeMb} MB",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Parameter: ${model.parameterSize}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Download- und Auswahl-Steuerung
-                    if (model.isDownloading) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            LinearProgressIndicator(
-                                progress = { model.downloadProgress },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            val mbDownloaded = model.downloadedBytes / (1024 * 1024)
-                            val mbTotal = if (model.totalBytes > 0) model.totalBytes / (1024 * 1024) else model.downloadSizeMb.toLong()
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Lade echtes Modell herunter: $mbDownloaded MB / $mbTotal MB (${(model.downloadProgress * 100).toInt()}%)",
-                                style = MaterialTheme.typography.labelSmall
+                                text = "${model.parameterSize} • ~${model.downloadSizeMb} MB",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
                             )
                         }
-                    } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (!model.isDownloaded) {
-                                Text(
-                                    text = "Nicht auf Gerät (${model.downloadSizeMb} MB)",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+
+                        // Download- und Auswahl-Aktionen (Kompakt und elegant)
+                        if (model.isDownloading) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    progress = { model.downloadProgress },
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
                                 )
-                                OutlinedButton(onClick = { viewModel.downloadModel(model.id) }) {
-                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Download (${model.downloadSizeMb} MB)")
-                                }
-                            } else {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                Text(
+                                    text = "${(model.downloadProgress * 100).toInt()}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else if (!model.isDownloaded) {
+                            FilledTonalButton(
+                                onClick = { viewModel.downloadModel(model.id) },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                modifier = Modifier.height(32.dp)
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Laden (${model.downloadSizeMb} MB)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                IconButton(
+                                    onClick = { viewModel.deleteModel(model.id) },
+                                    modifier = Modifier.size(30.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = Color(0xFF10B981),
+                                        Icons.Default.DeleteOutline,
+                                        contentDescription = "Modell löschen",
+                                        tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    val sizeMb = if (model.localFileSizeBytes > 0) model.localFileSizeBytes / (1024 * 1024) else model.downloadSizeMb.toLong()
-                                    Text(
-                                        text = "$sizeMb MB auf Gerät",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF10B981)
-                                    )
-                                    IconButton(
-                                        onClick = { viewModel.deleteModel(model.id) },
-                                        modifier = Modifier.size(28.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.DeleteOutline,
-                                            contentDescription = "Modell löschen",
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
                                 }
 
                                 if (!model.isSelected) {
-                                    Button(onClick = { viewModel.selectModel(model.id) }) {
-                                        Text("Aktivieren")
+                                    Button(
+                                        onClick = { viewModel.selectModel(model.id) },
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text("Aktivieren", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 } else {
                                     Surface(
                                         color = Color(0xFF10B981).copy(alpha = 0.15f),
-                                        shape = RoundedCornerShape(12.dp)
+                                        shape = RoundedCornerShape(8.dp)
                                     ) {
-                                        Text(
-                                            text = "Aktiv",
-                                            color = Color(0xFF10B981),
-                                            fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(12.dp))
+                                            Text(
+                                                text = "Aktiv",
+                                                color = Color(0xFF10B981),
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
                                     }
                                 }
                             }
