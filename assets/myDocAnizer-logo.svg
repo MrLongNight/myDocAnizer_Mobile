@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="550" viewBox="0 0 1600 550" role="img" aria-labelledby="title desc">
+  <title id="title">myDocAnizer Mobile</title>
+  <desc id="desc">Logo for myDocAnizer Mobile with a folder and document icon, a shield, and a search glass.</desc>
+  <defs>
+    <linearGradient id="bgFade" x1="0" x2="1">
+      <stop offset="0%" stop-color="#0B1018"/>
+      <stop offset="100%" stop-color="#05070B"/>
+    </linearGradient>
+    <linearGradient id="brandGrad" x1="0" x2="1">
+      <stop offset="0%" stop-color="#2FE4FF"/>
+      <stop offset="50%" stop-color="#4DB0FF"/>
+      <stop offset="100%" stop-color="#C92DFF"/>
+    </linearGradient>
+    <linearGradient id="softGrad" x1="0" x2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#D7DEEA"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="550" fill="url(#bgFade)"/>
+
+  <g transform="translate(40,52)" filter="url(#shadow)">
+    <g transform="translate(0,0)">
+      <path d="M55 115 L235 115 L285 175 L285 333 C285 344 276 353 265 353 L55 353 C45 353 35 344 35 333 L35 131 C35 120 45 115 55 115 Z" fill="url(#brandGrad)"/>
+      <path d="M75 82 L216 82 L260 128 L260 154 L75 154 Z" fill="#D6F6FF" opacity="0.24"/>
+      <path d="M215 82 L260 128 L260 154 L215 154 Z" fill="#D6F6FF" opacity="0.18"/>
+      <path d="M70 230 L180 230 L183 244 L70 244 Z" fill="#C7F6FF" opacity="0.55"/>
+      <path d="M70 260 L165 260 L168 274 L70 274 Z" fill="#C7F6FF" opacity="0.4"/>
+      <path d="M70 292 L182 292 L185 306 L70 306 Z" fill="#C7F6FF" opacity="0.24"/>
+      <path d="M197 145 L264 145 L264 333 C264 344 255 353 244 353 L188 353 C179 353 171 346 171 337 L171 185 C171 166 185 152 197 145 Z" fill="url(#softGrad)" opacity="0.96"/>
+      <path d="M230 162 L239 162 L239 333 L230 333 Z" fill="#BFF5FF" opacity="0.48"/>
+      <path d="M211 171 L241 171 L241 215 L211 215 Z" fill="#C1D1FF" opacity="0.75"/>
+      <path d="M216 188 L236 188 L236 211 L216 211 Z" fill="#FFFFFF" opacity="0.82"/>
+      <path d="M211 219 L240 219 L240 324 L211 324 Z" fill="#EAEFF6" opacity="0.8"/>
+      <path d="M205 246 L246 246 L246 252 L205 252 Z" fill="#D8E4F7" opacity="0.8"/>
+      <path d="M205 270 L246 270 L246 276 L205 276 Z" fill="#D8E4F7" opacity="0.8"/>
+      <path d="M205 294 L239 294 L239 300 L205 300 Z" fill="#D8E4F7" opacity="0.8"/>
+    </g>
+
+    <g transform="translate(180,120)">
+      <circle cx="190" cy="190" r="105" fill="url(#brandGrad)"/>
+      <circle cx="190" cy="190" r="70" fill="#F6FAFF" opacity="0.95"/>
+      <path d="M220 200 L318 298" stroke="#2DE2FF" stroke-width="22" stroke-linecap="round"/>
+      <path d="M220 200 L318 298" stroke="#C62DFF" stroke-width="14" stroke-linecap="round" opacity="0.5"/>
+      <circle cx="190" cy="190" r="41" fill="#D9F9FF" opacity="0.12"/>
+      <path d="M126 143 L193 102 L255 143 L193 185 Z" fill="#4FC7FF" opacity="0.85"/>
+      <path d="M138 280 L215 280 L234 315 L119 315 Z" fill="#68C5FF" opacity="0.9"/>
+      <path d="M89 175 C89 120 131 79 184 79 C209 79 233 89 252 106 L240 118 C224 102 206 93 184 93 C138 93 104 125 104 175 C104 200 116 223 136 238 L124 250 C100 229 89 204 89 175 Z" fill="#2BCAFF" opacity="0.35"/>
+      <path d="M178 120 L142 154 L190 210 L245 153 Z" fill="#F2F9FF" opacity="0.9"/>
+      <circle cx="190" cy="190" r="22" fill="#111827" opacity="0.8"/>
+      <path d="M190 190 L190 231" stroke="#F2F9FF" stroke-width="7" stroke-linecap="round"/>
+      <path d="M155 190 L190 190" stroke="#F2F9FF" stroke-width="7" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <g transform="translate(410, 128)">
+    <text x="0" y="190" font-size="170" font-weight="900" font-family="Arial, sans-serif" letter-spacing="-6" fill="url(#brandGrad)" style="paint-order:stroke; stroke:#000000; stroke-width:0;">myDocAnizer</text>
+    <text x="2" y="312" font-size="92" font-weight="700" font-family="Segoe Print, Segoe Script, cursive" fill="#F7F7F7" font-style="italic" opacity="0.96">Mobile</text>
+  </g>
+</svg>
