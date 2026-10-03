@@ -6,10 +6,17 @@
 Version:       2.4.0 (Build 2026.09)
 License:       GNU Affero General Public License v3.0 (AGPLv3) for source code;
                All branding, logos, trademarks & store assets copyright mr.locke84.
-Repository:    https://github.com/mr-locke84/myDocAnizer-Mobile
+Repository:    https://github.com/MrLongNight/myDocAnizer-Mobile
+Desktop:       https://github.com/MrLongNight/myDocAnizer-Desktop
 Architecture:  Kotlin / Jetpack Compose / Android Room (SQLite + FTS4) /
                Google ML Kit Offline OCR / Local HuggingFace GGUF Nano-LLMs /
                AES-256-GCM Zero-Knowledge Client-Side Encryption / P2P Direct WiFi Sync
+
+📱 myDocAnizer Mobile
+🖥️  myDocAnizer Desktop is the cross-platform companion for Windows, macOS, and Linux.
+    It brings the same smart document workflow to the desktop with advanced management
+    features, helping you organize, manage and securely access your scanned documents.
+    → https://github.com/MrLongNight/myDocAnizer-Desktop
 
 --------------------------------------------------------------------------------
 1. MISSION & PHILOSOPHIE
@@ -163,7 +170,8 @@ Public License v3.0 (AGPLv3).
 
 Der Name "myDocAnizer", "myDocAnizer-Mobile", Logos, Icons und Play Store
 Grafik-Assets sind urheberrechtlich geschütztes Eigentum des Autors (mr.locke84).
-Jeder ist berechtigt, den Code einzusehen, zu auditieren und eigene Builds für den
+Jeder ist berechtigt, den Code einzusehen, zu auditieren und eigene Builds f��r den
 persönlichen Gebrauch zu erstellen. Der offizielle Play Store Vertrieb und das
 offizielle Markenbranding verbleiben beim Projektinhaber.
+
 ================================================================================
