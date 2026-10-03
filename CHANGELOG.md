@@ -4,5 +4,5 @@ All notable project updates are documented here.
 
 ## [Unreleased]
 
-- Updated the README branding with the myDocAnizer Mobile logo and added the myDocAnizer Desktop project link and description.
-- Added branded SVG assets for the mobile and desktop companion logos.
+- Updated the README to use the repository PNG logo assets for the mobile and desktop branding.
+- Added the myDocAnizer Desktop project link and description to the project landing page.
