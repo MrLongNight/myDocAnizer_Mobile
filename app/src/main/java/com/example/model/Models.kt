@@ -204,8 +204,73 @@ data class ChatMessage(
     val text: String,
     val isUser: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
-    val relatedDocIds: List<Long> = emptyList()
+    val relatedDocIds: List<Long> = emptyList(),
+    val suggestedFollowUps: List<String> = emptyList(),
+    val attachedDocTitle: String? = null,
+    val actionType: String? = null,
+    val actionLabel: String? = null,
+    val canUndo: Boolean = false,
+    val undoDescription: String? = null
 )
+
+/**
+ * Repräsentiert einen dauerhaft gespeicherten Chatverlauf für verschiedene Themen/Vorgänge.
+ */
+data class SavedChatSession(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String,
+    val messages: List<ChatMessage>,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * Logische Explorer-Filterstruktur für Dokumente im Tresor.
+ */
+data class ExplorerFilter(
+    val query: String = "",
+    val sender: String = "",
+    val docType: String? = null,
+    val tag: String? = null,
+    val mainCategory: String? = null,
+    val subCategory: String? = null,
+    val dateRange: String = "ALL", // "ALL", "TODAY", "WEEK", "MONTH", "YEAR"
+    val pageFilter: String = "ALL", // "ALL", "SINGLE", "MULTI", "3_PLUS", "5_PLUS"
+    val sortBy: String = "DATE_DESC", // "DATE_DESC", "DATE_ASC", "TITLE_ASC", "TITLE_DESC", "PAGES_DESC"
+    val customFieldId: String? = null,
+    val customFieldValue: String? = null
+)
+
+/**
+ * Repräsentiert eine vom LLM ausgeführte App-Aktion, die vom Nutzer rückgängig gemacht werden kann.
+ */
+sealed class LlmUndoAction {
+    abstract val description: String
+    abstract val timestamp: Long
+
+    data class FolderCreated(
+        val folderName: String,
+        val parentCategory: String,
+        val templateId: String,
+        override val description: String = "Ordner „$folderName“ löschen",
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : LlmUndoAction()
+
+    data class DocumentStatusUpdated(
+        val docId: Long,
+        val docTitle: String,
+        val previousStatus: String?,
+        val newStatus: String,
+        override val description: String = "Status für „$docTitle“ zurücksetzen",
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : LlmUndoAction()
+
+    data class FilterApplied(
+        val previousFilter: ExplorerFilter,
+        override val description: String = "Dokumenten-Filter zurücksetzen",
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : LlmUndoAction()
+}
 
 @Immutable
 data class TemplateItem(
@@ -1091,12 +1156,13 @@ data class ColorSkinItem(
 )
 
 val PRESET_COLOR_SKINS = listOf(
+    ColorSkinItem("MYDOCANIZER", "myDocAnizer Logo (Standard)", 0xFF00E5FF, 0xFFFF007F, 0xFFE0F7FA, "Offizielles Logo-Design: Electric Cyan, Cyber Magenta & Deep Violet"),
     ColorSkinItem("BLUE", "Oceanic Blau", 0xFF2563EB, 0xFF0284C7, 0xFFDBEAFE, "Klassisches DMS-Businessblau"),
     ColorSkinItem("EMERALD", "Smaragd Grün", 0xFF059669, 0xFF0D9488, 0xFFD1FAE5, "Frisches, klares Produktivitäts-Grün"),
     ColorSkinItem("SLATE", "Nordic Slate", 0xFF475569, 0xFF334155, 0xFFE2E8F0, "Modernes minimalistisches Anthrazit"),
     ColorSkinItem("AMBER", "Warmes Bernstein", 0xFFD97706, 0xFFB45309, 0xFFFEF3C7, "Warme, elegante Gold- & Kupfertöne"),
     ColorSkinItem("PURPLE", "Königs-Violett", 0xFF7C3AED, 0xFF6D28D9, 0xFFEDE9FE, "Edles, fokussiertes Violett"),
-    ColorSkinItem("ROSE", "Bordeaux & Rubin", 0xFFBE123C, 0xFF9F1239, 0xFFFFE4E6, "Kräftiges, markantes Rubinrot")
+    ColorSkinItem("ROSE", "Pink & Lila 💜", 0xFFD946EF, 0xFF8B5CF6, 0xFFFDF4FF, "Kräftiges Cyber-Pink mit edlem Lila-Akzent")
 )
 
 /**

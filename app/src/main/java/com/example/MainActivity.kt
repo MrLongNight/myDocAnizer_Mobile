@@ -8,18 +8,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.DocAnizerViewModel
-import com.example.ui.components.AppStartSplashAnimation
-import com.example.ui.components.SplashSoundSynthesizer
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.views.MainScreen
 
@@ -32,11 +27,6 @@ class MainActivity : FragmentActivity() {
             com.example.service.AppAuditLogger.init(this)
         } catch (t: Throwable) {
             android.util.Log.e("MainActivity", "AuditLogger init failed: ${t.message}")
-        }
-        try {
-            SplashSoundSynthesizer.precompute(this)
-        } catch (t: Throwable) {
-            android.util.Log.e("MainActivity", "SplashSoundSynthesizer precompute failed: ${t.message}")
         }
         try {
             handleWidgetIntent(intent)
@@ -55,32 +45,16 @@ class MainActivity : FragmentActivity() {
                 else -> systemDark
             }
 
-            var showSplash by rememberSaveable { mutableStateOf(true) }
-
-            // Unblockierbarer Sicherheits-Timer: Garantiert, dass der Splash-Screen in der Testumgebung/Emulator NIEMALS hängenbleibt
-            LaunchedEffect(Unit) {
-                kotlinx.coroutines.delay(2800L)
-                showSplash = false
-            }
-
             MyApplicationTheme(
                 darkTheme = isDark,
                 colorSkin = colorSkin,
                 highContrast = highContrastMode
             ) {
-                androidx.compose.material3.Surface(
+                Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.background
+                    color = MaterialTheme.colorScheme.background
                 ) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        MainScreen(viewModel = viewModel)
-
-                        if (showSplash) {
-                            AppStartSplashAnimation(
-                                onAnimationFinished = { showSplash = false }
-                            )
-                        }
-                    }
+                    MainScreen(viewModel = viewModel)
                 }
             }
         }

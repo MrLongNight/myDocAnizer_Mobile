@@ -57,6 +57,41 @@ fun getColorSchemeForSkin(skin: String, isDark: Boolean, highContrast: Boolean =
     }
 
     return when (skin) {
+        "BLUE" -> if (isDark) {
+            darkColorScheme(
+                primary = Color(0xFF3B82F6),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFF1E3A8A),
+                onPrimaryContainer = Color(0xFFDBEAFE),
+                secondary = Color(0xFF0284C7),
+                onSecondary = Color.White,
+                secondaryContainer = Color(0xFF075985),
+                onSecondaryContainer = Color(0xFFE0F2FE),
+                background = Color(0xFF0F172A),
+                onBackground = Color(0xFFF1F5F9),
+                surface = Color(0xFF1E293B),
+                onSurface = Color(0xFFF1F5F9),
+                surfaceVariant = Color(0xFF334155),
+                onSurfaceVariant = Color(0xFF94A3B8)
+            )
+        } else {
+            lightColorScheme(
+                primary = Color(0xFF2563EB),
+                onPrimary = Color.White,
+                primaryContainer = Color(0xFFDBEAFE),
+                onPrimaryContainer = Color(0xFF1E3A8A),
+                secondary = Color(0xFF0284C7),
+                onSecondary = Color.White,
+                secondaryContainer = Color(0xFFE0F2FE),
+                onSecondaryContainer = Color(0xFF0C4A6E),
+                background = Color(0xFFF8FAFC),
+                onBackground = Color(0xFF0F172A),
+                surface = Color.White,
+                onSurface = Color(0xFF0F172A),
+                surfaceVariant = Color(0xFFF1F5F9),
+                onSurfaceVariant = Color(0xFF64748B)
+            )
+        }
         "EMERALD" -> if (isDark) {
             darkColorScheme(
                 primary = Color(0xFF10B981),
@@ -197,16 +232,16 @@ fun getColorSchemeForSkin(skin: String, isDark: Boolean, highContrast: Boolean =
                 onSurfaceVariant = Color(0xFF64748B)
             )
         }
-        "ROSE" -> if (isDark) {
+        "ROSE", "PINK" -> if (isDark) {
             darkColorScheme(
-                primary = Color(0xFFFB7185),
-                onPrimary = Color(0xFF4C0519),
-                primaryContainer = Color(0xFF881337),
-                onPrimaryContainer = Color(0xFFFFE4E6),
-                secondary = Color(0xFFF43F5E),
-                onSecondary = Color.White,
-                secondaryContainer = Color(0xFF9F1239),
-                onSecondaryContainer = Color(0xFFFFF1F2),
+                primary = Color(0xFFF472B6), // Sanftes Cyber-Pink
+                onPrimary = Color(0xFF500030),
+                primaryContainer = Color(0xFF700045),
+                onPrimaryContainer = Color(0xFFFFD8EC),
+                secondary = Color(0xFFA78BFA), // Helles Lila 💜
+                onSecondary = Color(0xFF2E1065),
+                secondaryContainer = Color(0xFF5B21B6),
+                onSecondaryContainer = Color(0xFFEDE9FE),
                 background = Color(0xFF0F172A),
                 onBackground = Color(0xFFF1F5F9),
                 surface = Color(0xFF1E293B),
@@ -216,14 +251,14 @@ fun getColorSchemeForSkin(skin: String, isDark: Boolean, highContrast: Boolean =
             )
         } else {
             lightColorScheme(
-                primary = Color(0xFFBE123C),
+                primary = Color(0xFFD946EF), // Kräftiges Pink / Magenta
                 onPrimary = Color.White,
-                primaryContainer = Color(0xFFFFE4E6),
-                onPrimaryContainer = Color(0xFF881337),
-                secondary = Color(0xFF9F1239),
+                primaryContainer = Color(0xFFFDF4FF),
+                onPrimaryContainer = Color(0xFF701A75),
+                secondary = Color(0xFF8B5CF6), // Edles Lila 💜
                 onSecondary = Color.White,
-                secondaryContainer = Color(0xFFFFF1F2),
-                onSecondaryContainer = Color(0xFF4C0519),
+                secondaryContainer = Color(0xFFF3E8FF),
+                onSecondaryContainer = Color(0xFF3B0764),
                 background = Color(0xFFF8FAFC),
                 onBackground = Color(0xFF0F172A),
                 surface = Color.White,
@@ -232,42 +267,57 @@ fun getColorSchemeForSkin(skin: String, isDark: Boolean, highContrast: Boolean =
                 onSurfaceVariant = Color(0xFF64748B)
             )
         }
-        else -> { // "BLUE" (Default)
+        "MYDOCANIZER", "STANDARD", "DEFAULT" -> { // "MYDOCANIZER" (Originale Logo-Farbwelt: Electric Cyan, Reines Lila 💜 & Cyber-Pink 💖)
             if (isDark) {
                 darkColorScheme(
-                    primary = Color(0xFF3B82F6),
-                    onPrimary = Color.White,
-                    primaryContainer = Color(0xFF1E3A8A),
-                    onPrimaryContainer = Color(0xFFDBEAFE),
-                    secondary = Color(0xFF0284C7),
-                    onSecondary = Color.White,
-                    secondaryContainer = Color(0xFF075985),
-                    onSecondaryContainer = Color(0xFFE0F2FE),
-                    background = Color(0xFF0F172A),
+                    primary = Color(0xFF00E5FF), // Logo Electric Cyan (Primäre Aktionen, FAB, Highlights)
+                    onPrimary = Color(0xFF00363F),
+                    primaryContainer = Color(0xFF083344), // Subtiles Cyan-Blau (ruhiger Container)
+                    onPrimaryContainer = Color(0xFFCCFBF1),
+                    secondary = Color(0xFFA855F7), // Strahlendes Lila 💜 (Logo "Anizer" & Sekundär-Aktionen)
+                    onSecondary = Color(0xFF1E053A),
+                    secondaryContainer = Color(0xFF3B1A66), // Harmonisches Lila für Tonal-Buttons & Tags
+                    onSecondaryContainer = Color(0xFFF3E8FF),
+                    tertiary = Color(0xFFEC4899), // Akzent Cyber-Pink 💖 (Fristen, Wichtiges)
+                    onTertiary = Color(0xFF500030),
+                    tertiaryContainer = Color(0xFF700045),
+                    onTertiaryContainer = Color(0xFFFFD8EC),
+                    background = Color(0xFF070B14), // Deep Cyber Navy Canvas
                     onBackground = Color(0xFFF1F5F9),
-                    surface = Color(0xFF1E293B),
+                    surface = Color(0xFF0F172A), // Slate 900 für Karten & Leisten
                     onSurface = Color(0xFFF1F5F9),
-                    surfaceVariant = Color(0xFF334155),
-                    onSurfaceVariant = Color(0xFF94A3B8)
+                    surfaceVariant = Color(0xFF1E293B), // Slate 800 für Eingabefelder & Kacheln
+                    onSurfaceVariant = Color(0xFF94A3B8), // Klar lesbare, abgestufte Metadaten & Labels
+                    outline = Color(0xFF334155), // Ruhiger Slate-Rahmen (kein störendes Neon-Cyan!)
+                    outlineVariant = Color(0xFF1E293B)
                 )
             } else {
                 lightColorScheme(
-                    primary = Color(0xFF2563EB),
+                    primary = Color(0xFF0284C7), // Logo Deep Cyan-Blue (perfekter Kontrast auf Weiß)
                     onPrimary = Color.White,
-                    primaryContainer = Color(0xFFDBEAFE),
-                    onPrimaryContainer = Color(0xFF1E3A8A),
-                    secondary = Color(0xFF0284C7),
+                    primaryContainer = Color(0xFFE0F2FE),
+                    onPrimaryContainer = Color(0xFF0369A1),
+                    secondary = Color(0xFF8B5CF6), // Edles Lila 💜
                     onSecondary = Color.White,
-                    secondaryContainer = Color(0xFFE0F2FE),
-                    onSecondaryContainer = Color(0xFF0C4A6E),
+                    secondaryContainer = Color(0xFFEDE9FE), // Sanftes Flieder
+                    onSecondaryContainer = Color(0xFF5B21B6),
+                    tertiary = Color(0xFFEC4899), // Kräftiges Pink 💖
+                    onTertiary = Color.White,
+                    tertiaryContainer = Color(0xFFFCE7F3),
+                    onTertiaryContainer = Color(0xFF831843),
                     background = Color(0xFFF8FAFC),
                     onBackground = Color(0xFF0F172A),
                     surface = Color.White,
                     onSurface = Color(0xFF0F172A),
                     surfaceVariant = Color(0xFFF1F5F9),
-                    onSurfaceVariant = Color(0xFF64748B)
+                    onSurfaceVariant = Color(0xFF64748B),
+                    outline = Color(0xFFCBD5E1), // Subtile Begrenzungslinien
+                    outlineVariant = Color(0xFFE2E8F0)
                 )
             }
+        }
+        else -> { // Fallback auf Originale myDocAnizer Logo-Farbwelt
+            getColorSchemeForSkin("MYDOCANIZER", isDark, highContrast)
         }
     }
 }
@@ -275,7 +325,7 @@ fun getColorSchemeForSkin(skin: String, isDark: Boolean, highContrast: Boolean =
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    colorSkin: String = "BLUE",
+    colorSkin: String = "MYDOCANIZER",
     highContrast: Boolean = false,
     content: @Composable () -> Unit
 ) {

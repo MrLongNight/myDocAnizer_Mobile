@@ -3,6 +3,7 @@ package com.example.service
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.model.AppViewLevel
+import com.example.model.ChatMessage
 import com.example.model.ChecklistItem
 import com.example.model.CustomDashboardWidget
 import com.example.model.DocTypeItem
@@ -11,6 +12,7 @@ import com.example.model.ImportTemplateItem
 import com.example.model.PRESET_IMPORT_TEMPLATES
 import com.example.model.PdfSettings
 import com.example.model.STANDARD_DASHBOARD_TEMPLATES
+import com.example.model.SavedChatSession
 import com.example.model.ScannerSettings
 import com.example.model.TemplateItem
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -400,8 +402,12 @@ class SettingsRepository(context: Context) {
         _themeMode.value = mode
     }
 
-    // Farbschema / Color Skin: "BLUE", "EMERALD", "SLATE", "AMBER", "PURPLE", "ROSE"
-    private val _colorSkin = MutableStateFlow(prefs.getString("app_color_skin", "BLUE") ?: "BLUE")
+    // Farbschema / Color Skin: "MYDOCANIZER" (Standard mit Original Logo-Farben), "BLUE", "EMERALD", "SLATE", "AMBER", "PURPLE", "ROSE"
+    private val _colorSkin = MutableStateFlow(
+        prefs.getString("app_color_skin", "MYDOCANIZER")?.let {
+            if (it == "BLUE") "MYDOCANIZER" else it
+        } ?: "MYDOCANIZER"
+    )
     val colorSkin: StateFlow<String> = _colorSkin.asStateFlow()
 
     fun setColorSkin(skin: String) {
@@ -425,6 +431,24 @@ class SettingsRepository(context: Context) {
     fun setLargeTouchTargets(enabled: Boolean) {
         prefs.edit().putBoolean("app_large_touch_targets", enabled).apply()
         _largeTouchTargets.value = enabled
+    }
+
+    // Chatbot: Reine Wischgesten (Schiebeelement & Icon ausblenden)
+    private val _chatbotPureSwipeGestures = MutableStateFlow(prefs.getBoolean("chatbot_pure_swipe_gestures", false))
+    val chatbotPureSwipeGestures: StateFlow<Boolean> = _chatbotPureSwipeGestures.asStateFlow()
+
+    fun setChatbotPureSwipeGestures(enabled: Boolean) {
+        prefs.edit().putBoolean("chatbot_pure_swipe_gestures", enabled).apply()
+        _chatbotPureSwipeGestures.value = enabled
+    }
+
+    // Reiner Gesten-Modus (Immersive Fullscreen: Bottom-Bar & symmetrische FABs ausblenden, reine Wischzonen mit systemGestureExclusion)
+    private val _isGestureModeEnabled = MutableStateFlow(prefs.getBoolean("app_gesture_mode_enabled", false))
+    val isGestureModeEnabled: StateFlow<Boolean> = _isGestureModeEnabled.asStateFlow()
+
+    fun setGestureModeEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("app_gesture_mode_enabled", enabled).apply()
+        _isGestureModeEnabled.value = enabled
     }
 
     // Papierkorb / Mülleimer: Automatische Löschung nach definierten Tagen (0 = Nie / Manuell, 7, 14, 30, 60, 90)
@@ -864,6 +888,107 @@ class SettingsRepository(context: Context) {
         saveTemplates(updated)
     }
 
+    // GESPEICHERTE CHATVERLÄUFE FÜR UNTERSCHIEDLICHE THEMEN
+    private val _savedChatSessions = MutableStateFlow<List<SavedChatSession>>(loadSavedChatSessions())
+    val savedChatSessions: StateFlow<List<SavedChatSession>> = _savedChatSessions.asStateFlow()
+
+    private fun loadSavedChatSessions(): List<SavedChatSession> {
+        val json = prefs.getString("saved_chat_sessions_v1", null) ?: return emptyList()
+        return try {
+            val array = JSONArray(json)
+            val list = mutableListOf<SavedChatSession>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val id = obj.getString("id")
+                val title = obj.getString("title")
+                val createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                val updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
+                val msgArray = obj.optJSONArray("messages") ?: JSONArray()
+                val messages = mutableListOf<ChatMessage>()
+                for (j in 0 until msgArray.length()) {
+                    val mObj = msgArray.getJSONObject(j)
+                    messages.add(
+                        ChatMessage(
+                            id = mObj.optString("id", UUID.randomUUID().toString()),
+                            text = mObj.getString("text"),
+                            isUser = mObj.getBoolean("isUser"),
+                            timestamp = mObj.optLong("timestamp", System.currentTimeMillis()),
+                            attachedDocTitle = mObj.optString("attachedDocTitle").takeIf { it.isNotBlank() && it != "null" },
+                            actionType = mObj.optString("actionType").takeIf { it.isNotBlank() && it != "null" },
+                            actionLabel = mObj.optString("actionLabel").takeIf { it.isNotBlank() && it != "null" }
+                        )
+                    )
+                }
+                list.add(
+                    SavedChatSession(
+                        id = id,
+                        title = title,
+                        messages = messages,
+                        createdAt = createdAt,
+                        updatedAt = updatedAt
+                    )
+                )
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveChatSessions(list: List<SavedChatSession>) {
+        try {
+            val array = JSONArray()
+            for (session in list) {
+                val obj = JSONObject().apply {
+                    put("id", session.id)
+                    put("title", session.title)
+                    put("createdAt", session.createdAt)
+                    put("updatedAt", session.updatedAt)
+                    val msgArray = JSONArray()
+                    for (m in session.messages) {
+                        msgArray.put(JSONObject().apply {
+                            put("id", m.id)
+                            put("text", m.text)
+                            put("isUser", m.isUser)
+                            put("timestamp", m.timestamp)
+                            m.attachedDocTitle?.let { put("attachedDocTitle", it) }
+                            m.actionType?.let { put("actionType", it) }
+                            m.actionLabel?.let { put("actionLabel", it) }
+                        })
+                    }
+                    put("messages", msgArray)
+                }
+                array.put(obj)
+            }
+            prefs.edit().putString("saved_chat_sessions_v1", array.toString()).apply()
+            _savedChatSessions.value = list
+        } catch (_: Exception) {
+        }
+    }
+
+    fun addOrUpdateChatSession(session: SavedChatSession) {
+        val current = _savedChatSessions.value
+        val existingIndex = current.indexOfFirst { it.id == session.id }
+        val updated = if (existingIndex != -1) {
+            current.toMutableList().apply { set(existingIndex, session) }
+        } else {
+            listOf(session) + current
+        }
+        saveChatSessions(updated)
+    }
+
+    fun deleteChatSession(sessionId: String) {
+        val updated = _savedChatSessions.value.filterNot { it.id == sessionId }
+        saveChatSessions(updated)
+    }
+
+    fun renameChatSession(sessionId: String, newTitle: String) {
+        val updated = _savedChatSessions.value.map {
+            if (it.id == sessionId) it.copy(title = newTitle.trim(), updatedAt = System.currentTimeMillis()) else it
+        }
+        saveChatSessions(updated)
+    }
+
     // Wiederkehrende Import-Templates für strukturierte wiederkehrende Importe
     private val _importTemplates = MutableStateFlow<List<ImportTemplateItem>>(loadImportTemplates())
     val importTemplates: StateFlow<List<ImportTemplateItem>> = _importTemplates.asStateFlow()
@@ -980,6 +1105,20 @@ class SettingsRepository(context: Context) {
     fun resetWizard() {
         prefs.edit().putBoolean("setup_wizard_completed_v3", false).apply()
         _isWizardCompleted.value = false
+    }
+
+    // Erste Schritte Tour Status (Simpel & effektiv für jeden neuen Benutzer)
+    private val _isFirstStepsTourCompleted = MutableStateFlow(prefs.getBoolean("first_steps_tour_completed_v1", false))
+    val isFirstStepsTourCompleted: StateFlow<Boolean> = _isFirstStepsTourCompleted.asStateFlow()
+
+    fun setFirstStepsTourCompleted(completed: Boolean) {
+        prefs.edit().putBoolean("first_steps_tour_completed_v1", completed).apply()
+        _isFirstStepsTourCompleted.value = completed
+    }
+
+    fun resetFirstStepsTour() {
+        prefs.edit().putBoolean("first_steps_tour_completed_v1", false).apply()
+        _isFirstStepsTourCompleted.value = false
     }
 
     // Zero-Knowledge AES-256 Verschlüsselung & Cloud-Sync

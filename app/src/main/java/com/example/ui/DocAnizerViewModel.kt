@@ -9,6 +9,9 @@ import com.example.data.AppDatabase
 import com.example.model.DocTypeItem
 import com.example.model.DocumentEntity
 import com.example.model.ChatMessage
+import com.example.model.SavedChatSession
+import com.example.model.LlmUndoAction
+import com.example.model.ExplorerFilter
 import com.example.model.ImportTemplateItem
 import com.example.model.PdfSettings
 import com.example.model.ScannerSettings
@@ -17,6 +20,8 @@ import com.example.model.DocRule
 import com.example.model.BatchDocumentItem
 import com.example.model.BatchItemStatus
 import com.example.service.*
+import com.example.BuildConfig
+import com.example.util.DebugDataSeeder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -525,6 +530,27 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun dismissManualConfigWizard() {
         _showManualConfigWizard.value = false
+    }
+
+    // Virtuelle Erste-Schritte Tour (Simpel & effektiv für jeden neuen Benutzer)
+    val isFirstStepsTourCompleted: StateFlow<Boolean> = settingsRepo.isFirstStepsTourCompleted
+    private val _showFirstStepsTour = MutableStateFlow(false)
+    val showFirstStepsTour: StateFlow<Boolean> = _showFirstStepsTour.asStateFlow()
+
+    fun startFirstStepsTour() {
+        _showFirstStepsTour.value = true
+    }
+
+    fun dismissFirstStepsTour(markCompleted: Boolean = true) {
+        _showFirstStepsTour.value = false
+        if (markCompleted) {
+            settingsRepo.setFirstStepsTourCompleted(true)
+        }
+    }
+
+    fun resetFirstStepsTour() {
+        settingsRepo.resetFirstStepsTour()
+        _showFirstStepsTour.value = true
     }
 
     // Optionaler PC- & Desktop-Scanner Assistent
@@ -1309,21 +1335,6 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _isProcessingScan = MutableStateFlow(false)
     val isProcessingScan: StateFlow<Boolean> = _isProcessingScan.asStateFlow()
-
-    // Logische Explorer-Filterstruktur
-    data class ExplorerFilter(
-        val query: String = "",
-        val sender: String = "",
-        val docType: String? = null,
-        val tag: String? = null,
-        val mainCategory: String? = null,
-        val subCategory: String? = null,
-        val dateRange: String = "ALL", // "ALL", "TODAY", "WEEK", "MONTH", "YEAR"
-        val pageFilter: String = "ALL", // "ALL", "SINGLE", "MULTI", "3_PLUS", "5_PLUS"
-        val sortBy: String = "DATE_DESC", // "DATE_DESC", "DATE_ASC", "TITLE_ASC", "TITLE_DESC", "PAGES_DESC"
-        val customFieldId: String? = null,
-        val customFieldValue: String? = null
-    )
 
     private val _filter = MutableStateFlow(ExplorerFilter())
     val filter: StateFlow<ExplorerFilter> = _filter.asStateFlow()
@@ -2356,35 +2367,416 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    // Lokaler KI-Dokumenten-Chat / Assistent (On-Device RAG)
-    private val _chatMessages = MutableStateFlow<List<ChatMessage>>(listOf(
-        ChatMessage(
-            text = "Hallo! Ich bin dein lokaler myDocAnizer Dokumenten-Assistent. Ich laufe zu 100% offline direkt auf deinem Smartphone.\n\nDu kannst mich alles zu deinen abgelegten Dokumenten, Verträgen, Rechnungen oder anstehenden Kündigungsfristen fragen!",
-            isUser = false
-        )
-    ))
+    // 100% LOKALER ON-DEVICE KI-DOKUMENTEN-ASSISTENT & APP-STEUERUNG
+    val chatbotPureSwipeGestures: StateFlow<Boolean> = settingsRepo.chatbotPureSwipeGestures
+
+    fun setChatbotPureSwipeGestures(enabled: Boolean) {
+        settingsRepo.setChatbotPureSwipeGestures(enabled)
+    }
+
+    // Reiner Gesten-Modus (Immersive Fullscreen: Bottom-Bar & symmetrische FABs ausblenden)
+    val isGestureModeEnabled: StateFlow<Boolean> = settingsRepo.isGestureModeEnabled
+
+    fun setGestureModeEnabled(enabled: Boolean) {
+        settingsRepo.setGestureModeEnabled(enabled)
+    }
+
+    private val _isAiChatDrawerOpen = MutableStateFlow(false)
+    val isAiChatDrawerOpen: StateFlow<Boolean> = _isAiChatDrawerOpen.asStateFlow()
+
+    fun openAiChatDrawer() {
+        _isAiChatDrawerOpen.value = true
+    }
+
+    fun closeAiChatDrawer() {
+        _isAiChatDrawerOpen.value = false
+    }
+
+    fun toggleAiChatDrawer() {
+        _isAiChatDrawerOpen.value = !_isAiChatDrawerOpen.value
+    }
+
+    // CHAT-SESSION MANAGEMENT (Standard: Temporärer Chat)
+    val savedChatSessions: StateFlow<List<SavedChatSession>> = settingsRepo.savedChatSessions
+
+    private val _currentChatSessionId = MutableStateFlow<String?>(null)
+    val currentChatSessionId: StateFlow<String?> = _currentChatSessionId.asStateFlow()
+
+    private val _currentChatTitle = MutableStateFlow<String>("Temporärer Chat")
+    val currentChatTitle: StateFlow<String> = _currentChatTitle.asStateFlow()
+
+    // RÜCKGÄNGIG-MACHEN VON LLM-AKTIONEN
+    private val _lastUndoAction = MutableStateFlow<LlmUndoAction?>(null)
+    val lastUndoAction: StateFlow<LlmUndoAction?> = _lastUndoAction.asStateFlow()
+
+    private val defaultInitialMessage = ChatMessage(
+        text = "Hallo! Ich bin dein lokaler myDocAnizer Assistent. 🤖\n\nIch laufe zu 100% offline direkt auf deinem Smartphone und kenne mich mit deinen Dokumenten, deinen Verträgen und allen Funktionen der App aus.\n\nDu kannst mich alles zu deinen Akten fragen, Musterschreiben erstellen lassen oder App-Funktionen steuern (z.B. „Öffne den Scanner“ oder „Neuen Ordner erstellen“).\n\n💡 Wenn du wissen möchtest, wie und bei was ich dir genau helfen kann, tippe einfach **„Hilfe“**!",
+        isUser = false
+    )
+
+    private val _chatMessages = MutableStateFlow<List<ChatMessage>>(listOf(defaultInitialMessage))
     val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
 
-    fun sendChatMessage(userText: String) {
-        if (userText.isBlank()) return
-        val userMsg = ChatMessage(text = userText, isUser = true)
+    private val _isChatGenerating = MutableStateFlow(false)
+    val isChatGenerating: StateFlow<Boolean> = _isChatGenerating.asStateFlow()
+
+    private val _selectedChatDocument = MutableStateFlow<DocumentEntity?>(null)
+    val selectedChatDocument: StateFlow<DocumentEntity?> = _selectedChatDocument.asStateFlow()
+
+    fun selectChatDocument(doc: DocumentEntity?) {
+        _selectedChatDocument.value = doc
+    }
+
+    val isLocalLlmActive: Boolean
+        get() = true
+
+    fun startNewTemporaryChat() {
+        _currentChatSessionId.value = null
+        _currentChatTitle.value = "Temporärer Chat"
+        _selectedChatDocument.value = null
+        _lastUndoAction.value = null
+        _chatMessages.value = listOf(defaultInitialMessage)
+    }
+
+    fun saveCurrentChat(customTitle: String? = null) {
+        val messages = _chatMessages.value
+        val defaultTitle = messages.firstOrNull { it.isUser }?.text?.take(28)
+            ?: ("Chat vom " + java.text.SimpleDateFormat("dd.MM. HH:mm", java.util.Locale.GERMANY).format(java.util.Date()))
+        val title = customTitle?.trim()?.takeIf { it.isNotBlank() } ?: defaultTitle
+        val existingId = _currentChatSessionId.value
+        val sessionId = existingId ?: UUID.randomUUID().toString()
+
+        val session = SavedChatSession(
+            id = sessionId,
+            title = title,
+            messages = messages,
+            updatedAt = System.currentTimeMillis()
+        )
+        _currentChatSessionId.value = sessionId
+        _currentChatTitle.value = title
+        settingsRepo.addOrUpdateChatSession(session)
+    }
+
+    fun loadSavedChatSession(session: SavedChatSession) {
+        _currentChatSessionId.value = session.id
+        _currentChatTitle.value = session.title
+        _selectedChatDocument.value = null
+        _lastUndoAction.value = null
+        _chatMessages.value = session.messages.ifEmpty {
+            listOf(
+                ChatMessage(
+                    text = "Hallo! Ich bin dein lokaler myDocAnizer Assistent. 🤖\n\nDieser Chatverlauf ist dauerhaft gespeichert.",
+                    isUser = false
+                )
+            )
+        }
+    }
+
+    fun deleteSavedChatSession(sessionId: String) {
+        settingsRepo.deleteChatSession(sessionId)
+        if (_currentChatSessionId.value == sessionId) {
+            startNewTemporaryChat()
+        }
+    }
+
+    fun renameSavedChatSession(sessionId: String, newTitle: String) {
+        settingsRepo.renameChatSession(sessionId, newTitle)
+        if (_currentChatSessionId.value == sessionId) {
+            _currentChatTitle.value = newTitle.trim()
+        }
+    }
+
+    private fun autoSaveIfPersistent() {
+        val sessionId = _currentChatSessionId.value ?: return
+        val title = _currentChatTitle.value
+        settingsRepo.addOrUpdateChatSession(
+            SavedChatSession(
+                id = sessionId,
+                title = title,
+                messages = _chatMessages.value,
+                updatedAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    fun getLastUserPrompt(): String? {
+        return _chatMessages.value.lastOrNull { it.isUser }?.text
+    }
+
+    fun undoLastLlmAction() {
+        val action = _lastUndoAction.value ?: return
+        viewModelScope.launch {
+            when (action) {
+                is LlmUndoAction.FolderCreated -> {
+                    settingsRepo.deleteTemplate(action.templateId)
+                    _lastUndoAction.value = null
+                    val undoMsg = ChatMessage(
+                        text = "↩️ **Aktion rückgängig gemacht:** Der Ordner **„${action.folderName}“** wurde wieder aus dem Dokumenten-Tresor entfernt.",
+                        isUser = false
+                    )
+                    _chatMessages.value = _chatMessages.value + undoMsg
+                    autoSaveIfPersistent()
+                }
+                is LlmUndoAction.DocumentStatusUpdated -> {
+                    if (action.previousStatus != null) {
+                        customFieldDao.insertOrUpdateFieldValue(
+                            com.example.model.DocumentCustomFieldValueEntity(
+                                documentId = action.docId,
+                                customFieldId = "cf_status",
+                                fieldValue = action.previousStatus
+                            )
+                        )
+                    } else {
+                        customFieldDao.deleteFieldValue(action.docId, "cf_status")
+                    }
+                    _lastUndoAction.value = null
+                    val undoMsg = ChatMessage(
+                        text = "↩️ **Aktion rückgängig gemacht:** Der Bearbeitungsstatus für **„${action.docTitle}“** wurde auf **„${action.previousStatus ?: "Unbearbeitet"}“** zurückgesetzt.",
+                        isUser = false
+                    )
+                    _chatMessages.value = _chatMessages.value + undoMsg
+                    autoSaveIfPersistent()
+                }
+                is LlmUndoAction.FilterApplied -> {
+                    _filter.value = action.previousFilter
+                    _lastUndoAction.value = null
+                    val undoMsg = ChatMessage(
+                        text = "↩️ **Aktion rückgängig gemacht:** Der vorherige Filterzustand im Dokumenten-Tresor wurde wiederhergestellt.",
+                        isUser = false
+                    )
+                    _chatMessages.value = _chatMessages.value + undoMsg
+                    autoSaveIfPersistent()
+                }
+            }
+        }
+    }
+
+    val toolActionHandler = object : ToolActionHandler {
+        override suspend fun onFilterDocuments(sender: String?, status: String?, category: String?): String {
+            return applyFilterFromTool(sender, status, category)
+        }
+
+        override suspend fun onUpdateDocumentStatus(docId: String, newStatus: String): String {
+            return updateDocumentStatusFromTool(docId, newStatus)
+        }
+
+        override suspend fun onOpenAppSection(section: String): String {
+            return when (section.lowercase()) {
+                "scanner" -> "Ich öffne den Scanner für dich! 📷"
+                "dashboard" -> "Hier geht es direkt zu deinem Dashboard! 📊"
+                "trash" -> "Ich öffne den Papierkorb für dich. 🗑️"
+                "settings" -> "Ich öffne die Einstellungen für dich. ⚙️"
+                "deadlines" -> "Ich rufe das Fristen-Radar auf. ⏰"
+                "import" -> "Ich öffne den Datei-Import. 📥"
+                else -> "Ich navigiere zum Bereich '$section'."
+            }
+        }
+
+        override suspend fun onCreateFolder(folderName: String, parentCategory: String?): String {
+            return createFolderFromTool(folderName, parentCategory)
+        }
+    }
+
+    val llmToolRouter = LlmToolRouter(toolActionHandler)
+
+    fun applyFilterFromTool(sender: String?, status: String?, category: String?): String {
+        val previousFilter = _filter.value
+        _lastUndoAction.value = LlmUndoAction.FilterApplied(previousFilter)
+
+        var current = _filter.value
+        val summaryParts = mutableListOf<String>()
+
+        if (!sender.isNullOrBlank()) {
+            current = current.copy(sender = sender)
+            summaryParts.add("Absender: **$sender**")
+        }
+        if (!category.isNullOrBlank()) {
+            current = current.copy(mainCategory = category, subCategory = null)
+            summaryParts.add("Kategorie: **$category**")
+        }
+        if (!status.isNullOrBlank()) {
+            current = current.copy(customFieldId = "cf_status", customFieldValue = status)
+            summaryParts.add("Status: **$status**")
+        }
+
+        _filter.value = current
+
+        AppAuditLogger.log(
+            category = LogCategory.STORAGE_DMS,
+            tag = "LlmToolRouter",
+            message = "Dokumenten-Filter via KI-Tool 'filterDocuments' angewendet",
+            details = "Absender: $sender | Status: $status | Kategorie: $category"
+        )
+
+        return if (summaryParts.isNotEmpty()) {
+            "🔍 **Dokumenten-Filter angewendet:**\n${summaryParts.joinToString(" • ")}\n\nIm Dokumenten-Tresor werden jetzt die gefilterten Dokumente angezeigt."
+        } else {
+            "🔍 Alle Dokumenten-Filter im Tresor wurden zurückgesetzt."
+        }
+    }
+
+    suspend fun updateDocumentStatusFromTool(docId: String, newStatus: String): String {
+        val idLong = docId.trim().toLongOrNull()
+        val allDocs = documentDao.getAllDocuments().first()
+        val targetDoc = if (idLong != null) {
+            allDocs.find { it.id == idLong }
+        } else {
+            allDocs.find { it.title.contains(docId, ignoreCase = true) || it.fileName.contains(docId, ignoreCase = true) }
+        }
+
+        if (targetDoc == null) {
+            return "⚠️ Dokument mit ID oder Titel „$docId“ konnte im Dokumenten-Tresor nicht gefunden werden."
+        }
+
+        val currentValues = customFieldDao.getCustomFieldValuesForDocumentList(targetDoc.id)
+        val existingStatus = currentValues.find { it.customFieldId == "cf_status" }?.fieldValue
+        _lastUndoAction.value = LlmUndoAction.DocumentStatusUpdated(
+            docId = targetDoc.id,
+            docTitle = targetDoc.title,
+            previousStatus = existingStatus,
+            newStatus = newStatus
+        )
+
+        // Sicherstellen, dass das Feld cf_status existiert
+        val existingFields = customFieldDao.getAllCustomFieldsList()
+        val statusField = existingFields.find { it.id == "cf_status" }
+        if (statusField == null) {
+            customFieldDao.insertCustomField(
+                com.example.model.CustomFieldEntity(
+                    id = "cf_status",
+                    name = "Bearbeitungsstatus",
+                    description = "Status im Tresor",
+                    type = com.example.model.CustomFieldType.SELECTION,
+                    options = "Offen,Bezahlt,Gekündigt,Prüfen,In Bearbeitung",
+                    scope = com.example.model.CustomFieldScope.GLOBAL
+                )
+            )
+        }
+
+        customFieldDao.insertOrUpdateFieldValue(
+            com.example.model.DocumentCustomFieldValueEntity(
+                documentId = targetDoc.id,
+                customFieldId = "cf_status",
+                fieldValue = newStatus
+            )
+        )
+
+        if (newStatus.equals("Gekündigt", ignoreCase = true)) {
+            val updatedTags = if (!targetDoc.tags.contains("gekündigt", ignoreCase = true)) {
+                if (targetDoc.tags.isBlank()) "#gekündigt" else "${targetDoc.tags}, #gekündigt"
+            } else targetDoc.tags
+            documentDao.updateDocument(targetDoc.copy(tags = updatedTags))
+        }
+
+        AppAuditLogger.log(
+            category = LogCategory.STORAGE_DMS,
+            tag = "LlmToolRouter",
+            message = "Dokument-Status via KI-Tool 'updateDocumentStatus' geändert",
+            details = "Dokument: '${targetDoc.title}' (ID: ${targetDoc.id}) -> Neuer Status: '$newStatus'"
+        )
+
+        return "✅ Der Bearbeitungsstatus für **„${targetDoc.title}“** (ID: #${targetDoc.id}) wurde auf **„$newStatus“** gesetzt."
+    }
+
+    fun createFolderFromTool(folderName: String, parentCategory: String?): String {
+        val cleanName = folderName.trim().replace("\"", "").replace("'", "").trim()
+        if (cleanName.isBlank()) return "⚠️ Der Ordnername darf nicht leer sein."
+
+        val mainCat = parentCategory?.trim()?.takeIf { it.isNotBlank() } ?: cleanName
+        val subCat = if (parentCategory != null && parentCategory.isNotBlank()) cleanName else "Allgemein"
+
+        val template = createFolderAndTemplate(
+            mainCategory = mainCat,
+            subCategory = subCat
+        )
+
+        _lastUndoAction.value = LlmUndoAction.FolderCreated(
+            folderName = cleanName,
+            parentCategory = mainCat,
+            templateId = template.id
+        )
+
+        // DMS-Ordner-Fokus sofort auf diesen neu erstellten Ordner setzen
+        _selectedTemplate.value = template
+        _filter.value = _filter.value.copy(mainCategory = mainCat, subCategory = subCat)
+
+        AppAuditLogger.log(
+            category = LogCategory.STORAGE_DMS,
+            tag = "LlmToolRouter",
+            message = "Ordner via KI-Tool 'createFolder' erstellt",
+            details = "Ordner: '$cleanName' (Pfad: $mainCat / $subCat, Template-ID: ${template.id})"
+        )
+
+        return "📁 Der Ordner **„$cleanName“** wurde erfolgreich im Dokumenten-Tresor angelegt!\n\nDu findest ihn jetzt direkt in deiner Ordnerstruktur ($mainCat ➔ $subCat)."
+    }
+
+    suspend fun sendChatMessageSync(userText: String, attachedDoc: DocumentEntity? = _selectedChatDocument.value): LlmRouterResult {
+        val trimmed = userText.trim()
+        val userMsg = ChatMessage(
+            text = trimmed,
+            isUser = true,
+            attachedDocTitle = attachedDoc?.title
+        )
         _chatMessages.value = _chatMessages.value + userMsg
+        autoSaveIfPersistent()
+
+        val docs = allDocuments.value
+        val rawResult = llmService.queryDocumentAssistantWithFollowUps(
+            question = trimmed,
+            documents = docs,
+            attachedDoc = attachedDoc
+        )
+
+        val routerResult = llmToolRouter.routeResponse(rawResult.replyText)
+        val assistantMsg = when (routerResult) {
+            is LlmRouterResult.ToolCallExecuted -> {
+                ChatMessage(
+                    text = routerResult.confirmationMessage,
+                    isUser = false,
+                    actionType = routerResult.actionType ?: rawResult.actionType,
+                    actionLabel = routerResult.actionLabel ?: rawResult.actionLabel
+                )
+            }
+            is LlmRouterResult.Text -> {
+                ChatMessage(
+                    text = routerResult.replyText,
+                    isUser = false,
+                    actionType = rawResult.actionType,
+                    actionLabel = rawResult.actionLabel
+                )
+            }
+        }
+        _chatMessages.value = _chatMessages.value + assistantMsg
+        autoSaveIfPersistent()
+        return routerResult
+    }
+
+    fun sendChatMessage(userText: String, attachedDoc: DocumentEntity? = _selectedChatDocument.value) {
+        val trimmed = userText.trim()
+        if (trimmed.isBlank()) return
+        _isChatGenerating.value = true
 
         viewModelScope.launch {
-            val docs = allDocuments.value
-            val responseText = llmService.queryDocumentAssistant(userText, docs)
-            val assistantMsg = ChatMessage(text = responseText, isUser = false)
-            _chatMessages.value = _chatMessages.value + assistantMsg
+            try {
+                sendChatMessageSync(trimmed, attachedDoc)
+            } catch (e: Exception) {
+                Log.e("DocAnizerViewModel", "Chat assistant failed: ${e.message}", e)
+                _chatMessages.value = _chatMessages.value + ChatMessage(
+                    text = "Lokaler KI-Fehler: ${e.message}",
+                    isUser = false
+                )
+                autoSaveIfPersistent()
+            } finally {
+                _isChatGenerating.value = false
+            }
         }
     }
 
     fun clearChat() {
-        _chatMessages.value = listOf(
-            ChatMessage(
-                text = "Der Chat-Verlauf wurde zurückgesetzt. Wie kann ich dir bei deinen Dokumenten helfen?",
-                isUser = false
-            )
-        )
+        _selectedChatDocument.value = null
+        _lastUndoAction.value = null
+        _chatMessages.value = listOf(defaultInitialMessage)
+        autoSaveIfPersistent()
     }
 
     /**
@@ -2681,6 +3073,26 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             } finally {
                 processedBmpToRecycle?.let { runCatching { it.recycle() } }
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // DEBUG-DATEN-SEEDER & TESTDATEN-GENERIERUNG (NUR FÜR DEBUG-BUILDS!)
+    // ---------------------------------------------------------------------------------------------
+    fun seedDebugData(onComplete: (Int) -> Unit = {}) {
+        if (!BuildConfig.DEBUG) {
+            onComplete(0)
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val count = DebugDataSeeder.seedDatabaseAndFiles(
+                context = getApplication(),
+                database = db,
+                settingsRepo = settingsRepo
+            )
+            withContext(Dispatchers.Main) {
+                onComplete(count)
             }
         }
     }

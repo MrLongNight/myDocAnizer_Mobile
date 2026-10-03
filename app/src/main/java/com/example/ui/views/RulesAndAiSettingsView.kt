@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -573,70 +575,81 @@ fun HuggingFaceModelsContent(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = if (model.isSelected) 3.dp else 1.dp,
+                tonalElevation = if (model.isSelected) 2.dp else 0.dp,
                 border = BorderStroke(
-                    width = if (model.isSelected) 2.dp else 1.dp,
-                    color = if (model.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                    width = if (model.isSelected) 1.5.dp else 1.dp,
+                    color = if (model.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
                 ),
                 modifier = Modifier.fillMaxWidth().testTag("model_card_${model.id}")
             ) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Kopfzeile mit Name & Badges
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Header Row: Model Avatar, Name, Badges & Kompatibilität
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (model.isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.size(32.dp)
                             ) {
-                                Text(
-                                    text = model.name,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleSmall
-                                )
-                                if (model.isNewRelease) {
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = MaterialTheme.colorScheme.tertiary
-                                    ) {
-                                        Text(
-                                            text = "NEU",
-                                            color = MaterialTheme.colorScheme.onTertiary,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                            fontSize = 9.sp
-                                        )
-                                    }
-                                }
-                                if (model.isSelected) {
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = MaterialTheme.colorScheme.primary
-                                    ) {
-                                        Text(
-                                            text = "Aktiv",
-                                            color = Color.White,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                                            fontSize = 9.sp
-                                        )
-                                    }
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Psychology,
+                                        contentDescription = null,
+                                        tint = if (model.isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
-                            Text(
-                                text = "${model.author} • ${model.modelCategory}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 11.sp
-                            )
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = model.name,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    if (model.isNewRelease) {
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = MaterialTheme.colorScheme.tertiary
+                                        ) {
+                                            Text(
+                                                text = "NEU",
+                                                color = MaterialTheme.colorScheme.onTertiary,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 9.sp,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                Text(
+                                    text = "${model.parameterSize} • ${model.modelCategory}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    maxLines = 1
+                                )
+                            }
                         }
 
-                        // Kompatibilitäts-Badge
+                        // Kompatibilitäts-Badge (kompakt)
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = when (compatibility) {
@@ -647,11 +660,10 @@ fun HuggingFaceModelsContent(
                         ) {
                             Text(
                                 text = when (compatibility) {
-                                    com.example.model.ModelCompatibilityLevel.OPTIMAL -> "✅ Optimal"
-                                    com.example.model.ModelCompatibilityLevel.LIMITED -> "⚠️ Hohe RAM-Last"
-                                    com.example.model.ModelCompatibilityLevel.NOT_RECOMMENDED -> "❌ Zu wenig RAM"
+                                    com.example.model.ModelCompatibilityLevel.OPTIMAL -> "● Optimal"
+                                    com.example.model.ModelCompatibilityLevel.LIMITED -> "● Hohe Last"
+                                    com.example.model.ModelCompatibilityLevel.NOT_RECOMMENDED -> "● Viel RAM"
                                 },
-                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 10.sp,
                                 color = when (compatibility) {
@@ -664,65 +676,42 @@ fun HuggingFaceModelsContent(
                         }
                     }
 
-                    // Deutsche Modell-Erklärung
+                    // Deutsche Modell-Erklärung (prägnant & sauber, max 2 Zeilen)
                     Text(
                         text = model.descriptionDe,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
-                        lineHeight = 16.sp
+                        lineHeight = 16.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
 
-                    // Kriterien-Übersicht
-                    if (model.criteria.isNotEmpty()) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(6.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                model.criteria.forEach { criterion ->
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = Color(0xFF10B981),
-                                            modifier = Modifier.size(11.dp)
-                                        )
-                                        Text(
-                                            text = criterion,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Metriken & Download-/Aktivierungsleiste
+                    // Footer Row: Dateigröße / RAM links, kleiner schlanker Action Button rechts
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Memory,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(13.dp)
+                            )
                             Text(
-                                text = "${model.parameterSize} • ~${model.downloadSizeMb} MB",
+                                text = "${model.downloadSizeMb} MB • ${model.ramBadge}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 11.sp
                             )
                         }
 
-                        // Download- und Auswahl-Aktionen (Kompakt und elegant)
+                        // Aktionen: Kompakt & dezent (Download Button schlank und nicht mehr übergroß)
                         if (model.isDownloading) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -730,66 +719,70 @@ fun HuggingFaceModelsContent(
                             ) {
                                 CircularProgressIndicator(
                                     progress = { model.downloadProgress },
-                                    modifier = Modifier.size(18.dp),
+                                    modifier = Modifier.size(16.dp),
                                     strokeWidth = 2.dp
                                 )
                                 Text(
                                     text = "${(model.downloadProgress * 100).toInt()}%",
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
                                 )
                             }
                         } else if (!model.isDownloaded) {
                             FilledTonalButton(
                                 onClick = { viewModel.downloadModel(model.id) },
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                modifier = Modifier.height(32.dp)
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                modifier = Modifier.height(28.dp).testTag("btn_download_${model.id}")
                             ) {
-                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Laden (${model.downloadSizeMb} MB)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Laden", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                             }
                         } else {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 IconButton(
                                     onClick = { viewModel.deleteModel(model.id) },
-                                    modifier = Modifier.size(30.dp)
+                                    modifier = Modifier.size(28.dp).testTag("btn_delete_${model.id}")
                                 ) {
                                     Icon(
                                         Icons.Default.DeleteOutline,
-                                        contentDescription = "Modell löschen",
+                                        contentDescription = "Löschen",
                                         tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(15.dp)
                                     )
                                 }
 
                                 if (!model.isSelected) {
                                     Button(
                                         onClick = { viewModel.selectModel(model.id) },
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                        modifier = Modifier.height(32.dp)
+                                        shape = RoundedCornerShape(6.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                        modifier = Modifier.height(28.dp).testTag("btn_select_${model.id}")
                                     ) {
                                         Text("Aktivieren", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     }
                                 } else {
                                     Surface(
                                         color = Color(0xFF10B981).copy(alpha = 0.15f),
-                                        shape = RoundedCornerShape(8.dp)
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.height(24.dp)
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
                                         ) {
                                             Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(12.dp))
                                             Text(
                                                 text = "Aktiv",
                                                 color = Color(0xFF10B981),
                                                 fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.labelSmall
+                                                fontSize = 10.sp
                                             )
                                         }
                                     }

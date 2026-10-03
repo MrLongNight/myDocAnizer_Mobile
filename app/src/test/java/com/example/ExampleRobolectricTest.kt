@@ -7,6 +7,7 @@ import com.example.data.AppDatabase
 import com.example.model.CustomFieldEntity
 import com.example.model.CustomFieldScope
 import com.example.model.CustomFieldType
+import com.example.service.SettingsRepository
 import com.example.ui.DocAnizerViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -456,5 +457,419 @@ class ExampleRobolectricTest {
     assertFalse(modelFile.exists())
     val afterDelete = viewModel.llmService.availableModels.value.find { it.id == modelId }
     assertFalse(afterDelete!!.isDownloaded)
+  }
+
+  @Test
+  fun `verify AI Chatbot integration and conversation flow`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    val initialMessages = viewModel.chatMessages.value
+    assertTrue(initialMessages.isNotEmpty())
+    assertFalse(initialMessages[0].isUser)
+
+    val result = viewModel.llmService.queryDocumentAssistantWithFollowUps(
+      question = "Erstelle mir ein Kündigungsschreiben für meinen Vertrag",
+      documents = emptyList()
+    )
+    assertTrue(result.replyText.contains("Kündigung"))
+
+    // Test App-Steuerung per lokaler KI
+    val scanResult = viewModel.llmService.queryDocumentAssistantWithFollowUps(
+      question = "Öffne den Scanner",
+      documents = emptyList()
+    )
+    assertEquals("OPEN_SCANNER", scanResult.actionType)
+
+    viewModel.clearChat()
+    assertEquals(1, viewModel.chatMessages.value.size)
+  }
+
+  @Test
+  fun `verify LLM Tool definitions and OpenAI schema generation`() {
+    val filterTool = com.example.service.AppTool.FilterDocuments
+    assertEquals("filterDocuments", filterTool.name)
+    val filterSchema = filterTool.toOpenAiToolSchema()
+    assertEquals("function", filterSchema.getString("type"))
+    val funcObj = filterSchema.getJSONObject("function")
+    assertEquals("filterDocuments", funcObj.getString("name"))
+    val paramsObj = funcObj.getJSONObject("parameters")
+    val props = paramsObj.getJSONObject("properties")
+    assertTrue(props.has("sender"))
+    assertTrue(props.has("status"))
+    assertTrue(props.has("category"))
+
+    val updateTool = com.example.service.AppTool.UpdateDocumentStatus
+    assertEquals("updateDocumentStatus", updateTool.name)
+    val updateSchema = updateTool.toOpenAiToolSchema()
+    val updateFunc = updateSchema.getJSONObject("function")
+    val updateParams = updateFunc.getJSONObject("parameters")
+    val req = updateParams.getJSONArray("required")
+    assertTrue(req.toString().contains("docId"))
+    assertTrue(req.toString().contains("newStatus"))
+
+    // Test kotlinx JsonObject generation
+    val kotlinxObj = filterTool.toKotlinxJsonObject()
+    assertNotNull(kotlinxObj)
+    assertTrue(kotlinxObj.toString().contains("filterDocuments"))
+  }
+
+  @Test
+  fun `verify system prompt injection with available tools`() {
+    val injectedPrompt = com.example.service.LlmToolPromptBuilder.buildInjectedSystemPrompt()
+    assertTrue(injectedPrompt.contains("filterDocuments"))
+    assertTrue(injectedPrompt.contains("updateDocumentStatus"))
+    assertTrue(injectedPrompt.contains("WICHTIGE ANWEISUNG ZUR TOOL-NUTZUNG"))
+    assertTrue(injectedPrompt.contains("AUSSCHLIESSLICH mit einem JSON-Block"))
+    assertTrue(injectedPrompt.contains("```json"))
+  }
+
+  @Test
+  fun `verify LlmToolRouter parsing valid tool calls and fallback for broken output`() = runBlocking {
+    val router = com.example.service.LlmToolRouter()
+
+    // 1. Valid filterDocuments call with markdown
+    val filterOutput = """
+      ```json
+      {
+        "name": "filterDocuments",
+        "arguments": {
+          "sender": "Telekom",
+          "status": "Offen",
+          "category": "Finanzen"
+        }
+      }
+      ```
+    """.trimIndent()
+
+    val parsedFilter = router.parseToolCall(filterOutput)
+    assertNotNull(parsedFilter)
+    assertTrue(parsedFilter is com.example.service.AppToolCall.FilterDocuments)
+    val filterCall = parsedFilter as com.example.service.AppToolCall.FilterDocuments
+    assertEquals("Telekom", filterCall.sender)
+    assertEquals("Offen", filterCall.status)
+    assertEquals("Finanzen", filterCall.category)
+
+    // 2. Valid updateDocumentStatus call without markdown
+    val updateOutput = """{"name": "updateDocumentStatus", "arguments": {"docId": "42", "newStatus": "Bezahlt"}}"""
+    val parsedUpdate = router.parseToolCall(updateOutput)
+    assertNotNull(parsedUpdate)
+    assertTrue(parsedUpdate is com.example.service.AppToolCall.UpdateDocumentStatus)
+    val updateCall = parsedUpdate as com.example.service.AppToolCall.UpdateDocumentStatus
+    assertEquals("42", updateCall.docId)
+    assertEquals("Bezahlt", updateCall.newStatus)
+
+    // 3. Normal conversational text should not be recognized as tool call
+    val textOutput = "Hallo! Hier ist deine Aufstellung über alle Rechnungen des Monats."
+    val parsedText = router.parseToolCall(textOutput)
+    assertEquals(null, parsedText)
+
+    val routedTextResult = router.routeResponse(textOutput)
+    assertTrue(routedTextResult is com.example.service.LlmRouterResult.Text)
+    assertEquals(textOutput, (routedTextResult as com.example.service.LlmRouterResult.Text).replyText)
+
+    // 4. Malformed JSON should not crash and fall back safely to text
+    val brokenJson = "```json\n{ name: filterDocuments, broken_args: [ \n```"
+    val parsedBroken = router.parseToolCall(brokenJson)
+    assertEquals(null, parsedBroken)
+    val routedBroken = router.routeResponse(brokenJson)
+    assertTrue(routedBroken is com.example.service.LlmRouterResult.Text)
+  }
+
+  @Test
+  fun `verify LlmToolRouter native execution and ViewModel integration`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    // Insert a document for testing
+    val db = AppDatabase.getDatabase(app)
+    val docDao = db.documentDao()
+    val testDocId = docDao.insertDocument(
+      com.example.model.DocumentEntity(
+        title = "Telekom Festnetz Rechnungsbeleg",
+        sender = "Telekom",
+        fileName = "telekom_rechnung.pdf",
+        filePath = "/storage/test/telekom.pdf",
+        mainCategory = "Finanzen",
+        subCategory = "Telefon",
+        docType = "Rechnung",
+        amount = 49.95
+      )
+    )
+
+    // 1. Test Filter via Tool Call
+    val filterLlmResponse = """
+      ```json
+      {
+        "name": "filterDocuments",
+        "arguments": {
+          "sender": "Telekom",
+          "category": "Finanzen",
+          "status": "Offen"
+        }
+      }
+      ```
+    """.trimIndent()
+
+    val filterRouteResult = viewModel.llmToolRouter.routeResponse(filterLlmResponse)
+    assertTrue(filterRouteResult is com.example.service.LlmRouterResult.ToolCallExecuted)
+    val filterExec = filterRouteResult as com.example.service.LlmRouterResult.ToolCallExecuted
+    assertTrue(filterExec.confirmationMessage.contains("Telekom"))
+    assertTrue(filterExec.confirmationMessage.contains("Finanzen"))
+    assertEquals("OPEN_EXPLORER", filterExec.actionType)
+
+    // Verify filter was updated in ViewModel
+    val activeFilter = viewModel.filter.value
+    assertEquals("Telekom", activeFilter.sender)
+    assertEquals("Finanzen", activeFilter.mainCategory)
+    assertEquals("cf_status", activeFilter.customFieldId)
+    assertEquals("Offen", activeFilter.customFieldValue)
+
+    // 2. Test Update Document Status via Tool Call
+    val updateLlmResponse = """
+      ```json
+      {
+        "name": "updateDocumentStatus",
+        "arguments": {
+          "docId": "$testDocId",
+          "newStatus": "Bezahlt"
+        }
+      }
+      ```
+    """.trimIndent()
+
+    val updateRouteResult = viewModel.llmToolRouter.routeResponse(updateLlmResponse)
+    assertTrue(updateRouteResult is com.example.service.LlmRouterResult.ToolCallExecuted)
+    val updateExec = updateRouteResult as com.example.service.LlmRouterResult.ToolCallExecuted
+    assertTrue(updateExec.confirmationMessage.contains("Bezahlt"))
+    assertTrue(updateExec.confirmationMessage.contains("$testDocId"))
+
+    // Verify status was persisted in Room DB
+    val customDao = db.customFieldDao()
+    val customVals = customDao.getCustomFieldValuesForDocumentList(testDocId)
+    val statusVal = customVals.find { it.customFieldId == "cf_status" }
+    assertNotNull(statusVal)
+    assertEquals("Bezahlt", statusVal?.fieldValue)
+  }
+
+  @Test
+  fun `verify chat message execution with tool calling flow`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    // Send a query that requests filtering synchronously in test
+    val routerResult = viewModel.sendChatMessageSync("Filtere nach Telekom")
+    assertTrue(routerResult is com.example.service.LlmRouterResult.ToolCallExecuted)
+
+    val messages = viewModel.chatMessages.value
+    assertTrue("Expected at least 2 messages but was: ${messages.size}", messages.size >= 2)
+    val lastMsg = messages.last()
+    assertFalse(lastMsg.isUser)
+    assertTrue("Message text was: ${lastMsg.text}", lastMsg.text.contains("Dokumenten-Filter") || lastMsg.text.contains("Telekom"))
+    assertEquals("OPEN_EXPLORER", lastMsg.actionType)
+  }
+
+  @Test
+  fun `verify CreateFolder tool definition schema and router parsing`() = runBlocking {
+    val createFolderTool = com.example.service.AppTool.CreateFolder
+    assertEquals("createFolder", createFolderTool.name)
+    val schema = createFolderTool.toOpenAiToolSchema()
+    val func = schema.getJSONObject("function")
+    val params = func.getJSONObject("parameters")
+    val required = params.getJSONArray("required")
+    assertTrue(required.toString().contains("folderName"))
+
+    // Verify router parsing
+    val router = com.example.service.LlmToolRouter()
+    val output = """
+      ```json
+      {
+        "name": "createFolder",
+        "arguments": {
+          "folderName": "Versicherungen 2026",
+          "parentCategory": "Finanzen"
+        }
+      }
+      ```
+    """.trimIndent()
+    val parsed = router.parseToolCall(output)
+    assertNotNull(parsed)
+    assertTrue(parsed is com.example.service.AppToolCall.CreateFolder)
+    val folderCall = parsed as com.example.service.AppToolCall.CreateFolder
+    assertEquals("Versicherungen 2026", folderCall.folderName)
+    assertEquals("Finanzen", folderCall.parentCategory)
+  }
+
+  @Test
+  fun `verify folder creation via chat message tool execution`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    // User asks to create a folder
+    val routerResult = viewModel.sendChatMessageSync("Erstelle einen Ordner Steuern 2024")
+    assertTrue("Expected ToolCallExecuted but was: $routerResult", routerResult is com.example.service.LlmRouterResult.ToolCallExecuted)
+
+    val exec = routerResult as com.example.service.LlmRouterResult.ToolCallExecuted
+    assertTrue(exec.confirmationMessage.contains("Steuern 2024"))
+    assertEquals("OPEN_EXPLORER", exec.actionType)
+
+    // Verify template and folder were actually created in ViewModel
+    val templates = viewModel.templates.value
+    val createdTemplate = templates.find { it.mainCategory.contains("Steuern 2024") || it.subCategory.contains("Steuern 2024") }
+    assertNotNull("Created template must exist in templates list", createdTemplate)
+
+    // Verify chat message displays confirmation
+    val messages = viewModel.chatMessages.value
+    val lastMsg = messages.last()
+    assertFalse(lastMsg.isUser)
+    assertTrue(lastMsg.text.contains("Steuern 2024"))
+  }
+
+  @Test
+  fun `verify chatbot pure swipe gesture setting toggle`() {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    // Initially false
+    viewModel.setChatbotPureSwipeGestures(false)
+    assertFalse(viewModel.chatbotPureSwipeGestures.value)
+
+    // Toggle to true
+    viewModel.setChatbotPureSwipeGestures(true)
+    assertTrue(viewModel.chatbotPureSwipeGestures.value)
+
+    // Toggle back
+    viewModel.setChatbotPureSwipeGestures(false)
+    assertFalse(viewModel.chatbotPureSwipeGestures.value)
+  }
+
+  @Test
+  fun `verify undo action for folder creation via LLM`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    // 1. Create a folder via tool
+    viewModel.sendChatMessageSync("Erstelle einen Ordner Auto 2026")
+    assertNotNull(viewModel.lastUndoAction.value)
+
+    val templatesBeforeUndo = viewModel.templates.value
+    assertTrue(templatesBeforeUndo.any { it.mainCategory.contains("Auto 2026") || it.subCategory.contains("Auto 2026") })
+
+    // 2. Undo the action
+    viewModel.undoLastLlmAction()
+
+    // Wait a short moment for coroutine
+    kotlinx.coroutines.delay(100)
+
+    val templatesAfterUndo = viewModel.templates.value
+    assertFalse(templatesAfterUndo.any { it.mainCategory.contains("Auto 2026") || it.subCategory.contains("Auto 2026") })
+    assertEquals(null, viewModel.lastUndoAction.value)
+
+    val lastMsg = viewModel.chatMessages.value.last()
+    assertTrue(lastMsg.text.contains("rückgängig gemacht"))
+  }
+
+  @Test
+  fun `verify chat session saving loading and temporary mode`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    // 1. Initial mode is temporary
+    viewModel.startNewTemporaryChat()
+    assertEquals(null, viewModel.currentChatSessionId.value)
+    assertEquals("Temporärer Chat", viewModel.currentChatTitle.value)
+
+    // 2. Send messages
+    viewModel.sendChatMessageSync("Wie kann ich Verträge kündigen?")
+    assertEquals("Wie kann ich Verträge kündigen?", viewModel.getLastUserPrompt())
+
+    // 3. Save chat explicitly
+    viewModel.saveCurrentChat("Kündigungs-Assistent")
+    val savedId = viewModel.currentChatSessionId.value
+    assertNotNull(savedId)
+    assertEquals("Kündigungs-Assistent", viewModel.currentChatTitle.value)
+
+    val savedList = viewModel.savedChatSessions.value
+    assertTrue(savedList.any { it.id == savedId && it.title == "Kündigungs-Assistent" })
+
+    // 4. Start new temporary chat
+    viewModel.startNewTemporaryChat()
+    assertEquals(null, viewModel.currentChatSessionId.value)
+    assertEquals(1, viewModel.chatMessages.value.size) // Only initial greeting
+
+    // 5. Reload saved chat
+    val sessionToLoad = savedList.first { it.id == savedId }
+    viewModel.loadSavedChatSession(sessionToLoad)
+    assertEquals(savedId, viewModel.currentChatSessionId.value)
+    assertEquals("Kündigungs-Assistent", viewModel.currentChatTitle.value)
+    assertTrue(viewModel.chatMessages.value.any { it.text.contains("Kündigungs-Assistent") || it.text.contains("Verträge kündigen") })
+
+    // 6. Rename session
+    viewModel.renameSavedChatSession(savedId!!, "Vertragsrecht & Kündigungen")
+    assertEquals("Vertragsrecht & Kündigungen", viewModel.currentChatTitle.value)
+
+    // 7. Delete session
+    viewModel.deleteSavedChatSession(savedId)
+    assertEquals(null, viewModel.currentChatSessionId.value)
+    assertFalse(viewModel.savedChatSessions.value.any { it.id == savedId })
+  }
+
+  @Test
+  fun `verify pure gesture mode vs standard mode toggle`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    // Initial state is false (standard mode with visible bottom bar & symmetrical FABs)
+    viewModel.setGestureModeEnabled(false)
+    assertEquals(false, viewModel.isGestureModeEnabled.first())
+
+    // Enable pure gesture mode (immersive fullscreen, edge swipe zones active)
+    viewModel.setGestureModeEnabled(true)
+    assertEquals(true, viewModel.isGestureModeEnabled.first())
+
+    // Toggle back
+    viewModel.setGestureModeEnabled(false)
+    assertEquals(false, viewModel.isGestureModeEnabled.first())
+  }
+
+  @Test
+  fun `verify DebugDataSeeder generates realistic documents and files`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val db = AppDatabase.getDatabase(app)
+    val settingsRepo = SettingsRepository(app)
+
+    val count = com.example.util.DebugDataSeeder.seedDatabaseAndFiles(app, db, settingsRepo)
+    assertTrue(count >= 10)
+
+    val docs = db.documentDao().getAllDocumentsList()
+    assertEquals(count, docs.size)
+
+    // Check categories
+    assertTrue(docs.any { it.mainCategory == "Finanzen" })
+    assertTrue(docs.any { it.mainCategory == "Verträge" })
+    assertTrue(docs.any { it.mainCategory == "Gesundheit" })
+    assertTrue(docs.any { it.mainCategory == "Wohnung" })
+
+    // Check files exist on disk
+    for (doc in docs) {
+      val f = java.io.File(doc.filePath)
+      assertTrue("File should exist on disk: ${doc.filePath}", f.exists())
+      assertTrue("File size should be greater than 0", f.length() > 0)
+      assertTrue("OCR text must not be blank", doc.ocrText.isNotBlank())
+    }
+
+    // Check search / fuzzy query
+    val vodafoneDocs = db.documentDao().searchDocuments("Vodafone").first()
+    assertEquals(1, vodafoneDocs.size)
+    assertEquals("Vodafone GmbH", vodafoneDocs[0].sender)
+  }
+
+  @Test
+  fun `verify Settings navigation tab works properly`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    viewModel.setTargetNavigationTab("SETTINGS")
+    assertEquals("SETTINGS", viewModel.targetNavigationTab.value)
   }
 }

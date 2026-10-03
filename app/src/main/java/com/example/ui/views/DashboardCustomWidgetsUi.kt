@@ -106,13 +106,14 @@ import java.util.Locale
  */
 fun getWidgetAccentColor(colorSkin: String): Color {
     return when (colorSkin.uppercase()) {
+        "MYDOCANIZER" -> Color(0xFF00E5FF)
         "BLUE" -> Color(0xFF3B82F6)
         "EMERALD" -> Color(0xFF10B981)
         "AMBER" -> Color(0xFFF59E0B)
-        "ROSE" -> Color(0xFFF43F5E)
+        "ROSE" -> Color(0xFFD946EF)
         "PURPLE" -> Color(0xFF8B5CF6)
         "SLATE" -> Color(0xFF64748B)
-        else -> Color(0xFF3B82F6)
+        else -> Color(0xFF00E5FF)
     }
 }
 
@@ -766,7 +767,7 @@ fun CreateOrEditCustomWidgetDialog(
     var title by remember { mutableStateOf(initialWidget?.title ?: "") }
     var subtitle by remember { mutableStateOf(initialWidget?.subtitle ?: "") }
     var selectedType by remember { mutableStateOf(initialWidget?.type ?: CustomDashboardWidgetType.FILTER_DOCUMENTS) }
-    var selectedColorSkin by remember { mutableStateOf(initialWidget?.colorSkin ?: "BLUE") }
+    var selectedColorSkin by remember { mutableStateOf(initialWidget?.colorSkin ?: "MYDOCANIZER") }
     var selectedIconName by remember { mutableStateOf(initialWidget?.iconName ?: "folder_open") }
     var selectedPeriodScope by remember { mutableStateOf(initialWidget?.periodScope ?: ElementPeriodScope.ALL) }
     var targetCategory by remember { mutableStateOf(initialWidget?.targetCategory ?: (categories.firstOrNull() ?: "Finanzen")) }
@@ -777,10 +778,11 @@ fun CreateOrEditCustomWidgetDialog(
     val isEditing = initialWidget != null
 
     val colorOptions = listOf(
+        "MYDOCANIZER" to "myDocAnizer (Standard)",
         "BLUE" to "Blau",
         "EMERALD" to "Smaragd",
         "AMBER" to "Bernstein",
-        "ROSE" to "Rose",
+        "ROSE" to "Pink & Lila 💜",
         "PURPLE" to "Violett",
         "SLATE" to "Schiefer"
     )

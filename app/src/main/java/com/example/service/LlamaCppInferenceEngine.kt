@@ -353,6 +353,190 @@ ws ::= [ \t\n\r]*
         return parsed.toJsonString()
     }
 
+    /**
+     * Führt eine Chatbot-Inferenz mit dynamisch injiziertem System-Prompt und Function-Calling Tools aus.
+     */
+    suspend fun executeChatInferenceWithTools(
+        modelFile: File,
+        userMessage: String,
+        tools: List<AppTool> = AppTool.DEFAULT_TOOLS,
+        systemPrompt: String = LlmToolPromptBuilder.buildInjectedSystemPrompt(tools = tools),
+        params: InferenceParams = InferenceParams(temperature = 0.2f, grammar = null)
+    ): String = withContext(Dispatchers.Default) {
+        if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
+            return@withContext executeFallbackToolInference(userMessage)
+        }
+        executeInference(
+            modelFile = modelFile,
+            prompt = userMessage,
+            systemPrompt = systemPrompt,
+            params = params
+        )
+    }
+
+    /**
+     * Fallback-Logik wenn GGUF-Modell noch nicht heruntergeladen ist oder in Testumgebungen.
+     * Erzeugt OpenAI-kompatible JSON Tool-Calls bei Handlungsanweisungen oder Text bei Fragen.
+     */
+    fun executeFallbackToolInference(userMessage: String): String {
+        val qLower = userMessage.trim().lowercase()
+
+        // 1. Status ändern: "setze status von dokument 5 auf bezahlt" oder "dokument 1 als bezahlt markieren"
+        val statusMatch = Regex("(?:status|dokument|beleg)\\s+(?:von\\s+)?(?:id\\s+|#)?([0-9]+|[a-zA-Z0-9_-]+)\\s+(?:auf|als)\\s+([a-zA-ZäöüÄÖÜ\\s]+)", RegexOption.IGNORE_CASE).find(userMessage)
+        if (statusMatch != null && (qLower.contains("status") || qLower.contains("setz") || qLower.contains("änder") || qLower.contains("markier"))) {
+            val id = statusMatch.groupValues[1].trim()
+            val rawStatus = statusMatch.groupValues[2].trim().replace(".", "")
+            val cleanStatus = when {
+                rawStatus.contains("bezahlt", ignoreCase = true) -> "Bezahlt"
+                rawStatus.contains("offen", ignoreCase = true) -> "Offen"
+                rawStatus.contains("gekündigt", ignoreCase = true) -> "Gekündigt"
+                rawStatus.contains("prüfung", ignoreCase = true) || rawStatus.contains("prüfen", ignoreCase = true) -> "Prüfen"
+                else -> rawStatus.replaceFirstChar { it.uppercase() }
+            }
+            return """
+                ```json
+                {
+                  "name": "updateDocumentStatus",
+                  "arguments": {
+                    "docId": "$id",
+                    "newStatus": "$cleanStatus"
+                  }
+                }
+                ```
+            """.trimIndent()
+        }
+
+        // 2. Dokumente filtern: "filtere nach Telekom", "zeige offene rechnungen", "dokumente von Allianz"
+        if (qLower.contains("filter") || (qLower.contains("zeig") && (qLower.contains("dokument") || qLower.contains("rechnung")))) {
+            var sender: String? = null
+            var status: String? = null
+            var category: String? = null
+
+            // Sender ermitteln
+            when {
+                qLower.contains("telekom") -> sender = "Telekom"
+                qLower.contains("vodafone") -> sender = "Vodafone"
+                qLower.contains("allianz") -> sender = "Allianz"
+                qLower.contains("finanzamt") -> sender = "Finanzamt"
+                qLower.contains("stadtwerke") -> sender = "Stadtwerke"
+                qLower.contains("post") || qLower.contains("dhl") -> sender = "Deutsche Post"
+                qLower.contains("nach ") -> {
+                    sender = userMessage.substringAfter("nach ").trim().split(" ", ",", ".").firstOrNull()?.replaceFirstChar { it.uppercase() }
+                }
+                qLower.contains("von ") -> {
+                    sender = userMessage.substringAfter("von ").trim().split(" ", ",", ".").firstOrNull()?.replaceFirstChar { it.uppercase() }
+                }
+            }
+
+            // Status ermitteln
+            when {
+                qLower.contains("offen") -> status = "Offen"
+                qLower.contains("bezahlt") -> status = "Bezahlt"
+                qLower.contains("gekündigt") -> status = "Gekündigt"
+                qLower.contains("prüfen") -> status = "Prüfen"
+            }
+
+            // Kategorie ermitteln
+            when {
+                qLower.contains("rechnung") || qLower.contains("finanz") -> category = "Finanzen"
+                qLower.contains("vertrag") || qLower.contains("verträge") -> category = "Verträge"
+                qLower.contains("versicherung") -> category = "Versicherungen"
+                qLower.contains("steuer") -> category = "Steuern"
+            }
+
+            val args = mutableListOf<String>()
+            sender?.let { args.add("\"sender\": \"$it\"") }
+            status?.let { args.add("\"status\": \"$it\"") }
+            category?.let { args.add("\"category\": \"$it\"") }
+
+            return """
+                ```json
+                {
+                  "name": "filterDocuments",
+                  "arguments": {
+                    ${args.joinToString(",\n                    ")}
+                  }
+                }
+                ```
+            """.trimIndent()
+        }
+
+        // 3. Neuen Ordner erstellen (Tool-Calling)
+        if ((qLower.contains("erstell") || qLower.contains("neu") || qLower.contains("anleg") || qLower.contains("mach")) && (qLower.contains("ordner") || qLower.contains("kategorie") || qLower.contains("verzeichnis"))) {
+            var folderName: String? = null
+            var parentCategory: String? = null
+
+            val quoteMatch = Regex("[\"']([^\"']+)[\"']").find(userMessage)
+            if (quoteMatch != null) {
+                folderName = quoteMatch.groupValues[1].trim()
+            }
+
+            if (folderName == null) {
+                val nameMatch = Regex("(?:namens|mit dem namen|mit namen|heißt|bezeichnung)\\s+([a-zA-Z0-9äöüÄÖÜ_\\-\\s]+)", RegexOption.IGNORE_CASE).find(userMessage)
+                if (nameMatch != null) {
+                    folderName = nameMatch.groupValues[1].trim().split(Regex("[,.;]")).firstOrNull()?.trim()
+                }
+            }
+
+            if (folderName == null) {
+                val ordnerMatch = Regex("(?:erstelle|anlegen|neuen?)\\s+(?:einen?\\s+)?(?:neuen?\\s+)?ordner\\s+(?:für\\s+)?([a-zA-Z0-9äöüÄÖÜ_\\-\\s]+)", RegexOption.IGNORE_CASE).find(userMessage)
+                if (ordnerMatch != null) {
+                    val candidate = ordnerMatch.groupValues[1].trim()
+                        .replace(Regex("(?:erstellen|anlegen|bitte|jetzt|im tresor|unter|in).*$"), "")
+                        .trim()
+                    if (candidate.isNotBlank() && !candidate.equals("erstellen", ignoreCase = true) && !candidate.equals("anlegen", ignoreCase = true)) {
+                        folderName = candidate
+                    }
+                }
+            }
+
+            val parentMatch = Regex("(?:unter|in der kategorie|im ordner|in)\\s+([a-zA-Z0-9äöüÄÖÜ_\\-]+)", RegexOption.IGNORE_CASE).find(userMessage)
+            if (parentMatch != null) {
+                val p = parentMatch.groupValues[1].trim()
+                if (!p.equals("ordner", ignoreCase = true) && !p.equals("tresor", ignoreCase = true) && !p.equals("app", ignoreCase = true)) {
+                    parentCategory = p.replaceFirstChar { it.uppercase() }
+                }
+            }
+
+            val finalFolderName = folderName?.takeIf { it.isNotBlank() } ?: "Neuer Ordner"
+
+            val argsContent = if (parentCategory != null) {
+                """"folderName": "$finalFolderName",
+                    "parentCategory": "$parentCategory""""
+            } else {
+                """"folderName": "$finalFolderName""""
+            }
+
+            return """
+                ```json
+                {
+                  "name": "createFolder",
+                  "arguments": {
+                    $argsContent
+                  }
+                }
+                ```
+            """.trimIndent()
+        }
+
+        // 4. App-Bereiche öffnen
+        if (qLower.contains("scanner") || qLower.contains("kamera")) {
+            return """
+                ```json
+                {
+                  "name": "openAppSection",
+                  "arguments": {
+                    "section": "scanner"
+                  }
+                }
+                ```
+            """.trimIndent()
+        }
+
+        // Default normale Antwort
+        return "Ich bin dein persönlicher myDocAnizer Assistent. Womit kann ich dir behilflich sein?"
+    }
+
     // Native JNI Methoden
     private external fun nativeExecuteLlamaWithGrammar(
         modelPath: String,

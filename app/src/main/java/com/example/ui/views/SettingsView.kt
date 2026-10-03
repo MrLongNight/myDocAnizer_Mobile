@@ -1,5 +1,6 @@
 package com.example.ui.views
 
+import com.example.BuildConfig
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -21,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
@@ -250,6 +252,7 @@ fun SettingsView(
                 tabs = tabs,
                 selectedIndex = selectedSettingsTab,
                 onSelectTab = { selectedSettingsTab = it },
+                onStartTour = { viewModel.startFirstStepsTour() },
                 onDismiss = { showSectionOverviewDialog = false }
             )
         }
@@ -1508,12 +1511,12 @@ fun DocTypeEditorDialog(
     val colorsPalette = listOf(
         0xFF2563EB, // Blau
         0xFF059669, // Grün
-        0xFF7C3AED, // Violett
-        0xFFDC2626, // Rot
+        0xFF8B5CF6, // Edles Lila 💜
+        0xFFD946EF, // Cyber Pink
         0xFFD97706, // Amber
         0xFF0D9488, // Teal
-        0xFF4F46E5, // Indigo
-        0xFFE11D48  // Rose
+        0xFF7C3AED, // Violett
+        0xFFFF007F  // Neon Pink
     )
 
     AlertDialog(
@@ -2486,6 +2489,64 @@ fun DesignSettingsTab(viewModel: DocAnizerViewModel) {
             )
         }
 
+        // Virtuelle Erste-Schritte Tour (Direkter Aufruf für neue oder interessierte Benutzer)
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+            modifier = Modifier.fillMaxWidth().testTag("card_first_steps_tour")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Explore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    Column {
+                        Text(
+                            text = "Virtuelle Erste-Schritte Tour",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Simpel & effektiv alle Kern-Features von myDocAnizer kennenlernen",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                FilledTonalButton(
+                    onClick = { viewModel.startFirstStepsTour() },
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.testTag("btn_start_first_steps_tour")
+                ) {
+                    Text("Tour starten", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
         // Helligkeitsmodus
         Card(
             shape = RoundedCornerShape(12.dp),
@@ -2728,6 +2789,204 @@ fun DesignSettingsTab(viewModel: DocAnizerViewModel) {
                 }
             }
         }
+
+        // 5. Dashboard-Bedienung: Standard-Modus (symmetrische Buttons & Menüleiste) vs. Reiner Gesten-Modus
+        val isGestureModeEnabled by viewModel.isGestureModeEnabled.collectAsState()
+
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            modifier = Modifier.fillMaxWidth().testTag("card_app_gesture_settings")
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Fullscreen,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "Bedienung & Wischgesten-Modus",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Standard-Modus mit Buttons oder 100% Vollbild mit Wischgesten",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = "Reiner Gesten-Modus (Vollbild ohne Buttons)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Blendet die untere Menüleiste und beide FABs (Chatbot links & Scan/Import rechts) vollständig aus für maximalen Bildschirmplatz.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isGestureModeEnabled,
+                        onCheckedChange = { viewModel.setGestureModeEnabled(it) },
+                        modifier = Modifier.testTag("switch_app_gesture_mode")
+                    )
+                }
+
+                // Subtile Statusanzeige zur aktuellen Einstellung
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isGestureModeEnabled)
+                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+                    else
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isGestureModeEnabled) Icons.Default.Swipe else Icons.Default.TouchApp,
+                            contentDescription = null,
+                            tint = if (isGestureModeEnabled) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = if (isGestureModeEnabled)
+                                "Aktiv: Reiner Gesten-Modus (100% Vollbild). Wische am linken Bildschirmrand nach rechts für den KI-Chatbot, oder am rechten Bildschirmrand nach links für das Scan- & Import-Menü."
+                            else
+                                "Aktiv: Standard-Modus. Symmetrische Aktions-Buttons und Menüleiste sind sichtbar. Wischgesten an den Rändern funktionieren zusätzlich jederzeit als Schnellzugriff.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+                // 6. ENTWICKLER-WERKZEUGE (NUR SICHTBAR WENN BuildConfig.DEBUG == true)
+                if (BuildConfig.DEBUG) {
+                    var showConfirmSeederDialog by remember { mutableStateOf(false) }
+                    var isSeeding by remember { mutableStateOf(false) }
+                    val context = androidx.compose.ui.platform.LocalContext.current
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("card_debug_data_seeder"),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)),
+                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.tertiary),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.BugReport,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Text(
+                                    text = "Entwickler-Testdaten (Debug Mode)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+
+                            Text(
+                                text = "Generiert 12 realistische Testdokumente (Vodafone, Allianz, SWM, Deutsche Bank, Helios Klinikum, HUK-Coburg, BARMER, Telekom, Amazon etc.) mit echten Sandbox-PDF-Dateien, OCR-Texten, Rechnungsbeträgen, Fristen und Ordnerstrukturen für Emulator- und Funktionsprüfungen.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+
+                            Button(
+                                onClick = { showConfirmSeederDialog = true },
+                                enabled = !isSeeding,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("btn_seed_debug_data")
+                            ) {
+                                if (isSeeding) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        color = MaterialTheme.colorScheme.onTertiary,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Generiere Testdaten & PDFs...")
+                                } else {
+                                    Icon(Icons.Default.Science, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Testdaten generieren", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    if (showConfirmSeederDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showConfirmSeederDialog = false },
+                            icon = { Icon(Icons.Default.Science, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
+                            title = { Text("Testdaten generieren?", fontWeight = FontWeight.Bold) },
+                            text = {
+                                Text(
+                                    "Möchtest du die lokale Datenbank leeren und 12 realistische Testdokumente (Finanzen, Verträge, Gesundheit, Wohnen) samt druckbaren PDF-Dateien und OCR-Texten neu anlegen?"
+                                )
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        showConfirmSeederDialog = false
+                                        isSeeding = true
+                                        viewModel.seedDebugData { count ->
+                                            isSeeding = false
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                "✅ $count Testdokumente & PDFs erfolgreich generiert!",
+                                                android.widget.Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                                ) {
+                                    Text("Ja, Testdaten einspielen")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showConfirmSeederDialog = false }) {
+                                    Text("Abbrechen")
+                                }
+                            }
+                        )
+                    }
+                }
     }
 }
 
@@ -4139,6 +4398,7 @@ private fun SettingsTabOverviewDialog(
     tabs: List<SettingsTabItem>,
     selectedIndex: Int,
     onSelectTab: (Int) -> Unit,
+    onStartTour: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -4157,13 +4417,56 @@ private fun SettingsTabOverviewDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Button für die Virtuelle Erste-Schritte Tour
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onDismiss()
+                            onStartTour()
+                        }
+                        .testTag("dialog_btn_start_tour")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Explore,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "🎯 Virtuelle Erste-Schritte Tour starten",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "Interaktive Einführung in alle Hauptfunktionen",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
                 Text(
                     text = "Direkter Wechsel ohne horizontales Scrollen:",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 val rows = tabs.chunked(2)
                 rows.forEach { rowTabs ->

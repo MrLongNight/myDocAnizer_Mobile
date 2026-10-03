@@ -111,7 +111,7 @@ data class CustomDashboardWidget(
     val subtitle: String = "",
     val type: CustomDashboardWidgetType = CustomDashboardWidgetType.NOTE_MEMO,
     val iconName: String = "category",
-    val colorSkin: String = "BLUE", // BLUE, EMERALD, AMBER, ROSE, PURPLE, SLATE
+    val colorSkin: String = "MYDOCANIZER", // MYDOCANIZER, BLUE, EMERALD, AMBER, ROSE, PURPLE, SLATE
     val periodScope: ElementPeriodScope = ElementPeriodScope.ALL, // Element-spezifischer Zeitraum!
     val targetCategory: String = "",
     val targetTag: String = "",
@@ -175,7 +175,7 @@ data class CustomDashboardWidget(
                 subtitle = json.optString("subtitle", ""),
                 type = type,
                 iconName = json.optString("iconName", "category"),
-                colorSkin = json.optString("colorSkin", "BLUE"),
+                colorSkin = json.optString("colorSkin", "MYDOCANIZER"),
                 periodScope = scope,
                 targetCategory = json.optString("targetCategory", ""),
                 targetTag = json.optString("targetTag", ""),

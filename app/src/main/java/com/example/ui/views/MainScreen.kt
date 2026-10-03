@@ -8,10 +8,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -23,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.DocAnizerViewModel
 import com.example.ui.components.AppLogoBanner
+import com.example.ui.components.FirstStepsTourModal
 
 enum class MainNavigationTab {
     SCANNER,
@@ -60,11 +64,15 @@ fun MainScreen(
     // App startet direkt im Dokumenten Tresor Modus
     var currentTab by rememberSaveable { mutableStateOf(MainNavigationTab.DOCANIZER) }
     var isFabExpanded by rememberSaveable { mutableStateOf(false) }
+    var showScanImportSheet by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val batchQueue by viewModel.batchQueue.collectAsStateWithLifecycle()
     val isWizardCompleted by viewModel.isWizardCompleted.collectAsStateWithLifecycle()
     val showManualWizard by viewModel.showManualConfigWizard.collectAsStateWithLifecycle()
     var sessionDismissedWizard by rememberSaveable { mutableStateOf(false) }
+
+    // Reiner Gesten-Modus (Immersive Fullscreen)
+    val isGestureModeEnabled by viewModel.isGestureModeEnabled.collectAsStateWithLifecycle()
 
     val targetTab by viewModel.targetNavigationTab.collectAsStateWithLifecycle()
     LaunchedEffect(targetTab) {
@@ -90,17 +98,22 @@ fun MainScreen(
         label = "fab_rotation"
     )
 
-    // Android System BackHandler: FAB schließen oder zurück zum Haupt-Tab
+    // Android System BackHandler: FAB schließen, Sheet schließen oder zurück zum Haupt-Tab
     BackHandler(enabled = isFabExpanded) {
         isFabExpanded = false
     }
 
-    BackHandler(enabled = !isFabExpanded && currentTab != MainNavigationTab.DOCANIZER) {
+    BackHandler(enabled = !isFabExpanded && showScanImportSheet) {
+        showScanImportSheet = false
+    }
+
+    BackHandler(enabled = !isFabExpanded && !showScanImportSheet && currentTab != MainNavigationTab.DOCANIZER) {
         currentTab = MainNavigationTab.DOCANIZER
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
+            modifier = Modifier.fillMaxSize(),
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 if (currentTab != MainNavigationTab.SCANNER) {
@@ -125,6 +138,7 @@ fun MainScreen(
                                     onClick = {
                                         currentTab = MainNavigationTab.DOCANIZER
                                         isFabExpanded = false
+                                        showScanImportSheet = false
                                     },
                                     modifier = Modifier.testTag("btn_top_back")
                                 ) {
@@ -133,25 +147,26 @@ fun MainScreen(
                                         contentDescription = "Zurück zum Dokumenten Tresor"
                                     )
                                 }
-                            } else {
-                                // Symmetrischer 48dp Platzhalter für pixelgenaue Zentrierung des Logos
-                                Spacer(modifier = Modifier.width(48.dp))
                             }
                         },
                         actions = {
-                            // Settings Button nur als Icon ohne Bezeichnung ganz oben rechts
+                            // Settings Button ganz oben rechts mit klarem Touch-Target
                             if (currentTab != MainNavigationTab.SETTINGS) {
                                 IconButton(
                                     onClick = {
                                         isFabExpanded = false
+                                        showScanImportSheet = false
                                         currentTab = MainNavigationTab.SETTINGS
                                     },
-                                    modifier = Modifier.testTag("btn_top_settings")
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .testTag("btn_top_settings")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Settings,
-                                        contentDescription = "Einstellungen",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        contentDescription = "Einstellungen öffnen",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
                                     )
                                 }
                             } else {
@@ -166,7 +181,13 @@ fun MainScreen(
                 }
             },
             bottomBar = {
-                if (currentTab != MainNavigationTab.SCANNER) {
+                // Symmetrischer Standard-Modus: NavigationBar mit überstehenden FABs sichtbar
+                // Reiner Gesten-Modus: NavigationBar vollständig und sanft ausgeblendet
+                AnimatedVisibility(
+                    visible = !isGestureModeEnabled && currentTab != MainNavigationTab.SCANNER,
+                    enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                    exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                ) {
                     val navItemColors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.primary,
                         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -174,93 +195,203 @@ fun MainScreen(
                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 8.dp,
-                        modifier = Modifier.testTag("main_bottom_nav_bar")
+
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.BottomCenter
                     ) {
-                        val isDocanizerSelected = currentTab == MainNavigationTab.DOCANIZER
-                        NavigationBarItem(
-                            selected = isDocanizerSelected,
-                            onClick = {
-                                isFabExpanded = false
-                                currentTab = MainNavigationTab.DOCANIZER
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = if (isDocanizerSelected) Icons.Default.FolderSpecial else Icons.Default.Folder,
-                                    contentDescription = "Dokumenten Tresor",
-                                    modifier = Modifier.size(if (isDocanizerSelected) 26.dp else 22.dp)
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = "Dokumenten Tresor",
-                                    fontWeight = if (isDocanizerSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                    fontSize = if (isDocanizerSelected) 13.sp else 12.sp
-                                )
-                            },
-                            colors = navItemColors,
-                            modifier = Modifier.testTag("nav_item_docanizer")
-                        )
+                        // 1. Untere Navigationsleiste mit den 3 Haupt-Tabs
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 8.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(72.dp)
+                                .padding(horizontal = 10.dp)
+                                .testTag("main_bottom_nav_bar")
+                        ) {
+                            // 1. Dokumente Tab
+                            val isDocanizerSelected = currentTab == MainNavigationTab.DOCANIZER
+                            NavigationBarItem(
+                                selected = isDocanizerSelected,
+                                onClick = {
+                                    isFabExpanded = false
+                                    currentTab = MainNavigationTab.DOCANIZER
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (isDocanizerSelected) Icons.Default.FolderSpecial else Icons.Default.Folder,
+                                        contentDescription = "Dokumente",
+                                        modifier = Modifier.size(if (isDocanizerSelected) 24.dp else 22.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = "Dokumente",
+                                        fontWeight = if (isDocanizerSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                        fontSize = if (isDocanizerSelected) 11.5.sp else 11.sp,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                },
+                                colors = navItemColors,
+                                modifier = Modifier
+                                    .weight(1.25f)
+                                    .testTag("nav_item_docanizer")
+                            )
 
-                        val isDashboardSelected = currentTab == MainNavigationTab.DASHBOARD
-                        NavigationBarItem(
-                            selected = isDashboardSelected,
-                            onClick = {
-                                isFabExpanded = false
-                                currentTab = MainNavigationTab.DASHBOARD
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = if (isDashboardSelected) Icons.Default.Dashboard else Icons.Default.DashboardCustomize,
-                                    contentDescription = "Dashboard",
-                                    modifier = Modifier.size(if (isDashboardSelected) 26.dp else 22.dp)
-                                )
-                            },
-                            label = {
-                                Text(
-                                    text = "Dashboard",
-                                    fontWeight = if (isDashboardSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                    fontSize = if (isDashboardSelected) 13.sp else 12.sp
-                                )
-                            },
-                            colors = navItemColors,
-                            modifier = Modifier.testTag("nav_item_dashboard")
-                        )
+                            // Platzhalter-Slot für den linken KI-Chatbot FAB
+                            Spacer(modifier = Modifier.weight(0.85f))
 
-                        val isBatchSelected = currentTab == MainNavigationTab.BATCH_INBOX
-                        NavigationBarItem(
-                            selected = isBatchSelected,
-                            onClick = {
-                                isFabExpanded = false
-                                currentTab = MainNavigationTab.BATCH_INBOX
-                            },
-                            icon = {
-                                BadgedBox(
-                                    badge = {
-                                        if (batchQueue.isNotEmpty()) {
-                                            Badge(containerColor = MaterialTheme.colorScheme.error) { Text("${batchQueue.size}") }
+                            // 2. Dashboard Tab
+                            val isDashboardSelected = currentTab == MainNavigationTab.DASHBOARD
+                            NavigationBarItem(
+                                selected = isDashboardSelected,
+                                onClick = {
+                                    isFabExpanded = false
+                                    currentTab = MainNavigationTab.DASHBOARD
+                                },
+                                icon = {
+                                    Icon(
+                                        imageVector = if (isDashboardSelected) Icons.Default.Dashboard else Icons.Default.DashboardCustomize,
+                                        contentDescription = "Dashboard",
+                                        modifier = Modifier.size(if (isDashboardSelected) 24.dp else 22.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = "Dashboard",
+                                        fontWeight = if (isDashboardSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                        fontSize = if (isDashboardSelected) 11.5.sp else 11.sp,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                },
+                                colors = navItemColors,
+                                modifier = Modifier
+                                    .weight(1.1f)
+                                    .testTag("nav_item_dashboard")
+                            )
+
+                            // Platzhalter-Slot für den rechten Scan/Import FAB
+                            Spacer(modifier = Modifier.weight(0.85f))
+
+                            // 3. Scan Eingang Tab
+                            val isBatchSelected = currentTab == MainNavigationTab.BATCH_INBOX
+                            NavigationBarItem(
+                                selected = isBatchSelected,
+                                onClick = {
+                                    isFabExpanded = false
+                                    currentTab = MainNavigationTab.BATCH_INBOX
+                                },
+                                icon = {
+                                    BadgedBox(
+                                        badge = {
+                                            if (batchQueue.isNotEmpty()) {
+                                                Badge(
+                                                    containerColor = MaterialTheme.colorScheme.secondary,
+                                                    contentColor = Color.White
+                                                ) { Text("${batchQueue.size}") }
+                                            }
                                         }
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isBatchSelected) Icons.Default.AllInbox else Icons.Default.Inbox,
+                                            contentDescription = "Scan Eingang",
+                                            modifier = Modifier.size(if (isBatchSelected) 24.dp else 22.dp)
+                                        )
                                     }
+                                },
+                                label = {
+                                    Text(
+                                        text = "Scan Eingang",
+                                        fontWeight = if (isBatchSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                        fontSize = if (isBatchSelected) 11.5.sp else 11.sp,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                },
+                                colors = navItemColors,
+                                modifier = Modifier
+                                    .weight(1.25f)
+                                    .testTag("nav_item_batch_inbox")
+                            )
+                        }
+
+                        // 2. Die beiden über die obere Leistenkante hinausragenden FABs
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(72.dp)
+                                .padding(horizontal = 10.dp),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            // Platzhalter für Dokumente Tab
+                            Spacer(modifier = Modifier.weight(1.25f))
+
+                            // FAB 1 (Links): KI-Chatbot Button ragt über die Leiste hinaus (offset y = -18.dp)
+                            Box(
+                                modifier = Modifier
+                                    .weight(0.85f)
+                                    .offset(y = (-18).dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                FloatingActionButton(
+                                    onClick = {
+                                        isFabExpanded = false
+                                        viewModel.openAiChatDrawer()
+                                    },
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                    shape = CircleShape,
+                                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .testTag("main_chatbot_fab")
                                 ) {
                                     Icon(
-                                        imageVector = if (isBatchSelected) Icons.Default.AllInbox else Icons.Default.Inbox,
-                                        contentDescription = "Scan InBox",
-                                        modifier = Modifier.size(if (isBatchSelected) 26.dp else 22.dp)
+                                        imageVector = Icons.Default.SmartToy,
+                                        contentDescription = "myDocAnizer KI-Assistent & Chatbot öffnen",
+                                        modifier = Modifier.size(26.dp)
                                     )
                                 }
-                            },
-                            label = {
-                                Text(
-                                    text = "Scan InBox",
-                                    fontWeight = if (isBatchSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                    fontSize = if (isBatchSelected) 13.sp else 12.sp
-                                )
-                            },
-                            colors = navItemColors,
-                            modifier = Modifier.testTag("nav_item_batch_inbox")
-                        )
+                            }
+
+                            // Platzhalter für Dashboard Tab
+                            Spacer(modifier = Modifier.weight(1.1f))
+
+                            // FAB 2 (Rechts): Scan/Import Button ragt über die Leiste hinaus (offset y = -18.dp)
+                            Box(
+                                modifier = Modifier
+                                    .weight(0.85f)
+                                    .offset(y = (-18).dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                FloatingActionButton(
+                                    onClick = {
+                                        isFabExpanded = false
+                                        showScanImportSheet = true
+                                    },
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                    shape = CircleShape,
+                                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .testTag("main_add_fab")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Scan- & Importmenü öffnen",
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+                            }
+
+                            // Platzhalter für Scan Eingang Tab
+                            Spacer(modifier = Modifier.weight(1.25f))
+                        }
                     }
                 }
             }
@@ -443,165 +574,303 @@ fun MainScreen(
             }
         }
 
-        // 1. Abdunklung (Scrim) hinter FAB & Subbuttons: Schließt das FAB-Menü bei Klick daneben
-        AnimatedVisibility(
-            visible = isFabExpanded,
-            enter = fadeIn(animationSpec = tween(200)),
-            exit = fadeOut(animationSpec = tween(200))
-        ) {
+        // =========================================================================
+        // 3. INTUITIVE WISCHGESTEN-ZONEN (EDGE-SWIPES):
+        // Unsichtbare Wisch-Zonen am linken und rechten Bildschirmrand.
+        // ZWINGEND mit Modifier.systemGestureExclusion(), um Konflikte mit der Android
+        // System-"Zurück"-Geste (seit Android 10) vollständig zu eliminieren!
+        // Funktioniert im reinen Gesten-Modus und als zusätzlicher Schnellzugriff im Standard-Modus.
+        // =========================================================================
+        val isAiChatDrawerOpen by viewModel.isAiChatDrawerOpen.collectAsStateWithLifecycle()
+
+        if (currentTab != MainNavigationTab.SCANNER && !isAiChatDrawerOpen && !showScanImportSheet) {
+            // Wisch-Zone Links (Alignment.CenterStart): Wisch von links nach rechts -> Öffnet Chatbot
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.42f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        isFabExpanded = false
+                    .align(Alignment.CenterStart)
+                    .padding(top = 92.dp, bottom = 100.dp)
+                    .fillMaxHeight()
+                    .width(40.dp)
+                    .systemGestureExclusion()
+                    .testTag("gesture_zone_left_chatbot")
+                    .pointerInput(Unit) {
+                        var totalDrag = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { totalDrag = 0f },
+                            onDragEnd = { totalDrag = 0f },
+                            onDragCancel = { totalDrag = 0f },
+                            onHorizontalDrag = { change, dragAmount ->
+                                totalDrag += dragAmount
+                                if (totalDrag > 32f) {
+                                    change.consume()
+                                    totalDrag = 0f
+                                    isFabExpanded = false
+                                    viewModel.openAiChatDrawer()
+                                }
+                            }
+                        )
+                    }
+            )
+
+            // Wisch-Zone Rechts (Alignment.CenterEnd): Wisch von rechts nach links -> Öffnet Scan/Import-Panel
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(top = 92.dp, bottom = 100.dp)
+                    .fillMaxHeight()
+                    .width(40.dp)
+                    .systemGestureExclusion()
+                    .testTag("gesture_zone_right_scan_import")
+                    .pointerInput(Unit) {
+                        var totalDrag = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { totalDrag = 0f },
+                            onDragEnd = { totalDrag = 0f },
+                            onDragCancel = { totalDrag = 0f },
+                            onHorizontalDrag = { change, dragAmount ->
+                                totalDrag += dragAmount
+                                if (totalDrag < -32f) {
+                                    change.consume()
+                                    totalDrag = 0f
+                                    isFabExpanded = false
+                                    showScanImportSheet = true
+                                }
+                            }
+                        )
                     }
             )
         }
 
-        // 2. Moderner Speed-Dial FAB unten rechts (BottomEnd) mit Subbuttons nach oben
-        if (currentTab != MainNavigationTab.SCANNER) {
-            val expandProgress by animateFloatAsState(
-                targetValue = if (isFabExpanded) 1f else 0f,
-                animationSpec = spring(
-                    dampingRatio = 0.72f,
-                    stiffness = 400f
-                ),
-                label = "fab_expand_progress"
-            )
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 18.dp, bottom = 96.dp),
-                contentAlignment = Alignment.BottomEnd
+        // =========================================================================
+        // 4. SCAN / IMPORT SCHNELLZUGRIFFS-PANEL (MODAL BOTTOM SHEET)
+        // Ausgelöst durch Wischgeste im Gesten-Modus oder direkte Schnellaktionen
+        // =========================================================================
+        if (showScanImportSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showScanImportSheet = false },
+                containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp,
+                dragHandle = { BottomSheetDefaults.DragHandle() }
             ) {
-                // Vertikale Subbuttons nach oben (nur sichtbar/klickbar wenn ausgeklappt oder animiert)
-                if (isFabExpanded || expandProgress > 0.01f) {
-                    // Option 1: Doku-Scan (oberer Subbutton)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 36.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = "Schnellzugriff & Scan/Import",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Gesten-Schnellmenü für deinen Dokumenten Tresor",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { showScanImportSheet = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Schließen")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Option 1: Dokument scannen
                     Surface(
-                        shape = RoundedCornerShape(24.dp),
+                        onClick = {
+                            showScanImportSheet = false
+                            currentTab = MainNavigationTab.SCANNER
+                        },
+                        shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.primaryContainer,
-                        tonalElevation = 6.dp,
-                        shadowElevation = 8.dp,
                         modifier = Modifier
-                            .offset {
-                                IntOffset(
-                                    x = (-4.dp.toPx() * expandProgress).toInt(),
-                                    y = (-116.dp.toPx() * expandProgress).toInt()
-                                )
-                            }
-                            .graphicsLayer {
-                                alpha = expandProgress.coerceIn(0f, 1f)
-                                scaleX = 0.4f + 0.6f * expandProgress
-                                scaleY = 0.4f + 0.6f * expandProgress
-                            }
-                            .clickable {
-                                isFabExpanded = false
-                                currentTab = MainNavigationTab.SCANNER
-                            }
-                            .testTag("fab_option_doku_scan")
+                            .fillMaxWidth()
+                            .testTag("sheet_option_scanner")
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                            modifier = Modifier.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(40.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = Icons.Default.DocumentScanner,
-                                        contentDescription = "Doku-Scan",
+                                        contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onPrimary,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
                             }
-                            Text(
-                                text = "Doku-Scan",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Dokument scannen",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Kamera-Scan mit automatischer Kantenerkennung & OCR",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
                         }
                     }
 
-                    // Option 2: Datei-Import (mittlerer Subbutton)
+                    // Option 2: Datei-Import
                     Surface(
-                        shape = RoundedCornerShape(24.dp),
+                        onClick = {
+                            showScanImportSheet = false
+                            currentTab = MainNavigationTab.IMPORT
+                        },
+                        shape = RoundedCornerShape(16.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer,
-                        tonalElevation = 6.dp,
-                        shadowElevation = 8.dp,
                         modifier = Modifier
-                            .offset {
-                                IntOffset(
-                                    x = (-4.dp.toPx() * expandProgress).toInt(),
-                                    y = (-62.dp.toPx() * expandProgress).toInt()
-                                )
-                            }
-                            .graphicsLayer {
-                                alpha = expandProgress.coerceIn(0f, 1f)
-                                scaleX = 0.4f + 0.6f * expandProgress
-                                scaleY = 0.4f + 0.6f * expandProgress
-                            }
-                            .clickable {
-                                isFabExpanded = false
-                                currentTab = MainNavigationTab.IMPORT
-                            }
-                            .testTag("fab_option_file_import")
+                            .fillMaxWidth()
+                            .testTag("sheet_option_import")
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                            modifier = Modifier.padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Surface(
                                 shape = CircleShape,
                                 color = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(40.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = Icons.Default.UploadFile,
-                                        contentDescription = "Datei-Import",
+                                        contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSecondary,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
                             }
-                            Text(
-                                text = "Datei-Import",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Dateien & PDFs importieren",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                                Text(
+                                    text = "Lokale Dokumente oder Vorlagen in den Tresor laden",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
                         }
                     }
-                }
 
-                // Haupt-FAB (+)
-                FloatingActionButton(
-                    onClick = { isFabExpanded = !isFabExpanded },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shape = CircleShape,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
-                    modifier = Modifier.testTag("main_add_fab")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = if (isFabExpanded) "Menü schließen" else "Hinzufügen",
+                    // Option 3: Scan InBox
+                    Surface(
+                        onClick = {
+                            showScanImportSheet = false
+                            currentTab = MainNavigationTab.BATCH_INBOX
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
                         modifier = Modifier
-                            .size(28.dp)
-                            .rotate(fabRotation)
-                    )
+                            .fillMaxWidth()
+                            .testTag("sheet_option_batch_inbox")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.AllInbox,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onTertiary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Scan InBox (${batchQueue.size} in Warteschlange)",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                                Text(
+                                    text = "Stapelverarbeitung & unfertige Dokumente prüfen",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
+
+                    // Option 4: Einstellungen
+                    Surface(
+                        onClick = {
+                            showScanImportSheet = false
+                            currentTab = MainNavigationTab.SETTINGS
+                        },
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("sheet_option_settings")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Einstellungen & Konfiguration",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = "Tresor, Design, Wischgesten & Backup anpassen",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -634,6 +903,18 @@ fun MainScreen(
             PcCompanionWizardDialog(
                 viewModel = viewModel,
                 onDismiss = { viewModel.dismissPcCompanionWizard() }
+            )
+        }
+
+        // Virtuelle Erste-Schritte Tour (Simpel & effektiv bei manuellem Aufruf oder geführter Tour)
+        val showFirstStepsTour by viewModel.showFirstStepsTour.collectAsStateWithLifecycle()
+        if (showFirstStepsTour) {
+            FirstStepsTourModal(
+                viewModel = viewModel,
+                onDismiss = { viewModel.dismissFirstStepsTour(markCompleted = true) },
+                onNavigateToTab = { targetTab ->
+                    currentTab = targetTab
+                }
             )
         }
 
@@ -763,6 +1044,43 @@ fun MainScreen(
                 }
             )
         }
+
+        // MINIMALER ON-DEVICE KI-ASSISTENT DRAWER (vom linken Rand)
+        if (isAiChatDrawerOpen) {
+            com.example.ui.components.AiDocumentChatDrawer(
+                isOpen = true,
+                onClose = { viewModel.closeAiChatDrawer() },
+                viewModel = viewModel,
+                onExecuteAction = { actionType ->
+                    when (actionType) {
+                        "OPEN_SCANNER" -> {
+                            isFabExpanded = false
+                            showScanImportSheet = false
+                            currentTab = MainNavigationTab.SCANNER
+                        }
+                        "OPEN_DASHBOARD" -> {
+                            isFabExpanded = false
+                            showScanImportSheet = false
+                            currentTab = MainNavigationTab.DASHBOARD
+                        }
+                        "OPEN_SETTINGS" -> {
+                            isFabExpanded = false
+                            showScanImportSheet = false
+                            currentTab = MainNavigationTab.SETTINGS
+                        }
+                        "OPEN_IMPORT" -> {
+                            isFabExpanded = false
+                            showScanImportSheet = false
+                            currentTab = MainNavigationTab.IMPORT
+                        }
+                        else -> {
+                            isFabExpanded = false
+                            showScanImportSheet = false
+                            currentTab = MainNavigationTab.DOCANIZER
+                        }
+                    }
+                }
+            )
+        }
     }
 }
-
