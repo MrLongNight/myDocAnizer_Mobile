@@ -12,9 +12,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.DocAnizerViewModel
+import com.example.ui.components.AppStartSplashAnimation
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.views.MainScreen
 
@@ -45,6 +49,8 @@ class MainActivity : FragmentActivity() {
                 else -> systemDark
             }
 
+            var showSplash by rememberSaveable { mutableStateOf(true) }
+
             MyApplicationTheme(
                 darkTheme = isDark,
                 colorSkin = colorSkin,
@@ -54,7 +60,13 @@ class MainActivity : FragmentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen(viewModel = viewModel)
+                    if (showSplash) {
+                        AppStartSplashAnimation(
+                            onAnimationFinished = { showSplash = false }
+                        )
+                    } else {
+                        MainScreen(viewModel = viewModel)
+                    }
                 }
             }
         }

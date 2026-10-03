@@ -402,7 +402,7 @@ fun HuggingFaceModelsContent(
     val isCheckingNewModels by viewModel.isCheckingNewModels.collectAsState()
     val newModelsNotification by viewModel.newModelsNotification.collectAsState()
     var isAdvancedInferenceExpanded by remember { mutableStateOf(false) }
-    var onlyShowCompatible by remember { mutableStateOf(true) }
+    var onlyShowCompatible by remember { mutableStateOf(false) }
     var selectedCategoryFilter by remember { mutableStateOf("Alle") }
 
     val displayedModels = remember(models, onlyShowCompatible, hardwareInfo, selectedCategoryFilter) {
@@ -410,9 +410,20 @@ fun HuggingFaceModelsContent(
             val matchHardware = if (onlyShowCompatible && hardwareInfo.totalRamGb > 0) {
                 model.recommendedRamGb <= hardwareInfo.totalRamGb + 0.5f
             } else true
-            val matchCategory = if (selectedCategoryFilter == "Alle") true else model.modelCategory == selectedCategoryFilter
+            val matchCategory = when (selectedCategoryFilter) {
+                "Alle" -> true
+                "Empfohlen" -> model.isHardwareRecommended || (model.recommendedRamGb <= hardwareInfo.totalRamGb + 0.2f)
+                "DMS & Rechnungen" -> model.modelCategory.contains("DMS", ignoreCase = true) || model.modelCategory.contains("Rechnung", ignoreCase = true)
+                else -> model.modelCategory == selectedCategoryFilter
+            }
             matchHardware && matchCategory
         }
+    }
+
+    val recommendedModel = remember(models, hardwareInfo) {
+        models.find { it.isHardwareRecommended }
+            ?: models.minByOrNull { kotlin.math.abs(it.recommendedRamGb - hardwareInfo.totalRamGb) }
+            ?: models.firstOrNull()
     }
 
     LazyColumn(
@@ -451,37 +462,124 @@ fun HuggingFaceModelsContent(
             }
         }
 
-        // KOMPAKTE HARDWARE- & STATUSLEISTE
+        // PROMINENTE HARDWARE-PRÜFUNG & ON-DEVICE KI-EMPFEHLUNG (VOLLSTÄNDIGE DIAGNOSE)
         item {
             Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Default.Memory, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                        Text(
-                            text = "${String.format(java.util.Locale.US, "%.1f", hardwareInfo.totalRamGb)} GB RAM • ${hardwareInfo.performanceTier}",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                    // Header: Live Telemetrie
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Memory,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            Column {
+                                Text(
+                                    text = "🔬 Live-Hardware-Prüfung & KI-Diagnose",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "${String.format(java.util.Locale.US, "%.1f", hardwareInfo.totalRamGb)} GB RAM • ${hardwareInfo.cpuCores} CPU-Kerne • ${hardwareInfo.performanceTier}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "100% Offline",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Nur passende", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Switch(
-                            checked = onlyShowCompatible,
-                            onCheckedChange = { onlyShowCompatible = it },
-                            modifier = Modifier.height(24.dp)
-                        )
+                    // Empfehlungs-Banner
+                    recommendedModel?.let { rec ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(15.dp))
+                                        Text(
+                                            text = "Empfehlung für dein Gerät: ${rec.name}",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Text(
+                                        text = rec.hardwareRecommendationReason.ifBlank { "Optimal abgestimmt auf deinen Arbeitsspeicher (${rec.ramBadge})." },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 10.sp,
+                                        lineHeight = 14.sp
+                                    )
+                                }
+
+                                if (!rec.isSelected) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    FilledTonalButton(
+                                        onClick = { viewModel.selectHuggingFaceModel(rec.id) },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) {
+                                        Text("Wählen", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                } else {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = Color(0xFF10B981).copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = "Aktiv",
+                                            color = Color(0xFF10B981),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -555,13 +653,26 @@ fun HuggingFaceModelsContent(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    listOf("Alle", "DMS & Rechnungen", "Reasoning & Logik", "Verträge & Jura", "Finanzen & Tabellen", "Mehrsprachig").forEach { cat ->
+                    listOf("Alle", "Empfohlen", "DMS & Rechnungen", "Reasoning & Logik", "Verträge & Jura", "Finanzen & Tabellen", "Mehrsprachig").forEach { cat ->
+                        val isSelected = when (cat) {
+                            "Alle" -> selectedCategoryFilter == "Alle"
+                            "Empfohlen" -> selectedCategoryFilter == "Empfohlen"
+                            "DMS & Rechnungen" -> selectedCategoryFilter == "DMS & Rechnungen" || selectedCategoryFilter == "DMS & Rechnungsextraktion"
+                            else -> selectedCategoryFilter == cat
+                        }
                         FilterChip(
-                            selected = (selectedCategoryFilter == cat) || (cat == "DMS & Rechnungen" && selectedCategoryFilter == "DMS & Rechnungsextraktion"),
+                            selected = isSelected,
                             onClick = { 
-                                selectedCategoryFilter = if (cat == "DMS & Rechnungen") "DMS & Rechnungsextraktion" else cat 
+                                selectedCategoryFilter = cat
                             },
-                            label = { Text(cat, fontSize = 11.sp, maxLines = 1) },
+                            label = { 
+                                val labelText = when (cat) {
+                                    "Alle" -> "Alle (${models.size})"
+                                    "Empfohlen" -> "⭐ Empfohlen"
+                                    else -> cat
+                                }
+                                Text(labelText, fontSize = 11.sp, maxLines = 1) 
+                            },
                             modifier = Modifier.height(30.dp)
                         )
                     }

@@ -385,37 +385,38 @@ private fun StepWelcome(
     ) {
         // Hero Card mit Dokumenten Tresor Logo-Banner
         Surface(
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(vertical = 12.dp, horizontal = 14.dp)
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp)
             ) {
                 AppLogoBanner(
-                    iconHeight = 150.dp,
-                    fontSize = 24f,
+                    iconHeight = 70.dp,
+                    fontSize = 18f,
                     includeContainer = false,
                     showTagline = true,
                     tagline = "first private and smart document management system"
                 )
 
                 Text(
-                    text = if (isManualReconfig) "App-Konfiguration deines Dokumenten-Tresors" else "Willkommen in deinem persönlichen Dokumenten-Tresor!",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = if (isManualReconfig) "App-Konfiguration deines Dokumenten-Tresors" else "Willkommen in deinem Dokumenten-Tresor!",
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center
                 )
 
                 Text(
-                    text = "Schützt deine wichtigsten Dokumente, Verträge, Quittungen und Unterlagen mit kompromisslosem Datenschutz – 100% lokal auf deinem Smartphone, ohne fremde Cloud-Server.",
+                    text = "Schützt deine wichtigsten Dokumente, Verträge und Belege – 100% lokal auf deinem Smartphone ohne fremde Cloud.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    fontSize = 11.sp
                 )
             }
         }
@@ -1478,6 +1479,76 @@ private fun StepStorageLocation(
         }
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 2.dp))
+
+        // 3a. Ordner-Strategie (Ebene 1): "Wie sortierst du Dokumente primär in Ebene 1?"
+        val currentFolderStrategy by viewModel.folderStrategy.collectAsState()
+        var isFolderStrategyExpanded by remember { mutableStateOf(false) }
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "Wie sortierst du Dokumente primär in Ebene 1?",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "Bestimmt, wie die Fachabteilungen und der KI-Wizard neue Ordner auf oberster Ebene vorschlagen.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            @OptIn(ExperimentalMaterial3Api::class)
+            ExposedDropdownMenuBox(
+                expanded = isFolderStrategyExpanded,
+                onExpandedChange = { isFolderStrategyExpanded = it },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = currentFolderStrategy.title,
+                    onValueChange = {},
+                    readOnly = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isFolderStrategyExpanded) },
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                        .testTag("dropdown_wizard_folder_strategy")
+                )
+
+                ExposedDropdownMenu(
+                    expanded = isFolderStrategyExpanded,
+                    onDismissRequest = { isFolderStrategyExpanded = false }
+                ) {
+                    com.example.model.FolderStrategy.entries.forEach { strategy ->
+                        val isSelected = strategy == currentFolderStrategy
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        text = strategy.title,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = strategy.description,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "📁 Bsp: ${strategy.examplePath}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            },
+                            onClick = {
+                                isFolderStrategyExpanded = false
+                                viewModel.setFolderStrategy(strategy)
+                            }
+                        )
+                    }
+                }
+            }
+        }
 
         // 3. Ordner-Nummerierung & Sortierung mit eigenem Info-Button
         var isPrefixDropdownExpanded by remember { mutableStateOf(false) }

@@ -1,5 +1,6 @@
 package com.example.service
 
+import com.example.model.FolderStrategy
 import org.json.JSONArray
 
 /**
@@ -102,5 +103,23 @@ Wenn der Nutzer hingegen eine reine Informationsfrage stellt, eine Zusammenfassu
             appendLine()
             append(TOOL_USAGE_DIRECTIVE.trim())
         }
+    }
+
+    /**
+     * Erstellt den spezialisierten Systemprompt für die Fachabteilungen (Team Finanzen, Verträge, Verwaltung)
+     * mit Injektion der Benutzer-FolderStrategy und existierender globaler Zusatzfelder.
+     */
+    fun buildDepartmentSystemPrompt(
+        department: DepartmentTeam,
+        folderStrategy: FolderStrategy,
+        whitelistedCustomFields: List<String> = emptyList(),
+        userCorrectionPrompt: String? = null
+    ): String {
+        return LlamaCppInferenceEngine.buildDepartmentSystemPrompt(
+            department = department,
+            folderStrategy = folderStrategy,
+            whitelistedCustomFields = whitelistedCustomFields,
+            userCorrectionPrompt = userCorrectionPrompt
+        )
     }
 }

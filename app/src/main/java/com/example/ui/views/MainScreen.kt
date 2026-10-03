@@ -342,8 +342,8 @@ fun MainScreen(
                                         isFabExpanded = false
                                         viewModel.openAiChatDrawer()
                                     },
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                    containerColor = MaterialTheme.colorScheme.secondary,
+                                    contentColor = MaterialTheme.colorScheme.onSecondary,
                                     shape = CircleShape,
                                     elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
                                     modifier = Modifier
@@ -361,31 +361,119 @@ fun MainScreen(
                             // Platzhalter für Dashboard Tab
                             Spacer(modifier = Modifier.weight(1.1f))
 
-                            // FAB 2 (Rechts): Scan/Import Button ragt über die Leiste hinaus (offset y = -18.dp)
+                            // FAB 2 (Rechts): Scan/Import Speed-Dial FAB (herausklappend!)
                             Box(
                                 modifier = Modifier
                                     .weight(0.85f)
                                     .offset(y = (-18).dp),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.BottomCenter
                             ) {
-                                FloatingActionButton(
-                                    onClick = {
-                                        isFabExpanded = false
-                                        showScanImportSheet = true
-                                    },
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                                    shape = CircleShape,
-                                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
-                                    modifier = Modifier
-                                        .size(52.dp)
-                                        .testTag("main_add_fab")
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Scan- & Importmenü öffnen",
-                                        modifier = Modifier.size(26.dp)
-                                    )
+                                    // 1. Herausklappende Speed-Dial Menüelemente
+                                    AnimatedVisibility(
+                                        visible = isFabExpanded,
+                                        enter = fadeIn(tween(180)) + slideInVertically(initialOffsetY = { it / 2 }) + scaleIn(initialScale = 0.8f),
+                                        exit = fadeOut(tween(150)) + slideOutVertically(targetOffsetY = { it / 2 }) + scaleOut(targetScale = 0.8f)
+                                    ) {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.padding(bottom = 4.dp)
+                                        ) {
+                                            // Option A: Datei-Import Button
+                                            Surface(
+                                                onClick = {
+                                                    isFabExpanded = false
+                                                    currentTab = MainNavigationTab.IMPORT
+                                                },
+                                                shape = RoundedCornerShape(20.dp),
+                                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                                shadowElevation = 6.dp,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                                modifier = Modifier
+                                                    .height(42.dp)
+                                                    .testTag("fab_option_import")
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.FileUpload,
+                                                        contentDescription = "Datei importieren",
+                                                        tint = MaterialTheme.colorScheme.secondary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                    Text(
+                                                        text = "Import",
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+
+                                            // Option B: Dokument scannen Button
+                                            Surface(
+                                                onClick = {
+                                                    isFabExpanded = false
+                                                    currentTab = MainNavigationTab.SCANNER
+                                                },
+                                                shape = RoundedCornerShape(20.dp),
+                                                color = MaterialTheme.colorScheme.primaryContainer,
+                                                shadowElevation = 6.dp,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                                                modifier = Modifier
+                                                    .height(42.dp)
+                                                    .testTag("fab_option_scanner")
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.DocumentScanner,
+                                                        contentDescription = "Dokument scannen",
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                    Text(
+                                                        text = "Scannen",
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 2. Haupt-FAB (+ rotiert um 45° zum X bei Aktivierung)
+                                    FloatingActionButton(
+                                        onClick = {
+                                            isFabExpanded = !isFabExpanded
+                                        },
+                                        containerColor = MaterialTheme.colorScheme.secondary,
+                                        contentColor = MaterialTheme.colorScheme.onSecondary,
+                                        shape = CircleShape,
+                                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
+                                        modifier = Modifier
+                                            .size(52.dp)
+                                            .testTag("main_add_fab")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = if (isFabExpanded) "Menü schließen" else "Scan- & Importmenü öffnen",
+                                            modifier = Modifier
+                                                .size(26.dp)
+                                                .graphicsLayer { rotationZ = fabRotation }
+                                        )
+                                    }
                                 }
                             }
 
@@ -632,8 +720,11 @@ fun MainScreen(
                                 if (totalDrag < -32f) {
                                     change.consume()
                                     totalDrag = 0f
-                                    isFabExpanded = false
-                                    showScanImportSheet = true
+                                    if (isGestureModeEnabled) {
+                                        showScanImportSheet = true
+                                    } else {
+                                        isFabExpanded = true
+                                    }
                                 }
                             }
                         )
@@ -642,7 +733,28 @@ fun MainScreen(
         }
 
         // =========================================================================
-        // 4. SCAN / IMPORT SCHNELLZUGRIFFS-PANEL (MODAL BOTTOM SHEET)
+        // 4. FAB SPEED-DIAL SCRIM (Abdunklung & Schließen bei Klick außerhalb)
+        // =========================================================================
+        AnimatedVisibility(
+            visible = isFabExpanded,
+            enter = fadeIn(tween(180)),
+            exit = fadeOut(tween(150))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        isFabExpanded = false
+                    }
+            )
+        }
+
+        // =========================================================================
+        // 5. SCAN / IMPORT SCHNELLZUGRIFFS-PANEL (MODAL BOTTOM SHEET)
         // Ausgelöst durch Wischgeste im Gesten-Modus oder direkte Schnellaktionen
         // =========================================================================
         if (showScanImportSheet) {

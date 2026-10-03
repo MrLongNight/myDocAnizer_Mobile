@@ -1180,6 +1180,7 @@ data class DocRule(
     val targetSubCategoryId: String = "",  // z.B. "B2.01"
     val targetDocType: String = "Rechnung", // z.B. "Rechnung"
     val detectedSender: String = "", // z.B. "Vodafone GmbH"
+    val targetFolderPath: String = "", // z.B. "Vodafone/Rechnungen" oder "Finanzen/Rechnungen"
     val targetTags: List<String> = emptyList(),
     val isEnabled: Boolean = true,
     val confidenceScore: Float = 1.0f,
@@ -1188,6 +1189,47 @@ data class DocRule(
     val targetIcon: String = "", // Zugeordnetes Dokument-Icon
     val targetLogo: String = ""  // Zugeordnetes Firmenlogo
 )
+
+/**
+ * Primäre Sortierstrategie für Ebene 1 der Ordnerstruktur (Ordner-Strategie-Wizard).
+ */
+enum class FolderStrategy(
+    val id: String,
+    val title: String,
+    val description: String,
+    val examplePath: String
+) {
+    BY_SENDER(
+        id = "BY_SENDER",
+        title = "Nach Absender (Firmen)",
+        description = "Ebene 1 wird nach Firmen, Institutionen oder Ausstellern benannt (z.B. Vodafone, Telekom, Allianz).",
+        examplePath = "Vodafone/Rechnungen"
+    ),
+    BY_CATEGORY(
+        id = "BY_CATEGORY",
+        title = "Nach Lebensbereich (Kategorien)",
+        description = "Ebene 1 orientiert sich an Themen wie Finanzen, Verträge, Wohnen, Steuern oder Gesundheit.",
+        examplePath = "Finanzen/Versicherungen"
+    ),
+    CHRONOLOGICAL(
+        id = "CHRONOLOGICAL",
+        title = "Chronologisch (Jahr)",
+        description = "Ebene 1 strukturiert nach Kalenderjahren (z.B. 2026) mit thematischen Unterordnern.",
+        examplePath = "2026/Rechnungen"
+    ),
+    FLAT(
+        id = "FLAT",
+        title = "Flach (Alles in einen Ordner)",
+        description = "Keine tiefen Verzweigungen. Alle Dokumente landen in einem zentralen Hauptordner.",
+        examplePath = "Dokumente"
+    );
+
+    companion object {
+        fun fromId(id: String?): FolderStrategy {
+            return entries.find { it.id.equals(id, ignoreCase = true) } ?: BY_CATEGORY
+        }
+    }
+}
 
 /**
  * Status eines Elements im Stapel-Puffer / Post-Processing

@@ -37,6 +37,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val financeDao = db.financeDao()
     private val settingsRepo = SettingsRepository(application)
     val ruleRepo = DocRuleRepository(application)
+    val ruleRepository: DocRuleRepository get() = ruleRepo
     val llmService = LlmService(application)
     val biometricAuthManager = BiometricAuthManager(application)
     val passkeyAuthManager = PasskeyAuthManager(application)
@@ -516,10 +517,116 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    // Two-Stage LLM Pipeline (AP-1: First-Run Triage & Second-Run Tiefenanalyse)
+    private val _isSecondRunGenerating = MutableStateFlow(false)
+    val isSecondRunGenerating: StateFlow<Boolean> = _isSecondRunGenerating.asStateFlow()
+
+    private val _lastAiAnalysisResult = MutableStateFlow<Map<Long, LlmClassificationResult>>(emptyMap())
+    val lastAiAnalysisResult: StateFlow<Map<Long, LlmClassificationResult>> = _lastAiAnalysisResult.asStateFlow()
+
+    fun runSecondRunAnalysis(
+        documentId: Long,
+        userCorrection: String? = null,
+        onComplete: ((LlmClassificationResult) -> Unit)? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSecondRunGenerating.value = true
+            try {
+                val doc = allDocuments.value.find { it.id == documentId }
+                    ?: documentDao.getDocumentById(documentId)
+                if (doc != null && doc.ocrText.isNotBlank()) {
+                    // Team 3 Stammdaten-Verwalter: Alle aktiven globalen Zusatzfelder aus Room DB holen
+                    val existingFields = customFieldDao.getAllCustomFieldsList()
+                    val whitelistedNames = existingFields.map { it.name }.distinct()
+
+                    val result = llmService.classifyDocumentSecondRun(
+                        ocrText = doc.ocrText,
+                        whitelistedCustomFields = whitelistedNames,
+                        userCorrection = userCorrection,
+                        folderStrategy = settingsRepo.folderStrategy.value,
+                        config = llmInferenceConfig.value
+                    )
+
+                    // Dokument-Metadaten aktualisieren falls präzisiert
+                    val updatedDoc = doc.copy(
+                        sender = if (result.sender.isNotBlank() && result.sender != "Dokument") result.sender else doc.sender,
+                        docType = if (result.docType.isNotBlank() && result.docType != "Dokument") result.docType else doc.docType
+                    )
+                    documentDao.updateDocument(updatedDoc)
+
+                    // Extrahierte Zusatzfelder in Room DB einpflegen
+                    result.customFields.forEach { (fieldName, fieldValue) ->
+                        if (fieldName.isNotBlank() && fieldValue.isNotBlank()) {
+                            val matchingField = existingFields.find { it.name.equals(fieldName, ignoreCase = true) }
+                            val fieldId = matchingField?.id ?: run {
+                                val newField = com.example.model.CustomFieldEntity(
+                                    id = java.util.UUID.randomUUID().toString(),
+                                    name = fieldName,
+                                    description = "Von Team 2 Tiefenanalyse erfasst",
+                                    type = com.example.model.CustomFieldType.TEXT,
+                                    scope = com.example.model.CustomFieldScope.GLOBAL
+                                )
+                                customFieldDao.insertCustomField(newField)
+                                newField.id
+                            }
+                            customFieldDao.insertOrUpdateFieldValue(
+                                com.example.model.DocumentCustomFieldValueEntity(
+                                    documentId = documentId,
+                                    customFieldId = fieldId,
+                                    fieldValue = fieldValue
+                                )
+                            )
+                        }
+                    }
+
+                    _lastAiAnalysisResult.value = _lastAiAnalysisResult.value + (documentId to result)
+                    withContext(Dispatchers.Main) {
+                        onComplete?.invoke(result)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("DocAnizerViewModel", "Fehler in runSecondRunAnalysis: ${e.message}", e)
+            } finally {
+                _isSecondRunGenerating.value = false
+            }
+        }
+    }
+
+    fun reRunFirstRunTriage(
+        documentId: Long,
+        onComplete: ((LlmClassificationResult) -> Unit)? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSecondRunGenerating.value = true
+            try {
+                val doc = allDocuments.value.find { it.id == documentId }
+                    ?: documentDao.getDocumentById(documentId)
+                if (doc != null && doc.ocrText.isNotBlank()) {
+                    val result = llmService.classifyDocumentFirstRun(
+                        ocrText = doc.ocrText,
+                        config = llmInferenceConfig.value
+                    )
+                    _lastAiAnalysisResult.value = _lastAiAnalysisResult.value + (documentId to result)
+                    withContext(Dispatchers.Main) {
+                        onComplete?.invoke(result)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("DocAnizerViewModel", "Fehler in reRunFirstRunTriage: ${e.message}", e)
+            } finally {
+                _isSecondRunGenerating.value = false
+            }
+        }
+    }
+
     // First-Run Wizard & Manueller Start
     val isWizardCompleted: StateFlow<Boolean> = settingsRepo.isWizardCompleted
     fun setWizardCompleted(completed: Boolean) = settingsRepo.setWizardCompleted(completed)
     fun resetWizard() = settingsRepo.resetWizard()
+
+    // Ordner-Strategie (Ebene 1): Nach Absender, Lebensbereich, Chronologisch oder Flach
+    val folderStrategy: StateFlow<com.example.model.FolderStrategy> = settingsRepo.folderStrategy
+    fun setFolderStrategy(strategy: com.example.model.FolderStrategy) = settingsRepo.setFolderStrategy(strategy)
 
     private val _showManualConfigWizard = MutableStateFlow(false)
     val showManualConfigWizard: StateFlow<Boolean> = _showManualConfigWizard.asStateFlow()
@@ -2052,6 +2159,17 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         else -> "Neues Dokument"
                     }
 
+                    val targetPath = aiClass.suggestedFolderPath.ifBlank {
+                        val snd = cleanSender ?: "Dokumente"
+                        val typ = cleanType ?: "Allgemein"
+                        when (settingsRepo.folderStrategy.value) {
+                            com.example.model.FolderStrategy.BY_SENDER -> "$snd/$typ"
+                            com.example.model.FolderStrategy.BY_CATEGORY -> "${aiClass.mainCategoryId}/$typ"
+                            com.example.model.FolderStrategy.CHRONOLOGICAL -> "2026/$typ"
+                            com.example.model.FolderStrategy.FLAT -> "Dokumente"
+                        }
+                    }
+
                     val suggestedRule = com.example.model.DocRule(
                         name = ruleName,
                         matchKeywords = smartKeywords,
@@ -2059,6 +2177,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         targetSubCategoryId = aiClass.subCategoryId,
                         targetDocType = aiClass.docType,
                         detectedSender = aiClass.sender,
+                        targetFolderPath = targetPath,
                         targetTags = aiClass.tags,
                         isEnabled = true,
                         isAiGenerated = true,

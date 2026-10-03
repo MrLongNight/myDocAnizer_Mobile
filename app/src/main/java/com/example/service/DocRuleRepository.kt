@@ -53,6 +53,7 @@ class DocRuleRepository(private val context: Context) {
                         targetSubCategoryId = obj.optString("targetSubCategoryId", "B1.01"),
                         targetDocType = obj.optString("targetDocType", "Dokument"),
                         detectedSender = obj.optString("detectedSender", ""),
+                        targetFolderPath = obj.optString("targetFolderPath", ""),
                         targetTags = tags,
                         isEnabled = obj.optBoolean("isEnabled", true),
                         confidenceScore = obj.optDouble("confidenceScore", 1.0).toFloat(),
@@ -80,6 +81,7 @@ class DocRuleRepository(private val context: Context) {
                     put("targetSubCategoryId", r.targetSubCategoryId)
                     put("targetDocType", r.targetDocType)
                     put("detectedSender", r.detectedSender)
+                    put("targetFolderPath", r.targetFolderPath)
                     put("targetTags", JSONArray(r.targetTags))
                     put("isEnabled", r.isEnabled)
                     put("confidenceScore", r.confidenceScore.toDouble())
@@ -157,5 +159,18 @@ class DocRuleRepository(private val context: Context) {
             }
         }
         return null
+    }
+
+    /**
+     * Prüft, ob bereits eine existierende Regel für diesen Absender oder Dokumenttyp vorliegt.
+     * Ermöglicht transparente Hinweise im Vorschlags-Dialog.
+     */
+    fun findMatchingOrSimilarRule(sender: String, docType: String): DocRule? {
+        val s = sender.trim().lowercase()
+        val dt = docType.trim().lowercase()
+        return _rules.value.firstOrNull { rule ->
+            (s.isNotBlank() && rule.detectedSender.isNotBlank() && (rule.detectedSender.lowercase() == s || s.contains(rule.detectedSender.lowercase()))) ||
+            (s.isNotBlank() && dt.isNotBlank() && rule.name.lowercase().contains(s) && rule.name.lowercase().contains(dt))
+        }
     }
 }

@@ -8,6 +8,7 @@ import com.example.model.ChecklistItem
 import com.example.model.CustomDashboardWidget
 import com.example.model.DocTypeItem
 import com.example.model.ElementPeriodScope
+import com.example.model.FolderStrategy
 import com.example.model.ImportTemplateItem
 import com.example.model.PRESET_IMPORT_TEMPLATES
 import com.example.model.PdfSettings
@@ -1096,6 +1097,17 @@ class SettingsRepository(context: Context) {
     // First-Run Setup Wizard Status (v3 stellt sicher, dass der Assistent beim aktuellen App-Start direkt angezeigt wird)
     private val _isWizardCompleted = MutableStateFlow(prefs.getBoolean("setup_wizard_completed_v3", false))
     val isWizardCompleted: StateFlow<Boolean> = _isWizardCompleted.asStateFlow()
+
+    // Ordner-Strategie (Ebene 1): Nach Absender, Lebensbereich, Chronologisch oder Flach
+    private val _folderStrategy = MutableStateFlow(
+        FolderStrategy.fromId(prefs.getString("folder_strategy", FolderStrategy.BY_CATEGORY.id))
+    )
+    val folderStrategy: StateFlow<FolderStrategy> = _folderStrategy.asStateFlow()
+
+    fun setFolderStrategy(strategy: FolderStrategy) {
+        prefs.edit().putString("folder_strategy", strategy.id).apply()
+        _folderStrategy.value = strategy
+    }
 
     fun setWizardCompleted(completed: Boolean) {
         prefs.edit().putBoolean("setup_wizard_completed_v3", completed).apply()

@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AppViewLevel
 import com.example.model.DocTypeItem
+import com.example.model.FolderStrategy
 import com.example.model.DOC_NAMING_STYLE_OPTIONS
 import com.example.model.PREFIX_STYLE_OPTIONS
 import com.example.model.PrefixStyleOption
@@ -2416,6 +2417,76 @@ fun PdfSettingsTab(viewModel: DocAnizerViewModel) {
                     }
                 }
             }
+                // Ordner-Strategie (Ebene 1): "Wie sortierst du Dokumente primär in Ebene 1?"
+                val currentFolderStrategy by viewModel.folderStrategy.collectAsState()
+                var isFolderStrategyExpanded by remember { mutableStateOf(false) }
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Wie sortierst du Dokumente primär in Ebene 1?",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Bestimmt, wie die Fachabteilungen und der KI-Wizard neue Ordner auf oberster Ebene vorschlagen.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    ExposedDropdownMenuBox(
+                        expanded = isFolderStrategyExpanded,
+                        onExpandedChange = { isFolderStrategyExpanded = it },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = currentFolderStrategy.title,
+                            onValueChange = {},
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isFolderStrategyExpanded) },
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                                .testTag("dropdown_settings_folder_strategy")
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = isFolderStrategyExpanded,
+                            onDismissRequest = { isFolderStrategyExpanded = false }
+                        ) {
+                            FolderStrategy.entries.forEach { strategy ->
+                                val isSelected = strategy == currentFolderStrategy
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(
+                                                text = strategy.title,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                            )
+                                            Text(
+                                                text = strategy.description,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = "📁 Bsp: ${strategy.examplePath}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        isFolderStrategyExpanded = false
+                                        viewModel.setFolderStrategy(strategy)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Live-Vorschau der Ordnerstruktur
                 Surface(
                     shape = RoundedCornerShape(8.dp),

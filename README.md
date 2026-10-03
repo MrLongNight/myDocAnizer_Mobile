@@ -6,11 +6,11 @@
 
 The Privacy-First, 100% On-Device Document Management & Smart Scanner App
 
-**Version:** 2.4.0 (Build 2026.09)  
+**Version:** 2.5.0 (Build 2026.10)  
 **License:** GNU Affero General Public License v3.0 (AGPLv3) for source code; All branding, logos, trademarks & store assets copyright mr.locke84.  
 **Repository:** https://github.com/MrLongNight/myDocAnizer_Mobile  
 **Desktop:** https://github.com/MrLongNight/myDocAnizer-Desktop  
-**Architecture:** Kotlin / Jetpack Compose / Android Room (SQLite + FTS4) / Google ML Kit Offline OCR / Local HuggingFace GGUF Nano-LLMs / AES-256-GCM Zero-Knowledge Client-Side Encryption / P2P Direct WiFi Sync
+**Architecture:** Kotlin / Jetpack Compose / Android Room (SQLite + FTS4) / Google ML Kit Offline OCR / 4-Team On-Device GGUF Nano-LLM Pipeline / Quality Gatekeeper & Text-Anchor Verification / AES-256-GCM Zero-Knowledge Client-Side Encryption / P2P Direct WiFi Sync
 
 ## Related project
 
@@ -45,26 +45,32 @@ myDocAnizer-Mobile is the counter-design to commercial scanner apps with opaque 
 +------------------------------------------------------------------------------+
 |                             myDocAnizer-Mobile                               |
 +------------------------------------------------------------------------------+
-| 1. Dokumenten-Tresor (DMS)  | 2. Scanner & OCR        | 3. On-Device LLM     |
-|   • DIN-Ordner (A01 - A09)  |   • Offline ML Kit OCR  |   • GGUF Inferenz    |
-|   • Batch-Inbox für Scans   |   • Auto-B/W Threshold  |   • Hardware-Check   |
-|   • Custom Fields (Zusatz)  |   • Multi-Page Capture  |   • Lokales RAG Q&A  |
-|   • FTS4 Volltext-Suche     |   • Akustische Profile  |   • Regelgenerator   |
+| 1. Dokumenten-Tresor (DMS)  | 2. Scanner & OCR        | 3. 4-Team On-Device  |
+|   • DIN-Ordner (A01 - A09)  |   • Offline ML Kit OCR  |     KI-Pipeline      |
+|   • Batch-Inbox für Scans   |   • Auto-B/W Threshold  |   • Team 1: Triage   |
+|   • Custom Fields (Zusatz)  |   • Multi-Page Capture  |   • Team 2: Fachabtl.|
+|   • FTS4 Volltext-Suche     |   • Akustische Profile  |   • Team 3: Stammdat.|
+|   • Ordner-Strategie Wizard |   • GBNF-Grammar JSON   |   • Team 4: Revision |
 +-----------------------------+-------------------------+----------------------+
 | 4. Fristen & Regeln         | 5. Finanzen & Bank      | 6. Sync & Sicherheit |
 |   • Kündigungsfrist-Regex   |   • CSV Kontoauszüge    |   • P2P WLAN-Sync    |
 |   • Schlagwort-Regelwerk    |   • Belegabgleich       |   • AES-256-GCM Enc  |
 |   • Auto-Logo-Zuweisung     |   • Bar-Ausgabenbuch    |   • Biometrie/Passkey|
-|   • 100% deterministisch    |   • Budget & KPIs       |   • Disaster Restore |
+|   • Deterministisch $S $T   |   • Budget & KPIs       |   • Disaster Restore |
 +------------------------------------------------------------------------------+
 ```
 
 ### Module Details
 
-**Module 1: Document Vault (DMS Explorer)**
+**Module 1: Document Vault (DMS Explorer) & Dynamic Folder Wizard**
 - Structured two-level folder hierarchy (main categories A01–A09: e.g., Housing, Finance, Contracts, Taxes, Authorities; subcategories B1.01, etc.).
+- **Dynamic Folder Strategy Wizard (`FolderStrategy`):** Customizable Level-1 organizing structure:
+  - *By Sender (Companies)*: `Vodafone/Invoices`
+  - *By Category (Life Areas)*: `Finance/Insurance`
+  - *Chronological (Year)*: `2026/Invoices`
+  - *Flat*: `Documents`
 - Batch Inbox for fast scanning in batches with later review and assignment.
-- Custom additional fields (e.g., customer number, license plate, tax ID, case number) with free type definition (text, amount, date).
+- Custom additional fields (e.g., customer number, license plate, tax ID, meter number) with free type definition (text, amount, date, boolean, selection).
 - Integrated PDF viewer with sharing, export, and print functions.
 
 **Module 2: Smart Camera Scanner & Preprocessing**
@@ -74,15 +80,17 @@ myDocAnizer-Mobile is the counter-design to commercial scanner apps with opaque 
 - Multi-page document capture with sorting and page deletion.
 - Acoustic sound profiles (click, beep, chime, silent) and haptic feedback.
 
-**Module 3: Local HuggingFace LLM Suite**
-- Complete on-device inference without internet.
-- Local models include SmolLM2, Qwen 2.5, DeepSeek-R1 Distill Qwen, Phi-3.5 Mini, Ministral, Gemma 2, Llama 3.2, and Qwen 2.5 Coder.
-- Automatic hardware barometer and remote catalog sync.
-- Local AI rule generator and on-device RAG document chat.
+**Module 3: 4-Team On-Device KI-Pipeline & Quality Gatekeeper**
+- Complete on-device inference without internet (GGUF weights via Llama.cpp / GBNF Hardware Grammars).
+- **Team 1: Poststelle & Eingangstriage:** Fast first run on header & signal text slices (`OcrPreFilterMatrix`) for sender, doc-type and category.
+- **Team 2: Fachabteilungs-Teams (Second Run):** Specialized departments (Team Finance, Team Contracts, Team Administration) with injected `FolderStrategy` prompts.
+- **Team 3: Master Data & Whitelist Manager:** Injects vault-wide custom fields to eliminate synonym chaos.
+- **Team 4: Revision & Quality Gatekeeper:** Pure Kotlin deterministic cross-check. Text-anchor verification for amounts, dates, and IBANs; normalization of currency (`1.000,00 €` -> `1000.00`) and dates (`12. März` -> `12.03`); birth date confusion prevention; 1-click UI corrections.
 
-**Module 4: Deadline & Termination Detection**
+**Module 4: Deadline & Termination Detection & Deterministic Rule Engine**
 - Automatic analysis of OCR text for termination periods, minimum contract durations, payment terms, and objection deadlines.
 - Pre-warning times with calendar integration and dashboard alerts.
+- **Deterministic DocRule Engine:** Auto-names rules strictly as `"$Sender $DocType"`, attaches target folder paths, and matches incoming scans 100% deterministically.
 
 **Module 5: Finance, Household Budget & Receipt Reconciliation**
 - CSV import for common German banks.
@@ -90,9 +98,9 @@ myDocAnizer-Mobile is the counter-design to commercial scanner apps with opaque 
 - Integrated household budget with cash tracker.
 
 **Module 6: Synchronization & Data Security**
-- Local P2P master-master WiFi sync between phone and desktop.
-- Client-side zero-knowledge encryption with AES-256-GCM and PBKDF2.
-- Disaster recovery via encrypted .enc archives.
+- Local P2P master-master WiFi sync between phone and desktop (Port 8765, mDNS discovery, QR-Code pairing).
+- Client-side zero-knowledge encryption with AES-256-GCM and PBKDF2 (100,000 rounds).
+- Disaster recovery via encrypted `.enc` archives.
 - App lock via biometrics and FIDO2 passkey.
 
 ---

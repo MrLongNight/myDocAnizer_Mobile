@@ -48,6 +48,7 @@ fun PendingRuleSuggestionDialog(
     var excludeKeywordsStr by remember { mutableStateOf(suggestion.suggestedRule.excludeKeywords.joinToString(", ")) }
     var mainCatId by remember { mutableStateOf(suggestion.suggestedRule.targetMainCategoryId) }
     var subCatId by remember { mutableStateOf(suggestion.suggestedRule.targetSubCategoryId) }
+    var targetFolderPath by remember { mutableStateOf(suggestion.suggestedRule.targetFolderPath) }
     var selectedIcon by remember { mutableStateOf(suggestion.suggestedRule.targetIcon.ifBlank { "description" }) }
     var selectedLogo by remember { mutableStateOf(suggestion.suggestedRule.targetLogo) }
     var showIconPicker by remember { mutableStateOf(false) }
@@ -60,10 +61,20 @@ fun PendingRuleSuggestionDialog(
     var aiRefinePrompt by remember { mutableStateOf("") }
     var isRefiningWithAi by remember { mutableStateOf(false) }
 
-    // Dialog für neues Zusatzfeld
     var showAddFieldDialog by remember { mutableStateOf(false) }
     var newFieldKey by remember { mutableStateOf("") }
     var newFieldValue by remember { mutableStateOf("") }
+
+    // Team 4: Deterministischer Quality Gatekeeper Cross-Check
+    var dismissedWarnings by remember { mutableStateOf(setOf<String>()) }
+    val qualityReport = remember(suggestion.ocrText, sender, docType, customFieldsMap) {
+        com.example.service.QualityGatekeeper.auditExtraction(
+            ocrText = suggestion.ocrText,
+            sender = sender,
+            docType = docType,
+            customFields = customFieldsMap
+        )
+    }
 
     var copyNotificationMessage by remember { mutableStateOf<String?>(null) }
 
@@ -395,6 +406,139 @@ fun PendingRuleSuggestionDialog(
                             )
                         }
 
+                        // Transparenter Abgleich mit bestehenden DocRules (AP-2)
+                        val existingSimilarRule: DocRule? = remember(sender, docType) {
+                            viewModel?.ruleRepo?.findMatchingOrSimilarRule(sender, docType)
+                        }
+
+                        if (existingSimilarRule != null) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = "Ähnliche Regel existiert bereits: '${existingSimilarRule.name}'",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                        Text(
+                                            text = "Ablagepfad: ${existingSimilarRule.targetFolderPath.ifBlank { "Standardordner" }} • Du kannst diesen Vorschlag als Variante speichern oder anpassen.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Team 4: Deterministischer Quality Gatekeeper Prüfhinweis (AP-3)
+                        val activeWarnings = qualityReport.warnings.filter { it !in dismissedWarnings }
+                        if (activeWarnings.isNotEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.28f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("card_quality_gatekeeper_warning")
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Shield,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Team 4 Revision: Prüfhinweis (Score: ${(qualityReport.overallConfidence * 100).toInt()}%)",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                            Text(
+                                                text = activeWarnings.joinToString(" • "),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onErrorContainer
+                                            )
+                                        }
+                                        TextButton(
+                                            onClick = { dismissedWarnings = dismissedWarnings + activeWarnings.toSet() },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("Bestätigen", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+
+                                    // Schnellkorrektur-Chips
+                                    val correctiveChecks = qualityReport.fieldChecks.filter { it.suggestedCorrection != null && it.fieldName !in dismissedWarnings }
+                                    if (correctiveChecks.isNotEmpty()) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            modifier = Modifier.horizontalScroll(rememberScrollState())
+                                        ) {
+                                            correctiveChecks.forEach { check ->
+                                                AssistChip(
+                                                    onClick = {
+                                                        val updated = customFieldsMap.toMutableMap()
+                                                        updated[check.fieldName] = check.suggestedCorrection!!
+                                                        customFieldsMap = updated
+                                                        dismissedWarnings = dismissedWarnings + check.warningMessage.orEmpty()
+                                                    },
+                                                    label = {
+                                                        Text(
+                                                            text = "${check.fieldName} korrigieren: '${check.suggestedCorrection}'",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.SemiBold
+                                                        )
+                                                    },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Vorgeschlagener flexibler Ordnerpfad (Ebene 1 / Ebene 2)
+                        OutlinedTextField(
+                            value = targetFolderPath,
+                            onValueChange = { targetFolderPath = it },
+                            label = { Text("Vorgeschlagener Ordnerpfad (Ebene 1 / 2)") },
+                            leadingIcon = {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            },
+                            placeholder = { Text("z.B. Vodafone/Rechnungen oder Finanzen/Mobilfunk") },
+                            singleLine = true,
+                            supportingText = { Text("Gemäß aktiver Ordner-Strategie von der Fachabteilung vorgeschlagen") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
                         OutlinedTextField(
                             value = keywordsStr,
                             onValueChange = { keywordsStr = it },
@@ -454,31 +598,70 @@ fun PendingRuleSuggestionDialog(
                                         fontSize = 11.sp
                                     )
                                 } else {
-                                    customFieldsMap.forEach { (key, value) ->
+                                     customFieldsMap.forEach { (key, value) ->
+                                        val fieldCheck = qualityReport.getCheckForField(key)
+                                        val hasFieldIssue = fieldCheck != null && (!fieldCheck.isFoundInText || !fieldCheck.isPlausible) && key !in dismissedWarnings
+
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clip(RoundedCornerShape(8.dp))
-                                                .background(MaterialTheme.colorScheme.surface)
+                                                .background(
+                                                    if (hasFieldIssue) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+                                                    else MaterialTheme.colorScheme.surface
+                                                )
                                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = key,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Text(
+                                                        text = key,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    if (hasFieldIssue) {
+                                                        Text(
+                                                            text = "⚠️ Bitte prüfen",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.error,
+                                                            fontWeight = FontWeight.SemiBold
+                                                        )
+                                                    }
+                                                }
                                                 Text(
                                                     text = value,
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.primary
+                                                    color = if (hasFieldIssue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                                                 )
+                                                if (hasFieldIssue && fieldCheck?.suggestedCorrection != null) {
+                                                    Text(
+                                                        text = "Vorschlag: ${fieldCheck.suggestedCorrection}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        fontWeight = FontWeight.Bold,
+                                                        modifier = Modifier.clickable {
+                                                            val updated = customFieldsMap.toMutableMap()
+                                                            updated[key] = fieldCheck.suggestedCorrection
+                                                            customFieldsMap = updated
+                                                            dismissedWarnings = dismissedWarnings + key
+                                                        }
+                                                    )
+                                                }
                                             }
 
                                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                if (hasFieldIssue) {
+                                                    IconButton(
+                                                        onClick = { dismissedWarnings = dismissedWarnings + key },
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.Done, contentDescription = "Wert bestätigen", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                                    }
+                                                }
+
                                                 IconButton(
                                                     onClick = {
                                                         clipboardManager.setText(AnnotatedString(value))
@@ -585,6 +768,7 @@ fun PendingRuleSuggestionDialog(
                                 matchKeywords = if (kwList.isNotEmpty()) kwList else listOf(sender.lowercase()),
                                 targetIcon = selectedIcon,
                                 targetLogo = selectedLogo,
+                                targetFolderPath = targetFolderPath,
                                 targetCustomFields = customFieldsMap
                             )
                             suggestion.onSingleUseOnly(updatedRule)
@@ -614,6 +798,7 @@ fun PendingRuleSuggestionDialog(
                                 matchKeywords = if (kwList.isNotEmpty()) kwList else listOf(sender.lowercase()),
                                 targetIcon = selectedIcon,
                                 targetLogo = selectedLogo,
+                                targetFolderPath = targetFolderPath,
                                 targetCustomFields = customFieldsMap
                             )
                             suggestion.onSaveAsPermanentRule(updatedRule)

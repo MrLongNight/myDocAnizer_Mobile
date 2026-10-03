@@ -33,6 +33,13 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `verify DocAnizerApp initialization and CrashGuard setup`() {
+    val app = DocAnizerApp()
+    app.onCreate()
+    assertNotNull(app)
+  }
+
+  @Test
   fun `launch MainActivity successfully without crash`() {
     val controller = Robolectric.buildActivity(MainActivity::class.java)
     val activity = controller.setup().visible().get()
@@ -872,4 +879,288 @@ class ExampleRobolectricTest {
     viewModel.setTargetNavigationTab("SETTINGS")
     assertEquals("SETTINGS", viewModel.targetNavigationTab.value)
   }
+
+  @Test
+  fun `verify AP-1 OcrPreFilterMatrix slices top header and key lines for First Run`() {
+    val longOcrText = buildString {
+      appendLine("Deutsche Telekom Kundenservice")
+      appendLine("Landgrabenweg 151, 53227 Bonn")
+      appendLine("Datum: 10.04.2026")
+      appendLine("Rechnung für März 2026")
+      appendLine("Sehr geehrter Kunde,")
+      for (i in 1..80) {
+        appendLine("Posten $i: Verbindung nach Deutschland Einzelnachweis $i Minuten 0,05 EUR")
+      }
+      appendLine("Rechnungsbetrag: 79,90 €")
+      appendLine("Fälligkeit: 25.04.2026")
+      appendLine("IBAN: DE12345678901234567890")
+      appendLine("Vielen Dank für Ihr Vertrauen.")
+    }
+
+    assertTrue(longOcrText.length > 2500)
+    val slice = com.example.service.OcrPreFilterMatrix.extractFirstRunSlice(longOcrText, maxChars = 900)
+    assertTrue("Slice must be <= 900 characters but was ${slice.length}", slice.length <= 900)
+    assertTrue(slice.contains("Deutsche Telekom"))
+    assertTrue(slice.contains("KOPFZEILEN"))
+    assertTrue(slice.contains("Rechnungsbetrag") || slice.contains("79,90") || slice.contains("Fälligkeit"))
+  }
+
+  @Test
+  fun `verify AP-1 Two-Stage Pipeline first run and second run with custom fields whitelist`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    val sampleOcr = """
+      Stadtwerke München GmbH
+      Emmy-Noether-Straße 2, 80992 München
+      Jahresabrechnung 2025/2026
+      Kundennummer: SWM-882193
+      Zählernummer: Z-99210
+      Fälligkeit: 15.05.2026
+      Rechnungsbetrag: 412,50 €
+      Vielen Dank für Ihre Energienutzung.
+    """.trimIndent()
+
+    // 1. Team 1: First Run (Schnelle Triage)
+    val firstRun = viewModel.llmService.classifyDocumentFirstRun(sampleOcr)
+    assertEquals("Stadtwerke", firstRun.sender)
+    assertEquals("Rechnung", firstRun.docType)
+    assertTrue(firstRun.title.contains("Stadtwerke"))
+    assertTrue(firstRun.title.contains("abrechnung", ignoreCase = true) || firstRun.title.contains("Rechnung"))
+    assertTrue(firstRun.explanation.contains("Team 1 Triage") || firstRun.explanation.contains("Inferenz"))
+
+    // 2. Team 2 & 3: Second Run (Tiefenanalyse mit Whitelist existierender Zusatzfelder)
+    val whitelisted = listOf("Kundennummer", "Zählernummer", "Fälligkeit", "Monatliche Kosten")
+    val secondRun = viewModel.llmService.classifyDocumentSecondRun(
+      ocrText = sampleOcr,
+      whitelistedCustomFields = whitelisted,
+      userCorrection = "Absender ist Stadtwerke München"
+    )
+
+    assertEquals("Stadtwerke München", secondRun.sender)
+    assertEquals("Rechnung", secondRun.docType)
+    assertEquals("Stadtwerke München Rechnung", secondRun.title)
+    assertTrue(secondRun.customFields.containsKey("Kundennummer"))
+    assertTrue(secondRun.customFields.containsKey("Fälligkeit"))
+    assertTrue(secondRun.explanation.contains("Team 2 Tiefenanalyse"))
+
+    // 3. Test ViewModel runSecondRunAnalysis persistence
+    val db = AppDatabase.getDatabase(app)
+    val docId = db.documentDao().insertDocument(
+      com.example.model.DocumentEntity(
+        title = "Stadtwerke Rechnung",
+        sender = "Stadtwerke",
+        fileName = "swm_rechnung.pdf",
+        filePath = "/test/swm.pdf",
+        mainCategory = "Finanzen",
+        subCategory = "Energie",
+        ocrText = sampleOcr
+      )
+    )
+
+    var completed = false
+    viewModel.runSecondRunAnalysis(docId, "Absender ist Stadtwerke München") { res ->
+      completed = true
+      assertNotNull(res)
+    }
+
+    var attempts = 0
+    while (!completed && attempts < 30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(50)
+      attempts++
+    }
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    assertTrue(completed)
+    val lastRes = viewModel.lastAiAnalysisResult.value[docId]
+    assertNotNull(lastRes)
+    assertEquals("Stadtwerke München", lastRes?.sender)
+  }
+
+  @Test
+  fun `verify AP-2 Department Teams FolderStrategy and rule repository integration`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    // 1. FolderStrategy Speicherung und ViewModel-Flows
+    viewModel.setFolderStrategy(com.example.model.FolderStrategy.BY_SENDER)
+    assertEquals(com.example.model.FolderStrategy.BY_SENDER, viewModel.folderStrategy.first())
+
+    viewModel.setFolderStrategy(com.example.model.FolderStrategy.CHRONOLOGICAL)
+    assertEquals(com.example.model.FolderStrategy.CHRONOLOGICAL, viewModel.folderStrategy.first())
+
+    // 2. Dispatcher für Fachabteilungs-Teams (Finanzen, Verträge, Verwaltung)
+    assertEquals(
+      com.example.service.DepartmentTeam.FINANCE,
+      com.example.service.DepartmentTeam.dispatch("Rechnung")
+    )
+    assertEquals(
+      com.example.service.DepartmentTeam.FINANCE,
+      com.example.service.DepartmentTeam.dispatch("Stromabrechnung Stadtwerke")
+    )
+    assertEquals(
+      com.example.service.DepartmentTeam.CONTRACTS,
+      com.example.service.DepartmentTeam.dispatch("Versicherungspolice Allianz")
+    )
+    assertEquals(
+      com.example.service.DepartmentTeam.CONTRACTS,
+      com.example.service.DepartmentTeam.dispatch("Mietvertrag")
+    )
+    assertEquals(
+      com.example.service.DepartmentTeam.ADMINISTRATION,
+      com.example.service.DepartmentTeam.dispatch("Rentenbescheid")
+    )
+    assertEquals(
+      com.example.service.DepartmentTeam.ADMINISTRATION,
+      com.example.service.DepartmentTeam.dispatch("Allgemeiner Brief")
+    )
+
+    // 3. Department System Prompt & FolderStrategy-Injektion
+    val prompt = com.example.service.LlmToolPromptBuilder.buildDepartmentSystemPrompt(
+      department = com.example.service.DepartmentTeam.FINANCE,
+      folderStrategy = com.example.model.FolderStrategy.BY_SENDER,
+      whitelistedCustomFields = listOf("Rechnungsnummer", "Fälligkeit")
+    )
+    assertTrue(prompt.contains("Abteilung A (Finanzen & Buchhaltung)"))
+    assertTrue(prompt.contains("Nach Absender (Firmen)"))
+    assertTrue(prompt.contains("vorgeschlagener_pfad"))
+    assertTrue(prompt.contains("Rechnungsnummer"))
+
+    // 4. Second Run mit Department & FolderStrategy-Pfad
+    val sampleInvoice = """
+      Vodafone GmbH
+      Ferdinand-Braun-Platz 1, 40549 Düsseldorf
+      Mobilfunkrechnung März 2026
+      Rechnungsnummer: VF-2026-9810
+      Kundennummer: KD-118822
+      Rechnungsbetrag: 49,99 €
+      Fälligkeit: 20.03.2026
+    """.trimIndent()
+
+    val result = viewModel.llmService.classifyDocumentSecondRun(
+      ocrText = sampleInvoice,
+      folderStrategy = com.example.model.FolderStrategy.BY_SENDER,
+      department = com.example.service.DepartmentTeam.FINANCE
+    )
+    assertEquals("Vodafone GmbH", result.sender)
+    assertEquals("Rechnung", result.docType)
+    assertEquals("Vodafone GmbH Rechnung", result.title)
+    assertTrue(result.suggestedFolderPath.contains("Vodafone") || result.suggestedFolderPath.contains("Rechnung"))
+    assertTrue(result.explanation.contains("Finanzen") || result.explanation.contains("Abt. A"))
+
+    // 5. DocRuleRepository Abgleich und Pfad-Persistierung
+    val ruleRepo = viewModel.ruleRepository
+    val testRule = com.example.model.DocRule(
+      id = "rule_vf_test",
+      name = "Vodafone GmbH Rechnung",
+      matchKeywords = listOf("vodafone", "mobilfunkrechnung"),
+      targetDocType = "Rechnung",
+      detectedSender = "Vodafone GmbH",
+      targetFolderPath = "Vodafone/Rechnungen"
+    )
+    ruleRepo.addRule(testRule)
+
+    val foundSimilar = ruleRepo.findMatchingOrSimilarRule("Vodafone GmbH", "Rechnung")
+    assertNotNull(foundSimilar)
+    assertEquals("Vodafone/Rechnungen", foundSimilar?.targetFolderPath)
+  }
+
+  @Test
+  fun `verify AP-3 Quality Gatekeeper deterministischer cross-check and normalization`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    com.example.service.AppAuditLogger.init(app)
+
+    // 1. Normalisierungs-Logik: Datumsangaben
+    val normDate1 = com.example.service.QualityGatekeeper.normalizeDate("12. März 2024")
+    assertNotNull(normDate1)
+    assertEquals("12.03.2024", normDate1?.standardFormatted)
+
+    val normDate2 = com.example.service.QualityGatekeeper.normalizeDate("5. Jan. 24")
+    assertNotNull(normDate2)
+    assertEquals("05.01.2024", normDate2?.standardFormatted)
+
+    val normDate3 = com.example.service.QualityGatekeeper.normalizeDate("2024-11-20")
+    assertNotNull(normDate3)
+    assertEquals("20.11.2024", normDate3?.standardFormatted)
+
+    // 2. Normalisierungs-Logik: Beträge
+    val normAmount1 = com.example.service.QualityGatekeeper.normalizeAmount("1.000,00 €")
+    assertNotNull(normAmount1)
+    assertEquals(1000.00, normAmount1?.numericValue ?: 0.0, 0.001)
+    assertEquals("1000.00", normAmount1?.standardFormatted)
+    assertEquals("1.000,00", normAmount1?.germanFormatted)
+
+    val normAmount2 = com.example.service.QualityGatekeeper.normalizeAmount("49,99 EUR")
+    assertNotNull(normAmount2)
+    assertEquals(49.99, normAmount2?.numericValue ?: 0.0, 0.001)
+
+    // 3. Normalisierungs-Logik: IBAN
+    val normIban = com.example.service.QualityGatekeeper.normalizeIban("DE12 3456 7890 1234 5678 90")
+    assertEquals("DE12345678901234567890", normIban)
+
+    // 4. Text-Anchor-Cross-Check: Erfolgreich verankerte Entitäten
+    val authenticOcr = """
+      Telekom Deutschland GmbH
+      Rechnung Nr. 99182371
+      Rechnungsdatum: 12.03.2024
+      Gesamtbetrag: 1.000,00 €
+      Zahlbar bis: 26.03.2024
+      IBAN: DE12 3456 7890 1234 5678 90
+    """.trimIndent()
+
+    val validReport = com.example.service.QualityGatekeeper.auditExtraction(
+      ocrText = authenticOcr,
+      sender = "Telekom Deutschland GmbH",
+      docType = "Rechnung",
+      amountStr = "1.000,00 €",
+      dueDateStr = "26.03.2024",
+      docDateStr = "12.03.2024",
+      ibanStr = "DE12345678901234567890"
+    )
+
+    assertTrue(validReport.isApproved)
+    assertTrue(validReport.overallConfidence >= 0.90f)
+    assertTrue(validReport.warnings.isEmpty())
+
+    // 5. Halluzinations-Erkennung: Betrag kommt nicht im Text vor
+    val hallucinatedReport = com.example.service.QualityGatekeeper.auditExtraction(
+      ocrText = authenticOcr,
+      sender = "Telekom Deutschland GmbH",
+      docType = "Rechnung",
+      amountStr = "5.432,10 €", // Halluzination!
+      dueDateStr = "26.03.2024"
+    )
+
+    val amountCheck = hallucinatedReport.getCheckForField("Betrag")
+    assertNotNull(amountCheck)
+    assertFalse(amountCheck!!.isFoundInText)
+    assertTrue(hallucinatedReport.warnings.any { it.contains("Betrag bitte kurz prüfen") })
+    assertTrue(hallucinatedReport.overallConfidence < 0.80f)
+
+    // 6. Logik-Plausibilität: Fälligkeitsdatum steht neben 'geb.' (Geburtsdatum-Verwechslung)
+    val patientOcr = """
+      Allgemeines Krankenhaus
+      Patient: Max Mustermann, geb. 15.05.1982
+      Rechnungsbetrag: 150,00 €
+      Zahlungsziel: 30.06.2026
+    """.trimIndent()
+
+    val confusedReport = com.example.service.QualityGatekeeper.auditExtraction(
+      ocrText = patientOcr,
+      amountStr = "150,00 €",
+      dueDateStr = "15.05.1982" // Verwechslung: Geburtsdatum fälschlicherweise als Fälligkeit genommen
+    )
+
+    val dueDateCheck = confusedReport.getCheckForField("Fälligkeit")
+    assertNotNull(dueDateCheck)
+    assertFalse(dueDateCheck!!.isPlausible)
+    assertTrue(dueDateCheck.warningMessage!!.contains("Geburtsdatum-Verwechslung"))
+    assertEquals("30.06.2026", dueDateCheck.suggestedCorrection)
+    assertFalse(confusedReport.isApproved)
+
+    // 7. Audit Logging Nachweis
+    val logs = com.example.service.AppAuditLogger.logs.value
+    assertTrue(logs.any { it.tag == "QualityGatekeeper" && it.message.contains("Team 4 Revision") })
+  }
 }
+

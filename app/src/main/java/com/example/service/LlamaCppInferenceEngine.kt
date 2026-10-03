@@ -3,11 +3,41 @@ package com.example.service
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import com.example.model.FolderStrategy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+
+/**
+ * Fachabteilungs-Teams für den Second Run (Team 2: Spezialisten-Tiefenanalyse).
+ */
+enum class DepartmentTeam(val id: String, val displayName: String, val shortName: String) {
+    FINANCE("FINANCE", "Abt. A: Finanzen & Buchhaltung", "Team Finanzen"),
+    CONTRACTS("CONTRACTS", "Abt. B: Vertragswesen & Recht", "Team Verträge"),
+    ADMINISTRATION("ADMINISTRATION", "Abt. C: Postverkehr & Verwaltung", "Team Verwaltung");
+
+    companion object {
+        fun dispatch(docTypeOrText: String?): DepartmentTeam {
+            val t = (docTypeOrText ?: "").lowercase().trim()
+            return when {
+                t.contains("rechnung") || t.contains("beleg") || t.contains("quittung") ||
+                t.contains("kassenbon") || t.contains("gehalt") || t.contains("entgelt") ||
+                t.contains("lohn") || t.contains("steuer") || t.contains("finanz") ||
+                t.contains("auszug") || t.contains("gutschrift") || t.contains("abschlag") ||
+                t.contains("strom") || t.contains("gas") || t.contains("energie") -> FINANCE
+
+                t.contains("vertrag") || t.contains("police") || t.contains("versicherung") ||
+                t.contains("kündigung") || t.contains("mitglied") || t.contains("abo") ||
+                t.contains("leasing") || t.contains("miet") || t.contains("vereinbarung") ||
+                t.contains("haftpflicht") || t.contains("kfz") -> CONTRACTS
+
+                else -> ADMINISTRATION
+            }
+        }
+    }
+}
 
 /**
  * Strukturierte JSON-Antwort des LLMs gemäß dem vorgegebenen Chain-of-Thought DMS-Schema.
@@ -18,6 +48,7 @@ data class DmsExtractionResponse(
     val dokumententyp: String? = null,
     val matchKeywords: List<String> = emptyList(),
     val kategorieVorschlag: String? = null,
+    val vorgeschlagenerPfad: String? = null,
     val globaleZusatzfelder: Map<String, String> = emptyMap(),
     val rawJson: String = ""
 ) {
@@ -45,6 +76,7 @@ data class DmsExtractionResponse(
         json.put("dokumententyp", dokumententyp ?: JSONObject.NULL)
         json.put("match_keywords", JSONArray(matchKeywords))
         json.put("kategorie_vorschlag", kategorieVorschlag ?: JSONObject.NULL)
+        json.put("vorgeschlagener_pfad", vorgeschlagenerPfad ?: JSONObject.NULL)
         val fieldsObj = JSONObject()
         globaleZusatzfelder.forEach { (k, v) -> fieldsObj.put(k, v) }
         json.put("globale_zusatzfelder", fieldsObj)
@@ -98,11 +130,126 @@ Antworte AUSSCHLIESSLICH mit diesem exakten JSON-Schema:
 }"""
 
         /**
+         * System-Prompt für den schnellen First Run (Team 1: Poststelle & Eingangstriage).
+         * Konzentriert sich nur auf Absender, Typ, Kategorie und Schlüsselwörter.
+         */
+        const val TRIAGE_SYSTEM_PROMPT: String = """Du bist der Leiter der Poststelle & Eingangstriage (Team 1) für die App myDocAnizer.
+Deine Aufgabe: Blitzschnelle Ersterfassung des Dokuments anhand der Kopfzeilen und Schlüsselbereiche.
+Regeln:
+1. Erfinde keine Daten. Wenn ein Wert fehlt oder unklar ist, nutze null.
+2. Identifiziere primär: Absender (Firma/Behörde/Aussteller), Dokumententyp (Rechnung, Vertrag, Kassenbeleg, Gehalt, Bescheid, Brief) und die passende Hauptkategorie (Finanzen, Verträge, Steuern, Post & Dokumente, Privat).
+3. Extrahiere bis zu 3 prägnante Erkennungswörter (match_keywords).
+
+Antworte AUSSCHLIESSLICH mit diesem exakten JSON-Schema:
+{
+  "_reasoning": "Kurzer Satz zur Begründung",
+  "absender": "Firma oder Aussteller",
+  "dokumententyp": "z.B. Rechnung, Vertrag, Überweisung",
+  "match_keywords": ["keyword1", "keyword2"],
+  "kategorie_vorschlag": "Hauptkategorie"
+}"""
+
+        /**
+         * GBNF Grammatik für den schnellen First Run (Team 1 Triage ohne Zusatzfelder-Overhead).
+         */
+        const val TRIAGE_JSON_GBNF: String = """
+root ::= "{" ws "\"_reasoning\":" ws string "," ws "\"absender\":" ws opt_string "," ws "\"dokumententyp\":" ws opt_string "," ws "\"match_keywords\":" ws string_array "," ws "\"kategorie_vorschlag\":" ws opt_string "}" ws
+opt_string ::= string | "null"
+string_array ::= "[" ws (string ("," ws string)*)? ws "]"
+string ::= "\"" ([^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4}))* "\""
+ws ::= [ \t\n\r]*
+"""
+
+        /**
+         * Baut den spezialisierten Fachabteilungs-System-Prompt für den Second Run (Team 2).
+         * Unterstützt die drei Fachabteilungen (Finanzen, Verträge, Verwaltung),
+         * injiziert die Benutzer-Ordnerstrategie ('FolderStrategy') und globale Zusatzfelder-Whitelists (Team 3).
+         */
+        fun buildDepartmentSystemPrompt(
+            department: DepartmentTeam,
+            folderStrategy: FolderStrategy = FolderStrategy.BY_CATEGORY,
+            whitelistedCustomFields: List<String> = emptyList(),
+            userCorrectionPrompt: String? = null
+        ): String {
+            val roleIntro = when (department) {
+                DepartmentTeam.FINANCE -> """Du bist der leitende Buchhalter in Abteilung A (Finanzen & Buchhaltung) für myDocAnizer.
+Deine Kernkompetenz: Rechnungen, Kassenbelege, Quittungen, Gehaltsabrechnungen, Steuerbescheide, Bankauszüge.
+Extrahiere präzise alle kaufmännischen Daten: Rechnungsbetrag, Fälligkeit, Skonto, Rechnungsnummer, IBAN, Steuernummer, Leistungszeitraum."""
+
+                DepartmentTeam.CONTRACTS -> """Du bist der Justiziar & Vertragsprüfer in Abteilung B (Vertragswesen & Recht) für myDocAnizer.
+Deine Kernkompetenz: Verträge, Versicherungspolicen, Mitgliedschaften, Kündigungen, Leasing, Mietverträge, Abonnements.
+Extrahiere präzise alle rechtlichen Vertragsdaten: Vertragspartner, Vertragsnummer, Policennummer, Vertragsbeginn, Mindestlaufzeit, Kündigungsfrist, monatliche Rate/Beitrag."""
+
+                DepartmentTeam.ADMINISTRATION -> """Du bist der Verwaltungsleiter in Abteilung C (Postverkehr & Verwaltung) für myDocAnizer.
+Deine Kernkompetenz: Amtliche Bescheide, Behördenschreiben, Meldebescheinigungen, Zeugnisse, Garantiescheine, allgemeiner Schriftverkehr.
+Extrahiere präzise alle administrativen Daten: Behörde/Aussteller, Aktenzeichen, Bescheiddatum, Fristen, Betreff, Bearbeiter."""
+            }
+
+            val strategyDirective = """### ORDNERSTRATEGIE-VORGABE (EBENE 1):
+Der Nutzer bevorzugt Ebene 1 nach ${folderStrategy.title}.
+Schlage im JSON unter 'vorgeschlagener_pfad' einen passenden, flexiblen Ordnerpfad vor (z.B. '${folderStrategy.examplePath}' oder 'Kategorie/Unterkategorie' bzw. 'Absender/Dokumententyp'), der exakt zu diesem Dokument passt. Keine starren Muster erzwingen!"""
+
+            val fieldsPart = if (whitelistedCustomFields.isNotEmpty()) {
+                """### TEAM 3 STAMMDATEN-REGEL FÜR GLOBALE ZUSATZFELDER:
+Folgende globale Zusatzfelder existieren bereits im Tresor:
+[ ${whitelistedCustomFields.joinToString(", ")} ]
+REGELN:
+1. Ordne gefundene Werte (z.B. Rechnungsnummer, Kundennummer, Vertragsnummer, Fälligkeit) ZWINGEND einem dieser existierenden Felder zu, sofern passend!
+2. Erfinde nur dann ein neues Feld in 'globale_zusatzfelder', wenn absolut kein existierendes Feld passt.
+3. Erfinde niemals Daten. Wenn ein Wert fehlt, nutze null."""
+            } else {
+                """3. Erfinde unter 'globale_zusatzfelder' sinnvolle, ordnerübergreifende Schlüssel-Wert-Paare (wie 'vertragsnummer', 'zaehlernummer', 'faelligkeit'), um das Dokument maximal filterbar zu machen."""
+            }
+
+            val correctionPart = if (!userCorrectionPrompt.isNullOrBlank()) {
+                """
+
+### BENUTZER-KORREKTURANWEISUNG (HÖCHSTE PRIORITÄT):
+"$userCorrectionPrompt"
+Berücksichtige diese Anweisung des Nutzers zwingend vorrangig bei der Extraktion!"""
+            } else ""
+
+            return """$roleIntro
+Analysiere den VOLLSTÄNDIGEN OCR-Text und extrahiere alle relevanten Daten präzise.
+Regeln:
+1. Erfinde keine Daten. Wenn ein Wert fehlt, nutze null.
+2. Achte extrem genau auf den Kontext von Daten (z. B. ein Geburtsdatum neben 'geb.' ist niemals eine Fälligkeit!).
+$strategyDirective
+$fieldsPart$correctionPart
+
+Antworte AUSSCHLIESSLICH mit diesem exakten JSON-Schema:
+{
+  "_reasoning": "Ausführlicher Satz: Warum wurden diese Entitäten und dieser Ordnerpfad gewählt?",
+  "absender": "Firma oder Aussteller",
+  "dokumententyp": "z.B. Rechnung, Vertrag, Überweisung",
+  "match_keywords": ["keyword1", "keyword2", "keyword3"],
+  "kategorie_vorschlag": "Hauptkategorie",
+  "vorgeschlagener_pfad": "z.B. Vodafone/Rechnungen oder Finanzen/Energie",
+  "globale_zusatzfelder": {
+    "dynamisches_feld_1": "wert",
+    "dynamisches_feld_2": "wert"
+  }
+}"""
+        }
+
+        fun buildSecondRunSystemPrompt(
+            whitelistedCustomFields: List<String> = emptyList(),
+            userCorrectionPrompt: String? = null
+        ): String {
+            return buildDepartmentSystemPrompt(
+                department = DepartmentTeam.ADMINISTRATION,
+                folderStrategy = FolderStrategy.BY_CATEGORY,
+                whitelistedCustomFields = whitelistedCustomFields,
+                userCorrectionPrompt = userCorrectionPrompt
+            )
+        }
+
+        /**
          * GBNF (Grammar-Based Network Format) zur hardwareseitigen Erzwingung der JSON-Struktur in llama.cpp.
          * Erlaubt beliebige dynamische Key-Value-Paare im 'globale_zusatzfelder'-Objekt.
          */
         const val DMS_JSON_GBNF: String = """
-root ::= "{" ws "\"_reasoning\":" ws string "," ws "\"absender\":" ws opt_string "," ws "\"dokumententyp\":" ws opt_string "," ws "\"match_keywords\":" ws string_array "," ws "\"kategorie_vorschlag\":" ws opt_string "," ws "\"globale_zusatzfelder\":" ws object "}" ws
+root ::= "{" ws "\"_reasoning\":" ws string "," ws "\"absender\":" ws opt_string "," ws "\"dokumententyp\":" ws opt_string "," ws "\"match_keywords\":" ws string_array "," ws "\"kategorie_vorschlag\":" ws opt_string "," ws "\"vorgeschlagener_pfad\":" ws opt_string "," ws "\"globale_zusatzfelder\":" ws object "}" ws
 opt_string ::= string | "null"
 string_array ::= "[" ws (string ("," ws string)*)? ws "]"
 object ::= "{" ws (pair ("," ws pair)*)? ws "}"
@@ -133,6 +280,63 @@ ws ::= [ \t\n\r]*
             Build.HARDWARE.contains("kirin", ignoreCase = true) ||
             Build.HARDWARE.contains("mediatek", ignoreCase = true)
         )
+    }
+
+    /**
+     * Führt den schnellen First Run (Team 1: Poststelle & Eingangstriage) aus.
+     * Übergibt nur den per OCR-Vorfilter-Matrix zugeschnittenen Kopfbereich (schnell, ca. 400 Tokens).
+     */
+    suspend fun executeFirstRunExtraction(
+        modelFile: File,
+        ocrText: String,
+        params: InferenceParams = InferenceParams(maxTokens = 256, grammar = TRIAGE_JSON_GBNF)
+    ): DmsExtractionResponse = withContext(Dispatchers.Default) {
+        val filteredSlice = OcrPreFilterMatrix.extractFirstRunSlice(ocrText)
+        val rawOutput = executeInference(
+            modelFile = modelFile,
+            prompt = "OCR-KOPFZEILEN (TRIAGE):\n$filteredSlice",
+            systemPrompt = TRIAGE_SYSTEM_PROMPT,
+            params = params
+        )
+        parseDmsJson(rawOutput, filteredSlice)
+    }
+
+    /**
+     * Führt den erweiterten Second Run (Team 2: Fachabteilungs-Tiefenanalyse) aus.
+     * Übergibt den VOLLSTÄNDIGEN OCR-Text und injiziert Whitelist-Zusatzfelder aus Team 3
+     * sowie optionale gezielte Benutzer-Korrekturanweisungen.
+     */
+    suspend fun executeSecondRunExtraction(
+        modelFile: File,
+        ocrText: String,
+        whitelistedCustomFields: List<String> = emptyList(),
+        userCorrectionPrompt: String? = null,
+        folderStrategy: FolderStrategy = FolderStrategy.BY_CATEGORY,
+        department: DepartmentTeam? = null,
+        params: InferenceParams = InferenceParams(maxTokens = 600, grammar = DMS_JSON_GBNF)
+    ): DmsExtractionResponse = withContext(Dispatchers.Default) {
+        val targetDept = department ?: DepartmentTeam.dispatch(ocrText)
+        val systemPrompt = buildDepartmentSystemPrompt(
+            department = targetDept,
+            folderStrategy = folderStrategy,
+            whitelistedCustomFields = whitelistedCustomFields,
+            userCorrectionPrompt = userCorrectionPrompt
+        )
+        val promptContent = buildString {
+            append("OCR-VOLLTEXT:\n")
+            append(ocrText)
+            if (!userCorrectionPrompt.isNullOrBlank()) {
+                append("\n\nHINWEIS ZUR BENUTZER-KORREKTUR:\n")
+                append(userCorrectionPrompt)
+            }
+        }
+        val rawOutput = executeInference(
+            modelFile = modelFile,
+            prompt = promptContent,
+            systemPrompt = systemPrompt,
+            params = params
+        )
+        parseDmsJson(rawOutput, ocrText, folderStrategy)
     }
 
     /**
@@ -223,7 +427,11 @@ ws ::= [ \t\n\r]*
      * Parst den rohen Modell-Output fehlertolerant in ein [DmsExtractionResponse] Objekt.
      * Filtert Markdown-Codeblöcke heraus und repariert gängige JSON-Ungenauigkeiten.
      */
-    fun parseDmsJson(rawOutput: String, fallbackOcrText: String = ""): DmsExtractionResponse {
+    fun parseDmsJson(
+        rawOutput: String,
+        fallbackOcrText: String = "",
+        folderStrategy: FolderStrategy = FolderStrategy.BY_CATEGORY
+    ): DmsExtractionResponse {
         try {
             var jsonStr = rawOutput.trim()
 
@@ -247,6 +455,7 @@ ws ::= [ \t\n\r]*
             val absender = json.optString("absender", "").takeIf { it.isNotBlank() && it != "null" }
             val docType = json.optString("dokumententyp", "").takeIf { it.isNotBlank() && it != "null" }
             val catSuggestion = json.optString("kategorie_vorschlag", "").takeIf { it.isNotBlank() && it != "null" }
+            val pathSuggestion = json.optString("vorgeschlagener_pfad", "").takeIf { it.isNotBlank() && it != "null" }
 
             val matchKeywords = mutableListOf<String>()
             val kwArray = json.optJSONArray("match_keywords")
@@ -278,18 +487,33 @@ ws ::= [ \t\n\r]*
                 dokumententyp = docType,
                 matchKeywords = matchKeywords,
                 kategorieVorschlag = catSuggestion,
+                vorgeschlagenerPfad = pathSuggestion ?: run {
+                    val snd = absender ?: "Dokumente"
+                    val typ = docType ?: "Allgemein"
+                    val cat = catSuggestion ?: "Finanzen"
+                    when (folderStrategy) {
+                        FolderStrategy.BY_SENDER -> "$snd/$typ"
+                        FolderStrategy.BY_CATEGORY -> "$cat/$typ"
+                        FolderStrategy.CHRONOLOGICAL -> "2026/$typ"
+                        FolderStrategy.FLAT -> "Dokumente"
+                    }
+                },
                 globaleZusatzfelder = customFields,
                 rawJson = jsonStr
             )
         } catch (e: Exception) {
             Log.w(TAG, "JSON-Parsing fehlgeschlagen: ${e.message}, erzeuge Heuristik-Antwort")
-            return createHeuristicFallbackResponse(fallbackOcrText)
+            return createHeuristicFallbackResponse(fallbackOcrText, folderStrategy)
         }
     }
 
-    private fun createHeuristicFallbackResponse(ocrText: String): DmsExtractionResponse {
+    fun createHeuristicFallbackResponse(
+        ocrText: String,
+        folderStrategy: FolderStrategy = FolderStrategy.BY_CATEGORY
+    ): DmsExtractionResponse {
         val lower = ocrText.lowercase()
         val detectedSender = when {
+            lower.contains("congstar") -> "congstar"
             lower.contains("deutsche post") || lower.contains("postbank") -> "Deutsche Post"
             lower.contains("dhl") -> "DHL Paket"
             lower.contains("vodafone") -> "Vodafone GmbH"
@@ -330,16 +554,26 @@ ws ::= [ \t\n\r]*
 
         val keywords = listOfNotNull(detectedSender?.lowercase()?.split(" ")?.firstOrNull(), detectedType.lowercase())
 
+        val catSuggestion = when (detectedType) {
+            "Rechnung", "Gehaltsabrechnung", "Kassenbeleg" -> "Finanzen"
+            "Vertrag", "Bescheid" -> "Verträge"
+            else -> "Post & Dokumente"
+        }
+
+        val suggestedPath = when (folderStrategy) {
+            FolderStrategy.BY_SENDER -> "${detectedSender ?: "Dokumente"}/$detectedType"
+            FolderStrategy.BY_CATEGORY -> "$catSuggestion/$detectedType"
+            FolderStrategy.CHRONOLOGICAL -> "2026/$detectedType"
+            FolderStrategy.FLAT -> "Dokumente"
+        }
+
         return DmsExtractionResponse(
             reasoning = "Strukturierte On-Device Erkennung: ${detectedSender ?: "Allgemeines Dokument"} ($detectedType).",
             absender = detectedSender,
             dokumententyp = detectedType,
             matchKeywords = keywords,
-            kategorieVorschlag = when (detectedType) {
-                "Rechnung", "Gehaltsabrechnung", "Kassenbeleg" -> "Finanzen"
-                "Vertrag", "Bescheid" -> "Verträge"
-                else -> "Post & Dokumente"
-            },
+            kategorieVorschlag = catSuggestion,
+            vorgeschlagenerPfad = suggestedPath,
             globaleZusatzfelder = emptyMap()
         )
     }
@@ -548,4 +782,66 @@ ws ::= [ \t\n\r]*
         maxTokens: Int,
         grammar: String
     ): String
+}
+
+/**
+ * OCR-Vorfilter-Matrix für die schnelle Triage (Team 1: Poststelle & Eingangstriage).
+ * Schneidet den Text auf die oberen Zeilen zu (max. ca. 30% bzw. max. 800-1000 Zeichen),
+ * und sammelt Schlüsselzeilen für Dokumententyp, Absender und Beträge.
+ */
+object OcrPreFilterMatrix {
+    private val KEYWORD_PATTERNS = listOf(
+        Regex("(?i)\\b(rechnung|rechnungs-?nr|invoice|beleg|quittung|kassenbon|gutschrift)\\b"),
+        Regex("(?i)\\b(vertrag|versicherung|police|kundennummer|kunden-?nr|vertrags-?nr)\\b"),
+        Regex("(?i)\\b(kündigung|laufzeit|vertragsende|kündigungsfrist|mindestlaufzeit)\\b"),
+        Regex("(?i)\\b(gesamtbetrag|endbetrag|rechnungsbetrag|zu zahlen|fällig|zahlungsziel|iban|bic)\\b"),
+        Regex("(?i)\\b(finanzamt|bescheid|steuer-?nr|steuererklärung|aktenzeichen|gehalt|entgelt|lohn)\\b"),
+        Regex("(?i)\\b(stadtwerke|energie|wasser|strom|mobilfunk|telekom|vodafone|o2|allianz|post)\\b")
+    )
+
+    fun extractFirstRunSlice(ocrText: String, maxChars: Int = 900): String {
+        if (ocrText.length <= maxChars) return ocrText
+
+        val lines = ocrText.lines().map { it.trim() }.filter { it.isNotBlank() }
+        if (lines.isEmpty()) return ocrText.take(maxChars)
+
+        val headerBuilder = StringBuilder()
+        val keyzoneBuilder = StringBuilder()
+
+        var headerChars = 0
+        val maxHeaderChars = 550
+        val headerIndices = mutableSetOf<Int>()
+
+        for ((index, line) in lines.withIndex()) {
+            if (headerChars + line.length > maxHeaderChars) break
+            headerBuilder.appendLine(line)
+            headerChars += line.length + 1
+            headerIndices.add(index)
+        }
+
+        var keyChars = 0
+        val maxKeyChars = maxChars - headerChars
+
+        for ((index, line) in lines.withIndex()) {
+            if (index in headerIndices) continue
+            if (keyChars + line.length > maxKeyChars) break
+
+            val matches = KEYWORD_PATTERNS.any { it.containsMatchIn(line) }
+            if (matches) {
+                keyzoneBuilder.appendLine(line)
+                keyChars += line.length + 1
+            }
+        }
+
+        val result = buildString {
+            append("--- KOPFZEILEN (TRIAGE) ---\n")
+            append(headerBuilder.toString())
+            if (keyzoneBuilder.isNotBlank()) {
+                append("\n--- SCHLÜSSELZEILEN ---\n")
+                append(keyzoneBuilder.toString())
+            }
+        }
+
+        return if (result.length > maxChars) result.take(maxChars) else result
+    }
 }

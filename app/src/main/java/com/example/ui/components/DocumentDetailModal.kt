@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,7 +14,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,12 +38,35 @@ fun DocumentDetailModal(
     allCustomFields: List<com.example.model.CustomFieldEntity> = emptyList(),
     documentCustomFieldValues: List<com.example.model.DocumentCustomFieldValueEntity> = emptyList(),
     onUpdateCustomFieldValue: ((Long, String, String) -> Unit)? = null,
-    onUpdateDocumentIconAndLogo: ((Long, String, String) -> Unit)? = null
+    onUpdateDocumentIconAndLogo: ((Long, String, String) -> Unit)? = null,
+    onRunSecondRun: ((Long, String?) -> Unit)? = null,
+    onReRunFirstRun: ((Long) -> Unit)? = null,
+    isAiAnalyzing: Boolean = false,
+    lastAiResult: com.example.service.LlmClassificationResult? = null
 ) {
     val context = LocalContext.current
     var currentDocType by remember { mutableStateOf(document.docType) }
     var showTypePicker by remember { mutableStateOf(false) }
     var showIconPickerDialog by remember { mutableStateOf(false) }
+    var userCorrectionInput by remember { mutableStateOf("") }
+    var showCorrectionField by remember { mutableStateOf(false) }
+
+    // Team 4: Deterministischer Quality Gatekeeper Cross-Check (AP-3)
+    val customFieldsMap = remember(allCustomFields, documentCustomFieldValues) {
+        val map = mutableMapOf<String, String>()
+        allCustomFields.forEach { field ->
+            val v = documentCustomFieldValues.find { it.documentId == document.id && it.customFieldId == field.id }?.fieldValue
+            if (!v.isNullOrBlank()) {
+                map[field.name] = v
+            }
+        }
+        map
+    }
+    var dismissedModalWarnings by remember { mutableStateOf(setOf<String>()) }
+    val qualityReport = remember(document, customFieldsMap) {
+        com.example.service.QualityGatekeeper.auditDocument(document, customFieldsMap)
+    }
+
     val isImage = document.fileName.endsWith(".jpg", ignoreCase = true) ||
             document.fileName.endsWith(".png", ignoreCase = true)
 
@@ -173,6 +199,217 @@ fun DocumentDetailModal(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                }
+            }
+
+            // 🛡️ Team 4: Deterministischer Quality Gatekeeper Prüfhinweis (AP-3)
+            val activeModalWarnings = qualityReport.warnings.filter { it !in dismissedModalWarnings }
+            if (activeModalWarnings.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.28f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("card_modal_quality_warning")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Shield,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Team 4 Revision: Prüfhinweis (Score: ${(qualityReport.overallConfidence * 100).toInt()}%)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Text(
+                                    text = activeModalWarnings.joinToString(" • "),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            TextButton(
+                                onClick = { dismissedModalWarnings = dismissedModalWarnings + activeModalWarnings.toSet() },
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text("Bestätigen", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        // Schnellkorrektur-Chips
+                        val modalCorrectiveChecks = qualityReport.fieldChecks.filter { it.suggestedCorrection != null && it.fieldName !in dismissedModalWarnings }
+                        if (modalCorrectiveChecks.isNotEmpty()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.horizontalScroll(rememberScrollState())
+                            ) {
+                                modalCorrectiveChecks.forEach { check ->
+                                    val matchingField = allCustomFields.find { it.name.equals(check.fieldName, ignoreCase = true) }
+                                    if (matchingField != null) {
+                                        AssistChip(
+                                            onClick = {
+                                                onUpdateCustomFieldValue?.invoke(document.id, matchingField.id, check.suggestedCorrection!!)
+                                                dismissedModalWarnings = dismissedModalWarnings + check.fieldName
+                                            },
+                                            label = {
+                                                Text(
+                                                    text = "${check.fieldName} korrigieren: '${check.suggestedCorrection}'",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                Icon(Icons.Default.AutoFixHigh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 🤖 Lokale KI-Dokumentenanalyse (Two-Stage Pipeline: Triage & Tiefenscan)
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.SmartToy,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Lokale KI-Analyse",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        // Badge First Run vs. Second Run
+                        val isSecondRunDone = lastAiResult?.explanation?.contains("Team 2 Tiefenanalyse") == true
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSecondRunDone) Color(0xFF10B981).copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = if (isSecondRunDone) "⚡ Tiefenanalyse aktiv" else "📬 Triage (First Run)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSecondRunDone) Color(0xFF10B981) else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = lastAiResult?.explanation ?: "Dokument wurde mit schneller Triage erfasst. Starte bei Bedarf eine tiefere Volltext-Analyse für Verträge, Fristen und Zusatzfelder.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Ausklappbares Feld für gezielte Benutzer-Korrekturanweisung
+                    if (showCorrectionField) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = userCorrectionInput,
+                            onValueChange = { userCorrectionInput = it },
+                            label = { Text("Gezielte Korrektur an die KI") },
+                            placeholder = { Text("z.B. Absender ist Congstar, Vertragsnummer ergänzen") },
+                            singleLine = false,
+                            maxLines = 3,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = {
+                                onRunSecondRun?.invoke(document.id, userCorrectionInput.takeIf { it.isNotBlank() })
+                            },
+                            enabled = !isAiAnalyzing,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            if (isAiAnalyzing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Analysiere...", fontSize = 12.sp)
+                            } else {
+                                Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Tiefenanalyse (Run 2)", fontSize = 12.sp)
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                showCorrectionField = !showCorrectionField
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (showCorrectionField) Icons.Default.Close else Icons.Default.EditNote,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                onReRunFirstRun?.invoke(document.id)
+                            },
+                            enabled = !isAiAnalyzing
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Triage wiederholen",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -358,6 +595,9 @@ fun DocumentDetailModal(
                             }?.fieldValue ?: field.defaultValue
                             var tempVal by remember(existingVal) { mutableStateOf(existingVal) }
 
+                            val fieldCheck = qualityReport.getCheckForField(field.name)
+                            val hasFieldIssue = fieldCheck != null && (!fieldCheck.isFoundInText || !fieldCheck.isPlausible) && field.name !in dismissedModalWarnings
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -366,20 +606,54 @@ fun DocumentDetailModal(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = field.name,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            text = field.name,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        if (hasFieldIssue) {
+                                            Text(
+                                                text = "⚠️ Bitte prüfen",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
                                     Text(
                                         text = if (existingVal.isNotBlank()) existingVal else "— Nicht gesetzt —",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (existingVal.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        color = if (hasFieldIssue) MaterialTheme.colorScheme.error
+                                        else if (existingVal.isNotBlank()) MaterialTheme.colorScheme.onSurface
+                                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                     )
+                                    if (hasFieldIssue && fieldCheck?.suggestedCorrection != null) {
+                                        Text(
+                                            text = "Vorschlag: ${fieldCheck.suggestedCorrection}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.clickable {
+                                                onUpdateCustomFieldValue?.invoke(document.id, field.id, fieldCheck.suggestedCorrection)
+                                                dismissedModalWarnings = dismissedModalWarnings + field.name
+                                            }
+                                        )
+                                    }
                                 }
 
-                                TextButton(onClick = { fieldEditing = true }) {
-                                    Text(if (existingVal.isNotBlank()) "Bearbeiten" else "Setzen")
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (hasFieldIssue) {
+                                        IconButton(
+                                            onClick = { dismissedModalWarnings = dismissedModalWarnings + field.name },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(Icons.Default.Done, contentDescription = "Wert bestätigen", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                    TextButton(onClick = { fieldEditing = true }) {
+                                        Text(if (existingVal.isNotBlank()) "Bearbeiten" else "Setzen")
+                                    }
                                 }
                             }
 

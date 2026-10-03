@@ -91,6 +91,8 @@ fun DmsExplorerView(
 
     val customFields by viewModel.customFields.collectAsStateWithLifecycle()
     val allCustomFieldValues by viewModel.allDocumentCustomFieldValues.collectAsStateWithLifecycle()
+    val isSecondRunGenerating by viewModel.isSecondRunGenerating.collectAsStateWithLifecycle()
+    val lastAiAnalysisResult by viewModel.lastAiAnalysisResult.collectAsStateWithLifecycle()
     var showCreateCustomFieldDialog by remember { mutableStateOf(false) }
     var fieldToEdit by remember { mutableStateOf<com.example.model.CustomFieldEntity?>(null) }
 
@@ -1492,6 +1494,18 @@ fun DmsExplorerView(
             onUpdateDocumentIconAndLogo = { docId, iconName, companyLogo ->
                 viewModel.updateDocumentIconAndLogo(docId, iconName, companyLogo)
             },
+            onRunSecondRun = { docId, correction ->
+                viewModel.runSecondRunAnalysis(docId, correction) {
+                    selectedDocumentForDetail = viewModel.allDocuments.value.find { it.id == docId }
+                }
+            },
+            onReRunFirstRun = { docId ->
+                viewModel.reRunFirstRunTriage(docId) {
+                    selectedDocumentForDetail = viewModel.allDocuments.value.find { it.id == docId }
+                }
+            },
+            isAiAnalyzing = isSecondRunGenerating,
+            lastAiResult = lastAiAnalysisResult[doc.id],
             onDismissRequest = { selectedDocumentForDetail = null }
         )
     }
