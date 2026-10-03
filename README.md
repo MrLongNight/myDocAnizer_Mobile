@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://github.com/MrLongNight/myDocAnizer-Desktop">
+  <a href="https://github.com/MrLongNight/myDocAnizer_Mobile">
     <img src="app/src/main/res/drawable/mydocanizer_mobile.png" alt="myDocAnizer Mobile logo" width="1000" />
   </a>
 </div>
