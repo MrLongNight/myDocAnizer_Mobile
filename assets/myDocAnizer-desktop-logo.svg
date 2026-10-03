@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">myDocAnizer Desktop</title>
+  <desc id="desc">Desktop version logo for myDocAnizer with a secure folder and document icon.</desc>
+  <defs>
+    <linearGradient id="brand" x1="0" x2="1">
+      <stop offset="0%" stop-color="#2FE4FF"/>
+      <stop offset="50%" stop-color="#4DB0FF"/>
+      <stop offset="100%" stop-color="#C92DFF"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" x2="1">
+      <stop offset="0%" stop-color="#F5F7FB"/>
+      <stop offset="100%" stop-color="#DCE7F7"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="420" fill="#05070B"/>
+
+  <g transform="translate(690,60)" filter="url(#shadow)">
+    <g transform="translate(0,0)">
+      <path d="M58 98 L223 98 L259 144 L259 290 C259 303 248 314 235 314 L58 314 C45 314 34 303 34 290 L34 120 C34 107 45 98 58 98 Z" fill="url(#brand)"/>
+      <path d="M65 68 L193 68 L238 115 L238 136 L65 136 Z" fill="#DDFDFF" opacity="0.26"/>
+      <path d="M188 68 L238 115 L238 136 L188 136 Z" fill="#DDFDFF" opacity="0.18"/>
+      <path d="M55 170 L165 170 L167 182 L55 182 Z" fill="#EAFDFF" opacity="0.52"/>
+      <path d="M55 198 L150 198 L152 210 L55 210 Z" fill="#EAFDFF" opacity="0.36"/>
+      <path d="M55 228 L164 228 L166 240 L55 240 Z" fill="#EAFDFF" opacity="0.22"/>
+      <path d="M173 125 L245 125 L245 290 C245 304 233 314 219 314 L164 314 C154 314 146 306 146 296 L146 161 C146 138 163 125 173 125 Z" fill="url(#paper)"/>
+      <path d="M196 145 L205 145 L205 290 L196 290 Z" fill="#D4DDF7" opacity="0.7"/>
+      <path d="M176 165 L217 165 L217 202 L176 202 Z" fill="#F8FBFF" opacity="0.7"/>
+      <path d="M173 208 L221 208 L221 280 L173 280 Z" fill="#EEF3FF" opacity="0.7"/>
+      <path d="M171 236 L223 236 L223 243 L171 243 Z" fill="#DCE7F7" opacity="0.78"/>
+      <path d="M171 258 L223 258 L223 265 L171 265 Z" fill="#DCE7F7" opacity="0.78"/>
+      <path d="M171 280 L213 280 L213 287 L171 287 Z" fill="#DCE7F7" opacity="0.78"/>
+    </g>
+
+    <g transform="translate(180,96)">
+      <circle cx="90" cy="90" r="82" fill="url(#brand)"/>
+      <circle cx="90" cy="90" r="58" fill="#F0F8FF" opacity="0.96"/>
+      <path d="M108 101 L192 186" stroke="#32DFFF" stroke-width="18" stroke-linecap="round"/>
+      <path d="M108 101 L192 186" stroke="#C92DFF" stroke-width="10" stroke-linecap="round" opacity="0.45"/>
+      <path d="M98 55 L151 25 L197 59 L146 96 Z" fill="#5CC9FF" opacity="0.8"/>
+      <path d="M69 196 L112 196 L126 230 L54 230 Z" fill="#3EC0FF" opacity="0.9"/>
+      <circle cx="90" cy="90" r="18" fill="#171C28" opacity="0.8"/>
+      <path d="M90 90 L90 120" stroke="#F4F9FF" stroke-width="6" stroke-linecap="round"/>
+      <path d="M60 90 L90 90" stroke="#F4F9FF" stroke-width="6" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <g transform="translate(10, 120)">
+    <text x="0" y="135" font-size="170" font-weight="900" font-family="Arial, sans-serif" letter-spacing="-8" fill="url(#brand)" style="paint-order:stroke; stroke:#000000; stroke-width:0;">myDocAnizer</text>
+    <text x="12" y="250" font-size="96" font-weight="700" font-family="Segoe Print, Segoe Script, cursive" fill="#EFEFEF" font-style="italic" opacity="0.95">Desktop</text>
+  </g>
+</svg>
