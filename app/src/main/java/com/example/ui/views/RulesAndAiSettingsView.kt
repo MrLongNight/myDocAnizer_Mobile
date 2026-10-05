@@ -1,5 +1,8 @@
 package com.example.ui.views
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -21,34 +24,32 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import com.example.model.DocRule
 import com.example.service.HuggingFaceModelInfo
 import com.example.ui.DocAnizerViewModel
 import kotlinx.coroutines.launch
 
 /**
- * Ansicht zur Verwaltung des Schlagwort-Regelwerks und der lokalen HuggingFace On-Device LLMs.
- * Hier kann der Nutzer die KI beauftragen, neue Regeln vorzuschlagen, diese VORHER
- * prüfen/anpassen und hat 100%ige Transparenz und Kontrolle über das Sortierverhalten.
+ * Ansicht zur Verwaltung des Schlagwort-Regelwerks ("Dokumenten-Regeln").
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RulesAndAiSettingsTab(
+fun DocumentRulesSettingsTab(
     viewModel: DocAnizerViewModel,
     modifier: Modifier = Modifier
 ) {
     val docRules by viewModel.docRules.collectAsStateWithLifecycle()
-    val availableModels by viewModel.availableModels.collectAsStateWithLifecycle()
     val isGeneratingAi by viewModel.isGeneratingAi.collectAsStateWithLifecycle()
-    val coroutineScope = rememberCoroutineScope()
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Schlagwort-Regeln, 1 = On-Device KI-Modelle
     var showAiRuleDialog by remember { mutableStateOf(false) }
     var showCreateRuleDialog by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<DocRule?>(null) }
@@ -56,109 +57,58 @@ fun RulesAndAiSettingsTab(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Kopfzeile mit Aktionen
+        // Schnell-Aktionen für Regeln
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Regeln & On-Device KI",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = if (selectedTab == 0) "${docRules.size} aktive Erkennungs-Regeln" else "Lokale HuggingFace LLM-Modelle (100% Offline)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            if (selectedTab == 0) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilledTonalButton(
-                        onClick = { showAiRuleDialog = true },
-                        modifier = Modifier.testTag("btn_open_ai_rule_generator")
-                    ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("KI-Assistent", style = MaterialTheme.typography.labelMedium)
-                    }
-                    Button(
-                        onClick = { showCreateRuleDialog = true },
-                        modifier = Modifier.testTag("btn_add_rule_manual")
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Neu", style = MaterialTheme.typography.labelMedium)
-                    }
+            Text(
+                text = "Dokumenten-Regeln (${docRules.size})",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilledTonalButton(
+                    onClick = { showAiRuleDialog = true },
+                    modifier = Modifier.testTag("btn_open_ai_rule_generator")
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_ondevice_ai_agent),
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("AI-Agent Assistent", style = MaterialTheme.typography.labelMedium)
+                }
+                Button(
+                    onClick = { showCreateRuleDialog = true },
+                    modifier = Modifier.testTag("btn_add_rule_manual")
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Neu", style = MaterialTheme.typography.labelMedium)
                 }
             }
-        }
-
-        // Sub-Reiter
-        TabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text("Schlagwort-Regeln (${docRules.size})") },
-                icon = { Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(18.dp)) }
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                text = { Text("HuggingFace LLMs") },
-                icon = { Icon(Icons.Default.SmartToy, contentDescription = null, modifier = Modifier.size(18.dp)) }
-            )
-            Tab(
-                selected = selectedTab == 2,
-                onClick = { selectedTab = 2 },
-                text = { Text("Diagnose & Log") },
-                icon = { Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(18.dp)) }
-            )
         }
 
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            when (selectedTab) {
-                0 -> {
-                    // TAB 1: Schlagwort-Regeln vor KI
-                    RulesListContent(
-                        rules = docRules,
-                        onToggleRule = { id, enabled -> viewModel.toggleDocRule(id, enabled) },
-                        onEditRule = { rule -> editingRule = rule },
-                        onDeleteRule = { id -> viewModel.deleteDocRule(id) },
-                        onOpenAiAssistant = { showAiRuleDialog = true },
-                        onAddNewRule = { showCreateRuleDialog = true },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                1 -> {
-                    // TAB 2: HuggingFace On-Device Modelle
-                    HuggingFaceModelsContent(
-                        viewModel = viewModel,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                2 -> {
-                    // TAB 3: 100% Lokales Diagnose- & Inferenz-Audit-Log
-                    AuditLogContent(
-                        viewModel = viewModel,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
+            RulesListContent(
+                rules = docRules,
+                onToggleRule = { id, enabled -> viewModel.toggleDocRule(id, enabled) },
+                onEditRule = { rule -> editingRule = rule },
+                onDeleteRule = { id -> viewModel.deleteDocRule(id) },
+                onOpenAiAssistant = { showAiRuleDialog = true },
+                onAddNewRule = { showCreateRuleDialog = true },
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 
-    // KI Regel-Assistent Dialog
+    // AI-Agent Regel-Assistent Dialog
     if (showAiRuleDialog) {
         AiRuleGeneratorDialog(
             viewModel = viewModel,
@@ -205,6 +155,49 @@ fun RulesAndAiSettingsTab(
             }
         )
     }
+}
+
+/**
+ * Dedizierter Einstellungs-Tab für den onDevice AI-Agent (HuggingFace Modelle, Quantisierung & Inferenz).
+ */
+@Composable
+fun OnDeviceAiAgentSettingsTab(
+    viewModel: DocAnizerViewModel,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        HuggingFaceModelsContent(
+            viewModel = viewModel,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+/**
+ * System-Diagnose & Audit-Log (nach Entwickler-Einstellungen verschoben).
+ */
+@Composable
+fun SystemDiagnosticsAndLogTab(
+    viewModel: DocAnizerViewModel,
+    modifier: Modifier = Modifier
+) {
+    AuditLogContent(
+        viewModel = viewModel,
+        modifier = modifier.fillMaxSize()
+    )
+}
+
+@Composable
+fun RulesAndAiSettingsTab(
+    viewModel: DocAnizerViewModel,
+    modifier: Modifier = Modifier
+) {
+    DocumentRulesSettingsTab(viewModel = viewModel, modifier = modifier)
 }
 
 @Composable
@@ -395,12 +388,26 @@ fun HuggingFaceModelsContent(
     viewModel: DocAnizerViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val models by viewModel.availableModels.collectAsState()
     val hardwareInfo by viewModel.deviceHardwareInfo.collectAsState()
     val inferenceConfig by viewModel.llmInferenceConfig.collectAsState()
     val isExpertMode by viewModel.isExpertMode.collectAsState()
     val isCheckingNewModels by viewModel.isCheckingNewModels.collectAsState()
     val newModelsNotification by viewModel.newModelsNotification.collectAsState()
+    val autoCheckEnabled by viewModel.llmCatalogAutoCheckEnabled.collectAsState()
+    val checkInterval by viewModel.llmCatalogCheckInterval.collectAsState()
+
+    val importModelPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.importCustomModelFromUri(uri) { ok, msg ->
+                Toast.makeText(context, if (ok) "✅ $msg" else "❌ $msg", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     var isAdvancedInferenceExpanded by remember { mutableStateOf(false) }
     var onlyShowCompatible by remember { mutableStateOf(false) }
     var selectedCategoryFilter by remember { mutableStateOf("Alle") }
@@ -456,6 +463,127 @@ fun HuggingFaceModelsContent(
                         }
                         IconButton(onClick = { viewModel.dismissNewModelsNotification() }, modifier = Modifier.size(24.dp)) {
                             Icon(Icons.Default.Close, contentDescription = "Schließen", modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // BEREITS HERUNTERGELADENE MODELLE NACH NEUINSTALLATION WIEDERVERBINDEN & IMPORT
+        item {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                modifier = Modifier.fillMaxWidth().testTag("card_reconnect_downloaded_models")
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Link, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Gedownloadete Modelle wiederverbinden",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Bereits vorhandene .gguf-Modelle aus Downloads/Gerätespeicher nach App-Neuinstallation sofort neu verknüpfen",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.relinkDownloadedModels { count ->
+                                    Toast.makeText(
+                                        context,
+                                        if (count > 0) "✅ $count bestehende(s) Modell(e) erfolgreich verknüpft!" else "ℹ️ Speicher durchsucht: Alle vorhandenen Modelle sind aktuell.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(36.dp).testTag("btn_rescan_existing_models")
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Speicher scannen", fontSize = 11.sp, maxLines = 1)
+                        }
+
+                        FilledTonalButton(
+                            onClick = {
+                                importModelPicker.launch(arrayOf("*/*"))
+                            },
+                            modifier = Modifier.weight(1f).height(36.dp).testTag("btn_import_gguf_file")
+                        ) {
+                            Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(".GGUF importieren", fontSize = 11.sp, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        }
+
+        // AUTOMATISCHER KATALOG-CHECK BEIM APP-START & INTERVALL-EINSTELLUNG
+        item {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth().testTag("card_catalog_sync_settings")
+            ) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.CloudSync, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Column {
+                                Text(
+                                    text = "Automatischer Katalog-Check",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Prüft neue verifizierte HuggingFace GGUF-Modelle im Hintergrund",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = autoCheckEnabled,
+                            onCheckedChange = { viewModel.setLlmCatalogAutoCheckEnabled(it) },
+                            modifier = Modifier.testTag("switch_auto_catalog_check")
+                        )
+                    }
+
+                    if (autoCheckEnabled) {
+                        Text("Prüf-Intervall:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                "EVERY_START" to "Bei Start",
+                                "DAILY" to "Täglich",
+                                "WEEKLY" to "Wöchentlich",
+                                "DISABLED" to "Deaktiviert"
+                            ).forEach { (key, label) ->
+                                FilterChip(
+                                    selected = checkInterval == key,
+                                    onClick = { viewModel.setLlmCatalogCheckInterval(key) },
+                                    label = { Text(label, fontSize = 11.sp) },
+                                    modifier = Modifier.height(28.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -604,7 +732,7 @@ fun HuggingFaceModelsContent(
             }
         }
 
-        // MODELLE LISTE HEADER & SYNC ACTION
+        // MODELLE LISTE HEADER & SYNC ACTION (MANUELLES SYNC NUR IN EXPERTEN-ANSICHT)
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
@@ -625,22 +753,24 @@ fun HuggingFaceModelsContent(
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    FilledTonalButton(
-                        onClick = { viewModel.syncModelCatalogFromRemote(forceCheck = true) },
-                        enabled = !isCheckingNewModels,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                        modifier = Modifier.height(32.dp).testTag("btn_sync_model_catalog")
-                    ) {
-                        if (isCheckingNewModels) {
-                            CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Prüfe...", fontSize = 11.sp, maxLines = 1)
-                        } else {
-                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Katalog prüfen", fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
+                    // HuggingFace Katalog manuell aktualisieren soll NUR in Experten-Ansicht sichtbar sein
+                    if (isExpertMode) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        FilledTonalButton(
+                            onClick = { viewModel.syncModelCatalogFromRemote(forceCheck = true) },
+                            enabled = !isCheckingNewModels,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            modifier = Modifier.height(32.dp).testTag("btn_sync_model_catalog")
+                        ) {
+                            if (isCheckingNewModels) {
+                                CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Prüfe...", fontSize = 11.sp, maxLines = 1)
+                            } else {
+                                Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Katalog aktualisieren", fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }

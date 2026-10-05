@@ -46,6 +46,28 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         AppAuditLogger.init(application)
         settingsRepo.incrementAppLaunchCount()
+
+        // Automatische Verknüpfung bestehender Modelle & Katalog-Check nach Intervall
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                llmService.scanAndLinkExistingModels()
+                val autoCheckEnabled = settingsRepo.llmCatalogAutoCheckEnabled.value
+                val interval = settingsRepo.llmCatalogCheckInterval.value
+                val lastSync = llmService.lastCatalogSync.value
+                val now = System.currentTimeMillis()
+
+                val shouldCheck = autoCheckEnabled && when (interval) {
+                    "EVERY_START" -> true
+                    "DAILY" -> (now - lastSync) > 24 * 60 * 60 * 1000L
+                    "WEEKLY" -> (now - lastSync) > 7 * 24 * 60 * 60 * 1000L
+                    "DISABLED" -> false
+                    else -> true
+                }
+                if (shouldCheck) {
+                    llmService.syncModelCatalogFromRemote(forceCheck = false)
+                }
+            } catch (_: Throwable) {}
+        }
     }
 
     val auditLogs: StateFlow<List<AuditLogEntry>> = AppAuditLogger.logs
@@ -237,6 +259,12 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val targetNavigationTab: StateFlow<String?> = _targetNavigationTab.asStateFlow()
     fun setTargetNavigationTab(tab: String?) {
         _targetNavigationTab.value = tab
+    }
+
+    private val _targetSettingsSubTab = MutableStateFlow<Int?>(null)
+    val targetSettingsSubTab: StateFlow<Int?> = _targetSettingsSubTab.asStateFlow()
+    fun setTargetSettingsSubTab(subTab: Int?) {
+        _targetSettingsSubTab.value = subTab
     }
 
     private val _directOpenCashTracker = MutableStateFlow(false)
@@ -431,7 +459,16 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Biometrische Autorisierung (Fingerabdruck, Face Unlock, PIN)
     val biometricAuthEnabled: StateFlow<Boolean> = settingsRepo.biometricAuthEnabled
-    private val _isAppUnlocked = MutableStateFlow(!settingsRepo.biometricAuthEnabled.value)
+    private val _isAppUnlocked = MutableStateFlow(
+        if (!settingsRepo.biometricAuthEnabled.value) {
+            true
+        } else {
+            val hasHardware = biometricAuthManager.checkBiometricAvailability() == BiometricAuthManager.BiometricHardwareStatus.AVAILABLE
+            val hasPassword = settingsRepo.syncPasswordKey.value.isNotBlank()
+            // Falls weder Hardware vorhanden/registriert ist noch ein separates Passwort gesetzt wurde, direkt entsperren
+            !hasHardware && !hasPassword
+        }
+    )
     val isAppUnlocked: StateFlow<Boolean> = _isAppUnlocked.asStateFlow()
 
     fun setBiometricAuthEnabled(enabled: Boolean) {
@@ -510,6 +547,29 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     fun setSystemPromptPreset(preset: String) = updateLlmInferenceConfig(llmInferenceConfig.value.copy(systemPromptFocus = preset))
     fun setLlmCpuThreads(threads: Int) = updateLlmInferenceConfig(llmInferenceConfig.value.copy(threadCount = threads))
     fun dismissNewModelsNotification() = llmService.dismissNewModelsNotification()
+    val llmCatalogAutoCheckEnabled: StateFlow<Boolean> = settingsRepo.llmCatalogAutoCheckEnabled
+    fun setLlmCatalogAutoCheckEnabled(enabled: Boolean) = settingsRepo.setLlmCatalogAutoCheckEnabled(enabled)
+
+    val llmCatalogCheckInterval: StateFlow<String> = settingsRepo.llmCatalogCheckInterval
+    fun setLlmCatalogCheckInterval(interval: String) = settingsRepo.setLlmCatalogCheckInterval(interval)
+
+    fun relinkDownloadedModels(onResult: (Int) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val count = llmService.scanAndLinkExistingModels()
+            withContext(Dispatchers.Main) {
+                onResult(count)
+            }
+        }
+    }
+
+    fun importCustomModelFromUri(uri: android.net.Uri, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val res = llmService.importModelFromUri(getApplication(), uri)
+            res.onSuccess { msg -> onResult(true, msg) }
+                .onFailure { err -> onResult(false, err.message ?: "Import-Fehler") }
+        }
+    }
+
     fun rescanPersistedModels(): Int = llmService.scanAndLinkExistingModels()
     fun syncModelCatalogFromRemote(forceCheck: Boolean = true) {
         viewModelScope.launch {
@@ -742,7 +802,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val pendingUsbSyncWarning: StateFlow<String?> = _pendingUsbSyncWarning.asStateFlow()
     fun dismissUsbSyncWarning() { _pendingUsbSyncWarning.value = null }
     fun triggerUsbSyncReminderIfNeeded() {
-        if (cloudSyncConfig.value.enableManualUsbExport && cloudSyncConfig.value.usbSyncWarningOnScan) {
+        if (cloudSyncConfig.value.enableManualUsbExport && cloudSyncConfig.value.usbSyncWarningOnScan && usbBackupDrives.value.isNotEmpty()) {
             _pendingUsbSyncWarning.value = "⚠️ USB-Backup ausstehend: Bitte schließe deine Backup-USB-Sticks per OTG-Adapter an, um die neuen Dokumente zu synchronisieren!"
         }
     }

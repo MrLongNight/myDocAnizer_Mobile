@@ -1235,23 +1235,8 @@ class SettingsRepository(context: Context) {
         _passkeyCreatedAt.value = now
     }
 
-    // USB-Stick Backup-Verwaltung (Mehrere Sticks, Offsite-Aufbewahrung, Sync-Tracking)
-    private val defaultUsbSticks = listOf(
-        com.example.model.UsbBackupDrive(
-            id = "usb-1",
-            name = "USB-Stick 1 (Zuhause)",
-            locationNote = "Schreibtisch-Schublade (Nahbereich)",
-            lastSyncTimestamp = System.currentTimeMillis() - 86400000L,
-            totalSyncedDocs = 0
-        ),
-        com.example.model.UsbBackupDrive(
-            id = "usb-2",
-            name = "USB-Stick 2 (Ausgelagert)",
-            locationNote = "Bei Verwandten / Bankschließfach (Brandschutz & Hochwasser)",
-            lastSyncTimestamp = 0L,
-            totalSyncedDocs = 0
-        )
-    )
+    // USB-Stick Backup-Verwaltung (Standardmäßig keine vorkonfigurierten Sticks)
+    private val defaultUsbSticks = emptyList<com.example.model.UsbBackupDrive>()
 
     private val _usbBackupDrives = MutableStateFlow<List<com.example.model.UsbBackupDrive>>(defaultUsbSticks)
     val usbBackupDrives: StateFlow<List<com.example.model.UsbBackupDrive>> = _usbBackupDrives.asStateFlow()
@@ -1305,6 +1290,23 @@ class SettingsRepository(context: Context) {
     fun setBiometricAuthEnabled(enabled: Boolean) {
         prefs.edit().putBoolean("biometric_auth_enabled", enabled).apply()
         _biometricAuthEnabled.value = enabled
+    }
+
+    // Automatischer HuggingFace Modell-Katalog Check beim Start & Intervall
+    private val _llmCatalogAutoCheckEnabled = MutableStateFlow(prefs.getBoolean("llm_catalog_auto_check", true))
+    val llmCatalogAutoCheckEnabled: StateFlow<Boolean> = _llmCatalogAutoCheckEnabled.asStateFlow()
+
+    private val _llmCatalogCheckInterval = MutableStateFlow(prefs.getString("llm_catalog_check_interval", "EVERY_START") ?: "EVERY_START")
+    val llmCatalogCheckInterval: StateFlow<String> = _llmCatalogCheckInterval.asStateFlow()
+
+    fun setLlmCatalogAutoCheckEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("llm_catalog_auto_check", enabled).apply()
+        _llmCatalogAutoCheckEnabled.value = enabled
+    }
+
+    fun setLlmCatalogCheckInterval(interval: String) {
+        prefs.edit().putString("llm_catalog_check_interval", interval).apply()
+        _llmCatalogCheckInterval.value = interval
     }
 
     // On-Device LLM Inferenz- & Hardware-Parameter

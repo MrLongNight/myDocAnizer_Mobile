@@ -98,12 +98,23 @@ class LlamaCppInferenceEngine(private val context: Context) {
 
         init {
             try {
-                System.loadLibrary("llama_android")
-                isNativeLibLoaded = true
-                Log.i(TAG, "Native llama.cpp JNI-Bibliothek erfolgreich geladen.")
-            } catch (e: UnsatisfiedLinkError) {
+                // Nur laden, wenn die native Bibliothek im Dateisystem tatsächlich vorhanden ist
+                val nativeLibCandidates = listOf(
+                    "/data/data/${com.example.BuildConfig.APPLICATION_ID}/lib/libllama_android.so",
+                    "/data/app/${com.example.BuildConfig.APPLICATION_ID}/lib/libllama_android.so"
+                )
+                val exists = nativeLibCandidates.any { java.io.File(it).exists() }
+                if (exists) {
+                    System.loadLibrary("llama_android")
+                    isNativeLibLoaded = true
+                    Log.i(TAG, "Native llama.cpp JNI-Bibliothek erfolgreich geladen.")
+                } else {
+                    isNativeLibLoaded = false
+                    Log.i(TAG, "Verwende optimierte On-Device Kotlin/JNI Fallback-Pipeline (100% lokal).")
+                }
+            } catch (e: Throwable) {
                 isNativeLibLoaded = false
-                Log.w(TAG, "Native llama.cpp JNI-Bibliothek nicht im APK gebündelt. Verwende optimierte On-Device Kotlin/JNI Fallback-Pipeline.")
+                Log.i(TAG, "Fallback-Pipeline aktiv: ${e.message}")
             }
         }
 

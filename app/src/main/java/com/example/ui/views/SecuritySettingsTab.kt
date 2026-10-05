@@ -42,13 +42,6 @@ fun SecuritySettingsTab(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Überschrift & Info
-        Text(
-            text = "Sicherheit & Autorisierung",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
-
         // Biometrische App-Sperre Card
         Card(
             shape = RoundedCornerShape(16.dp),

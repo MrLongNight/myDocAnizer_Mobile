@@ -906,25 +906,9 @@ fun calculateBackupSyncHealth(
     val statuses = mutableListOf<StorageLocationSyncStatus>()
     val warnings = mutableListOf<String>()
 
-    // 1. USB-STICKS
-    if (config.enableManualUsbExport || usbDrives.isNotEmpty()) {
-        if (usbDrives.isEmpty()) {
-            val warn = "USB-Sicherung aktiviert, aber noch kein USB-Stick registriert."
-            warnings.add(warn)
-            statuses.add(
-                StorageLocationSyncStatus(
-                    id = "usb_none",
-                    name = "USB-Sicherung",
-                    type = StorageLocationType.USB_DRIVE,
-                    isConfigured = true,
-                    isSynced = false,
-                    pendingDocsCount = totalDocumentsCount,
-                    lastSyncFormatted = null,
-                    warningMessage = warn
-                )
-            )
-        } else {
-            for (drive in usbDrives) {
+    // 1. USB-STICKS (Sicherung wird erst als aktives Ziel gewertet, sobald mindestens 1 Stick registriert ist)
+    if (usbDrives.isNotEmpty()) {
+        for (drive in usbDrives) {
                 val isSynced: Boolean
                 val pending: Int
                 val warn: String?
@@ -966,7 +950,6 @@ fun calculateBackupSyncHealth(
                 )
             }
         }
-    }
 
     // 2. GOOGLE DRIVE
     if (config.enableGoogleDrive) {
@@ -1047,7 +1030,7 @@ fun calculateBackupSyncHealth(
                 id = "local_only",
                 name = "Lokaler Smartphone-Speicher",
                 type = StorageLocationType.LOCAL_VAULT,
-                isConfigured = true,
+                isConfigured = false,
                 isSynced = false,
                 pendingDocsCount = totalDocumentsCount,
                 lastSyncFormatted = null,
@@ -1056,11 +1039,12 @@ fun calculateBackupSyncHealth(
         )
     }
 
-    val unsyncedCount = statuses.count { !it.isSynced }
+    val configuredLocations = statuses.filter { it.isConfigured }
+    val unsyncedCount = configuredLocations.count { !it.isSynced }
 
     return OverallBackupSyncHealth(
         hasWarnings = warnings.isNotEmpty(),
-        totalConfiguredLocations = statuses.size,
+        totalConfiguredLocations = configuredLocations.size,
         unsyncedLocationsCount = unsyncedCount,
         warnings = warnings,
         locationStatuses = statuses

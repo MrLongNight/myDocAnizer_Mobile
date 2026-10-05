@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -22,7 +23,7 @@ import com.example.ui.components.AppStartSplashAnimation
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.views.MainScreen
 
-class MainActivity : FragmentActivity() {
+open class MainActivity : FragmentActivity() {
     private val viewModel: DocAnizerViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,12 +61,14 @@ class MainActivity : FragmentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    if (showSplash) {
-                        AppStartSplashAnimation(
-                            onAnimationFinished = { showSplash = false }
-                        )
-                    } else {
-                        MainScreen(viewModel = viewModel)
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        if (!showSplash) {
+                            MainScreen(viewModel = viewModel)
+                        } else {
+                            AppStartSplashAnimation(
+                                onAnimationFinished = { showSplash = false }
+                            )
+                        }
                     }
                 }
             }

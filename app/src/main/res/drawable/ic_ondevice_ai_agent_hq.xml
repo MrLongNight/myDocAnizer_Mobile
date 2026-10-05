@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="512dp"
+    android:height="512dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+
+    <!-- Phone Inner Gradient Shadow/Glow -->
+    <path
+        android:pathData="M 140,36 L 372,36 A 40,40 0 0,1 412,76 L 408,436 A 40,40 0 0,1 372,476 L 140,476 A 40,40 0 0,1 100,436 L 100,76 A 40,40 0 0,1 140,36 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="256"
+                android:startY="36"
+                android:endX="256"
+                android:endY="476"
+                android:type="linear">
+                <item android:color="#FF0D1B48" android:offset="0.0" />
+                <item android:color="#FF1A0B38" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Phone Frame Outer Neon Cyan Border -->
+    <path
+        android:strokeWidth="12"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 140,40 L 372,40 A 36,36 0 0,1 408,76 L 408,436 A 36,36 0 0,1 372,472 L 140,472 A 36,36 0 0,1 104,436 L 104,76 A 36,36 0 0,1 140,40 Z">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="104"
+                android:startY="40"
+                android:endX="408"
+                android:endY="472"
+                android:type="linear">
+                <item android:color="#FF00E5FF" android:offset="0.0" />
+                <item android:color="#FFD000FF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Speaker Bar -->
+    <path
+        android:fillColor="#FF00E5FF"
+        android:pathData="M 216,66 L 296,66 A 6,6 0 0,1 302,72 L 296,78 A 6,6 0 0,1 290,78 L 222,78 A 6,6 0 0,1 216,72 Z" />
+
+    <!-- Home Indicator Bar -->
+    <path
+        android:fillColor="#FF00E5FF"
+        android:pathData="M 180,434 L 332,434 A 6,6 0 0,1 338,440 L 332,446 A 6,6 0 0,1 326,446 L 186,446 A 6,6 0 0,1 180,440 Z" />
+
+    <!-- Circuit Lines Left -->
+    <path
+        android:strokeColor="#FF00E5FF"
+        android:strokeWidth="10"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 172,216 L 110,180 L 50,180 M 172,256 L 120,256 L 80,230 L 50,230 M 172,296 L 110,332 L 50,332" />
+
+    <!-- Circuit Nodes Left (Pink Glow Circles) -->
+    <path
+        android:strokeColor="#FF00E5FF"
+        android:strokeWidth="6"
+        android:fillColor="#FFEA00D0"
+        android:pathData="M 40,180 A 20,20 0 1,1 40,180.01 Z M 40,230 A 20,20 0 1,1 40,230.01 Z M 40,332 A 20,20 0 1,1 40,332.01 Z" />
+
+    <!-- Circuit Lines Right -->
+    <path
+        android:strokeColor="#FF00E5FF"
+        android:strokeWidth="10"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 340,216 L 402,180 L 462,180 M 340,256 L 392,256 L 432,230 L 462,230 M 340,296 L 402,332 L 462,332" />
+
+    <!-- Circuit Nodes Right (Pink Glow Circles) -->
+    <path
+        android:strokeColor="#FF00E5FF"
+        android:strokeWidth="6"
+        android:fillColor="#FFEA00D0"
+        android:pathData="M 472,180 A 20,20 0 1,1 472,180.01 Z M 472,230 A 20,20 0 1,1 472,230.01 Z M 472,332 A 20,20 0 1,1 472,332.01 Z" />
+
+    <!-- Chip Pins Cyan Glow -->
+    <path
+        android:strokeColor="#FF00E5FF"
+        android:strokeWidth="10"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:pathData="M 216,180 L 216,152 M 256,180 L 256,152 M 296,180 L 296,152 M 216,332 L 216,360 M 256,332 L 256,360 M 296,332 L 296,360 M 180,216 L 152,216 M 180,256 L 152,256 M 180,296 L 152,296 M 332,216 L 360,216 M 332,256 L 360,256 M 332,296 L 360,296" />
+
+    <!-- Center AI Chip Body Gradient Fill -->
+    <path
+        android:strokeColor="#FF00E5FF"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M 196,180 L 316,180 A 16,16 0 0,1 332,196 L 332,316 A 16,16 0 0,1 316,332 L 196,332 A 16,16 0 0,1 180,316 L 180,196 A 16,16 0 0,1 196,180 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="180"
+                android:startY="180"
+                android:endX="332"
+                android:endY="332"
+                android:type="linear">
+                <item android:color="#FF8A00FF" android:offset="0.0" />
+                <item android:color="#FFE500A0" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Glowing White AI Text -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 208,292 L 224,220 L 238,220 L 254,292 L 240,292 L 235,270 L 218,270 L 214,292 Z M 222,256 L 231,256 L 226,234 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 268,220 L 284,220 L 284,292 L 268,292 Z" />
+</vector>

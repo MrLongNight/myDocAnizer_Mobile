@@ -32,6 +32,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.DocAnizerViewModel
@@ -351,7 +353,7 @@ fun MainScreen(
                                         .testTag("main_chatbot_fab")
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.SmartToy,
+                                        painter = painterResource(id = R.drawable.ic_ondevice_ai_agent),
                                         contentDescription = "myDocAnizer KI-Assistent & Chatbot öffnen",
                                         modifier = Modifier.size(26.dp)
                                     )
@@ -488,11 +490,15 @@ fun MainScreen(
             val backupSyncHealth by viewModel.backupSyncHealth.collectAsState()
             val isSyncHealthWarningDismissed by viewModel.isSyncHealthWarningDismissed.collectAsState()
 
-            val showSyncWarning = pendingUsbSyncWarning != null || (backupSyncHealth.hasWarnings && !isSyncHealthWarningDismissed)
-            val displayWarningMsg = pendingUsbSyncWarning ?: (
-                "⚠️ ${backupSyncHealth.unsyncedLocationsCount} von ${backupSyncHealth.totalConfiguredLocations} Backup-Zielen nicht synchron: " +
-                (backupSyncHealth.warnings.firstOrNull() ?: "Sicherung ausstehend")
-            )
+            val showSyncWarning = pendingUsbSyncWarning != null || (backupSyncHealth.totalConfiguredLocations > 0 && backupSyncHealth.hasWarnings && !isSyncHealthWarningDismissed)
+            val displayWarningMsg = pendingUsbSyncWarning ?: run {
+                if (backupSyncHealth.totalConfiguredLocations > 0) {
+                    "⚠️ ${backupSyncHealth.unsyncedLocationsCount} von ${backupSyncHealth.totalConfiguredLocations} Backup-Zielen nicht synchron: " +
+                    (backupSyncHealth.warnings.firstOrNull() ?: "Sicherung ausstehend")
+                } else {
+                    "⚠️ " + (backupSyncHealth.warnings.firstOrNull() ?: "Kein Backup eingerichtet! Dokumente liegen nur ungesichert auf diesem Smartphone.")
+                }
+            }
 
             Column(
                 modifier = Modifier
@@ -1005,6 +1011,7 @@ fun MainScreen(
                     } else {
                         viewModel.setWizardCompleted(true)
                     }
+                    viewModel.startFirstStepsTour()
                 }
             )
         }

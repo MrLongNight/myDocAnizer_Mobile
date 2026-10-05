@@ -81,17 +81,29 @@ fun SettingsView(
     val appViewLevel by viewModel.appViewLevel.collectAsState()
     val isExpertMode by viewModel.isExpertMode.collectAsState()
     val isAdvancedOrExpert by viewModel.isAdvancedOrExpert.collectAsState()
+    val targetSettingsSubTab by viewModel.targetSettingsSubTab.collectAsState()
+
+    LaunchedEffect(targetSettingsSubTab) {
+        targetSettingsSubTab?.let { subTab ->
+            selectedSettingsTab = subTab
+            viewModel.setTargetSettingsSubTab(null)
+        }
+    }
 
     val tabs = listOf(
         SettingsTabItem("Scanner & Kamera", Icons.Default.PhotoCamera),
         SettingsTabItem("PDF & Optimierung", Icons.Default.PictureAsPdf),
         SettingsTabItem("Ein-&Ausgaben", Icons.Default.AccountBalanceWallet),
         SettingsTabItem("Gruppen & Zusatzfelder", Icons.Default.Label),
-        SettingsTabItem("Regeln & KI", Icons.Default.AutoAwesome),
+        SettingsTabItem("Dokumenten-Regeln", Icons.Default.FilterList),
+        SettingsTabItem("onDevice AI-Agent", Icons.Default.AutoAwesome),
         SettingsTabItem("Sicherheit", Icons.Default.Security),
         SettingsTabItem("WLAN & P2P Sync", Icons.Default.SyncAlt),
         SettingsTabItem("Cloud & Backup", Icons.Default.CloudSync),
-        SettingsTabItem("Design", Icons.Default.Palette)
+        SettingsTabItem("Design & Themes", Icons.Default.Palette),
+        SettingsTabItem("Bedienung & Gesten", Icons.Default.AccessibilityNew),
+        SettingsTabItem("Hilfe & Assistenten", Icons.Default.HelpOutline),
+        SettingsTabItem("Entwickler", Icons.Default.BugReport)
     )
 
     var showSectionOverviewDialog by remember { mutableStateOf(false) }
@@ -115,63 +127,60 @@ fun SettingsView(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
+                // Ebene-Umschalter zentriert mit kompakter Beschreibung direkt darunter
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 10.dp, vertical = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Ebene-Umschalter als schlanke FilterChips
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         FilterChip(
                             selected = appViewLevel == AppViewLevel.STANDARD,
                             onClick = { viewModel.setAppViewLevel(AppViewLevel.STANDARD) },
-                            label = { Text("Standard", fontSize = 11.sp) },
+                            label = { Text("Standard", fontSize = 10.sp) },
                             leadingIcon = if (appViewLevel == AppViewLevel.STANDARD) {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(12.dp)) }
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(10.dp)) }
                             } else null,
-                            modifier = Modifier.height(30.dp).testTag("chip_view_standard")
+                            modifier = Modifier.height(24.dp).testTag("chip_view_standard")
                         )
+                        Spacer(modifier = Modifier.width(4.dp))
                         FilterChip(
                             selected = appViewLevel == AppViewLevel.ADVANCED,
                             onClick = { viewModel.setAppViewLevel(AppViewLevel.ADVANCED) },
-                            label = { Text("Erweitert", fontSize = 11.sp) },
+                            label = { Text("Erweitert", fontSize = 10.sp) },
                             leadingIcon = if (appViewLevel == AppViewLevel.ADVANCED) {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(12.dp)) }
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(10.dp)) }
                             } else null,
-                            modifier = Modifier.height(30.dp).testTag("chip_view_advanced")
+                            modifier = Modifier.height(24.dp).testTag("chip_view_advanced")
                         )
+                        Spacer(modifier = Modifier.width(4.dp))
                         FilterChip(
                             selected = appViewLevel == AppViewLevel.EXPERT,
                             onClick = { viewModel.setAppViewLevel(AppViewLevel.EXPERT) },
-                            label = { Text("Experte", fontSize = 11.sp) },
+                            label = { Text("Experte", fontSize = 10.sp) },
                             leadingIcon = if (appViewLevel == AppViewLevel.EXPERT) {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(12.dp)) }
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(10.dp)) }
                             } else null,
-                            modifier = Modifier.height(30.dp).testTag("chip_view_expert")
+                            modifier = Modifier.height(24.dp).testTag("chip_view_expert")
                         )
                     }
-
-                    // Assistenten & Übersicht Button
-                    FilledTonalButton(
-                        onClick = { showSectionOverviewDialog = true },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        modifier = Modifier
-                            .height(30.dp)
-                            .testTag("btn_all_settings_tabs")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Assistenten", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    val descriptionText = when (appViewLevel) {
+                        AppViewLevel.STANDARD -> "Kompakte Übersicht aller Grundfunktionen für das tägliche Arbeiten"
+                        AppViewLevel.ADVANCED -> "Zusätzliche Werkzeuge für individuelle Sortierung & Automatisierung"
+                        AppViewLevel.EXPERT -> "Voller Zugriff auf erweiterte Systemparameter, Module & Schnittstellen"
                     }
+                    Text(
+                        text = descriptionText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(top = 2.dp, bottom = 2.dp)
+                    )
                 }
 
                 // NATIVE MATERIAL 3 SCROLLABLE TAB ROW
@@ -207,17 +216,17 @@ fun SettingsView(
                     }
                 }
 
-                // Subtile Status-Info zur aktiven Ansichtsebene
+                // Subtile Status-Info zur aktiven Ansichtsebene (Kompakt)
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                            .padding(horizontal = 12.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.Center
                     ) {
                         Text(
                             text = when (appViewLevel) {
@@ -227,7 +236,8 @@ fun SettingsView(
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 11.sp
+                            fontSize = 9.5.sp,
+                            lineHeight = 12.sp
                         )
                     }
                 }
@@ -240,11 +250,15 @@ fun SettingsView(
                 1 -> PdfSettingsTab(viewModel)
                 2 -> IncomeExpenseSettingsTab(viewModel)
                 3 -> DocTypesSettingsTab(viewModel)
-                4 -> RulesAndAiSettingsTab(viewModel)
-                5 -> SecuritySettingsTab(viewModel)
-                6 -> P2pSyncTab(viewModel)
-                7 -> CloudSyncSettingsTab(viewModel)
-                8 -> DesignSettingsTab(viewModel)
+                4 -> DocumentRulesSettingsTab(viewModel)
+                5 -> OnDeviceAiAgentSettingsTab(viewModel)
+                6 -> SecuritySettingsTab(viewModel)
+                7 -> P2pSyncTab(viewModel)
+                8 -> CloudSyncSettingsTab(viewModel)
+                9 -> DesignSettingsTab(viewModel)
+                10 -> AccessibilityAndGesturesTab(viewModel)
+                11 -> HelpAndWizardsTab(viewModel)
+                12 -> DeveloperSettingsTab(viewModel)
             }
         }
 
@@ -285,22 +299,9 @@ fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Scanner & Kamera-Einstellungen",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Steuere Auslöser, Dauerscan, Kamera-Licht und akustische Rückmeldungen.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
             TextButton(
                 onClick = {
                     val nextState = !allExpanded
@@ -1096,43 +1097,34 @@ fun DocTypesSettingsTab(viewModel: DocAnizerViewModel) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        TabRow(
-            selectedTabIndex = activeSubSection,
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.clip(RoundedCornerShape(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
         ) {
-            Tab(
-                selected = activeSubSection == 0,
+            FloatingActionButton(
                 onClick = { activeSubSection = 0 },
-                text = { Text("Doc-Typen (${docTypes.size})", fontWeight = if (activeSubSection == 0) FontWeight.Bold else FontWeight.Normal) }
-            )
-            Tab(
-                selected = activeSubSection == 1,
+                containerColor = if (activeSubSection == 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = if (activeSubSection == 0) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.height(38.dp)
+            ) {
+                Text("  Doc-Typen (${docTypes.size})  ", style = MaterialTheme.typography.labelMedium, fontWeight = if (activeSubSection == 0) FontWeight.Bold else FontWeight.Normal)
+            }
+            FloatingActionButton(
                 onClick = { activeSubSection = 1 },
-                text = { Text("Zusatzfelder (${customFields.size})", fontWeight = if (activeSubSection == 1) FontWeight.Bold else FontWeight.Normal) }
-            )
+                containerColor = if (activeSubSection == 1) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = if (activeSubSection == 1) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.height(38.dp)
+            ) {
+                Text("  Zusatzfelder (${customFields.size})  ", style = MaterialTheme.typography.labelMedium, fontWeight = if (activeSubSection == 1) FontWeight.Bold else FontWeight.Normal)
+            }
         }
 
         if (activeSubSection == 0) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Doc-Typen",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Optionale Gruppierungsmerkmale für deine Dokumente. Du kannst eigene Typen frei anlegen, bearbeiten oder löschen.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
             FilledTonalButton(
                 onClick = {
                     editingDocType = null
@@ -1265,23 +1257,9 @@ fun DocTypesSettingsTab(viewModel: DocAnizerViewModel) {
             // ZUSATZFELDER BEREICH
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Individuelle Zusatzfelder",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "Definiere eigene Metadaten-Felder. Die lokale KI befüllt diese automatisch beim Scannen, oder du bearbeitest sie manuell.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
                 FilledTonalButton(
                     onClick = {
                         editingCustomField = null
@@ -1717,22 +1695,9 @@ fun PdfSettingsTab(viewModel: DocAnizerViewModel) {
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "PDF, Optimierung & Speicherpfade",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Konfiguriere Bildverbesserung, Kompression, DPI-Auflösung und Aktenplan-Strukturen.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
             TextButton(
                 onClick = {
                     val nextState = !allExpanded
@@ -2523,7 +2488,7 @@ fun PdfSettingsTab(viewModel: DocAnizerViewModel) {
     }
 
 /**
- * TAB 4: Design & Farbschemata (Dark/Light Mode & Color Skins)
+ * TAB 8: Design & Farbschemata (Dark/Light Mode & Color Skins)
  */
 @Composable
 fun DesignSettingsTab(viewModel: DocAnizerViewModel) {
@@ -2537,87 +2502,6 @@ fun DesignSettingsTab(viewModel: DocAnizerViewModel) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // App-Logo Banner
-        AppLogoBanner(
-            iconHeight = 140.dp,
-            fontSize = 24f,
-            includeContainer = true,
-            showTagline = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Column {
-            Text(
-                text = "Design & Farbschema",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = "Passe das optische Design und die Akzentfarben von myDocAnizer an",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        // Virtuelle Erste-Schritte Tour (Direkter Aufruf für neue oder interessierte Benutzer)
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-            modifier = Modifier.fillMaxWidth().testTag("card_first_steps_tour")
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Explore,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    Column {
-                        Text(
-                            text = "Virtuelle Erste-Schritte Tour",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Simpel & effektiv alle Kern-Features von myDocAnizer kennenlernen",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                FilledTonalButton(
-                    onClick = { viewModel.startFirstStepsTour() },
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    modifier = Modifier.testTag("btn_start_first_steps_tour")
-                ) {
-                    Text("Tour starten", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
         // Helligkeitsmodus
         Card(
             shape = RoundedCornerShape(12.dp),
@@ -2745,11 +2629,26 @@ fun DesignSettingsTab(viewModel: DocAnizerViewModel) {
                 }
             }
         }
+    }
+}
 
-        // BARRIEREFREIHEIT & SEHHILFEN (WCAG AAA Kontrast, Skalierbarkeit & Touch-Größen)
-        val highContrastMode by viewModel.highContrastMode.collectAsState()
-        val largeTouchTargets by viewModel.largeTouchTargets.collectAsState()
+/**
+ * TAB 9: Bedienungshilfen, Sehbehinderte & Gesten-Steuerung
+ */
+@Composable
+fun AccessibilityAndGesturesTab(viewModel: DocAnizerViewModel) {
+    val highContrastMode by viewModel.highContrastMode.collectAsState()
+    val largeTouchTargets by viewModel.largeTouchTargets.collectAsState()
+    val isGestureModeEnabled by viewModel.isGestureModeEnabled.collectAsState()
 
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // BARRIEREFREIHEIT & SEHHILFEN
         Card(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -2861,9 +2760,7 @@ fun DesignSettingsTab(viewModel: DocAnizerViewModel) {
             }
         }
 
-        // 5. Dashboard-Bedienung: Standard-Modus (symmetrische Buttons & Menüleiste) vs. Reiner Gesten-Modus
-        val isGestureModeEnabled by viewModel.isGestureModeEnabled.collectAsState()
-
+        // 4. Dashboard-Bedienung & Wischgesten
         Card(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -2918,7 +2815,6 @@ fun DesignSettingsTab(viewModel: DocAnizerViewModel) {
                     )
                 }
 
-                // Subtile Statusanzeige zur aktuellen Einstellung
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = if (isGestureModeEnabled)
@@ -2951,113 +2847,351 @@ fun DesignSettingsTab(viewModel: DocAnizerViewModel) {
                 }
             }
         }
+    }
+}
 
-                // 6. ENTWICKLER-WERKZEUGE (NUR SICHTBAR WENN BuildConfig.DEBUG == true)
-                if (BuildConfig.DEBUG) {
-                    var showConfirmSeederDialog by remember { mutableStateOf(false) }
-                    var isSeeding by remember { mutableStateOf(false) }
-                    val context = androidx.compose.ui.platform.LocalContext.current
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("card_debug_data_seeder"),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)),
-                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.tertiary),
-                        shape = RoundedCornerShape(16.dp)
+/**
+ * TAB 10: Hilfe, Anleitungen & Assistenten
+ */
+@Composable
+fun HelpAndWizardsTab(viewModel: DocAnizerViewModel) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 1. Virtuelle Erste-Schritte Tour
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+            modifier = Modifier.fillMaxWidth().testTag("card_first_steps_tour")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        modifier = Modifier.size(40.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.BugReport,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                                Text(
-                                    text = "Entwickler-Testdaten (Debug Mode)",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-                            }
-
-                            Text(
-                                text = "Generiert 12 realistische Testdokumente (Vodafone, Allianz, SWM, Deutsche Bank, Helios Klinikum, HUK-Coburg, BARMER, Telekom, Amazon etc.) mit echten Sandbox-PDF-Dateien, OCR-Texten, Rechnungsbeträgen, Fristen und Ordnerstrukturen für Emulator- und Funktionsprüfungen.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Explore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
                             )
-
-                            Button(
-                                onClick = { showConfirmSeederDialog = true },
-                                enabled = !isSeeding,
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("btn_seed_debug_data")
-                            ) {
-                                if (isSeeding) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        color = MaterialTheme.colorScheme.onTertiary,
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Generiere Testdaten & PDFs...")
-                                } else {
-                                    Icon(Icons.Default.Science, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Testdaten generieren", fontWeight = FontWeight.Bold)
-                                }
-                            }
                         }
                     }
-
-                    if (showConfirmSeederDialog) {
-                        AlertDialog(
-                            onDismissRequest = { showConfirmSeederDialog = false },
-                            icon = { Icon(Icons.Default.Science, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
-                            title = { Text("Testdaten generieren?", fontWeight = FontWeight.Bold) },
-                            text = {
-                                Text(
-                                    "Möchtest du die lokale Datenbank leeren und 12 realistische Testdokumente (Finanzen, Verträge, Gesundheit, Wohnen) samt druckbaren PDF-Dateien und OCR-Texten neu anlegen?"
-                                )
-                            },
-                            confirmButton = {
-                                Button(
-                                    onClick = {
-                                        showConfirmSeederDialog = false
-                                        isSeeding = true
-                                        viewModel.seedDebugData { count ->
-                                            isSeeding = false
-                                            android.widget.Toast.makeText(
-                                                context,
-                                                "✅ $count Testdokumente & PDFs erfolgreich generiert!",
-                                                android.widget.Toast.LENGTH_LONG
-                                            ).show()
-                                        }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
-                                ) {
-                                    Text("Ja, Testdaten einspielen")
-                                }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { showConfirmSeederDialog = false }) {
-                                    Text("Abbrechen")
-                                }
-                            }
+                    Column {
+                        Text(
+                            text = "Virtuelle Erste-Schritte Tour",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Interaktive Führung durch alle Kernbereiche mit animiertem Spotlight-Fokus",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
+                Spacer(modifier = Modifier.width(8.dp))
+                FilledTonalButton(
+                    onClick = { viewModel.startFirstStepsTour() },
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.testTag("btn_start_first_steps_tour")
+                ) {
+                    Text("Tour starten", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // 2. Einrichtungs-Assistent (Setup-Wizard manuell starten)
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth().testTag("card_manual_setup_wizard")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.AutoFixHigh,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    Column {
+                        Text(
+                            text = "Einrichtungs-Assistent",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Schritt-für-Schritt Ersteinrichtung der wichtigsten Einstellungen erneut durchlaufen",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedButton(
+                    onClick = { viewModel.launchSetupWizardManually() },
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.testTag("btn_start_setup_wizard_manual")
+                ) {
+                    Text("Wizard starten", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // 3. PC- & Desktop-Scanner Assistent
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth().testTag("card_pc_companion_wizard")
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Computer,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    Column {
+                        Text(
+                            text = "PC- & Desktop-Kopplung",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "QR-Code Scanner für kabellosen P2P-Sync mit der myDocAnizer PC-App",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                OutlinedButton(
+                    onClick = { viewModel.launchPcCompanionWizard() },
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.testTag("btn_start_pc_companion_wizard")
+                ) {
+                    Text("Koppeln", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // 4. Wissensbasis & Schnellanleitung
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Text("Wissenswertes & Datenschutz", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                }
+                Text(
+                    text = "• 100% Offline-Tresor: Alle Dokumente und OCR-Texte verbleiben verschlüsselt auf deinem Smartphone.\n• DIN 5008 Aktenplan: 2-stufige Ordnerhierarchie für maximale Übersicht.\n• Zero-Cloud KI: HuggingFace LLMs laufen lokal auf dem Handy-Prozessor ohne Cloud-Upload.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/**
+ * TAB 11: Entwickler-Optionen & Debug-Werkzeuge
+ */
+@Composable
+fun DeveloperSettingsTab(viewModel: DocAnizerViewModel) {
+    var showConfirmSeederDialog by remember { mutableStateOf(false) }
+    var isSeeding by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val allDocs by viewModel.allDocuments.collectAsState()
+    val customFields by viewModel.customFields.collectAsState()
+    val hardwareInfo by viewModel.deviceHardwareInfo.collectAsState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // ENTWICKLER-TESTDATEN GENERATOR
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("card_debug_data_seeder"),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)),
+            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.tertiary),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Science,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = "Entwickler-Testdaten (Debug Data Seeder)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                }
+
+                Text(
+                    text = "Generiert 12 realistische Testdokumente (Vodafone, Allianz, SWM, Deutsche Bank, Helios Klinikum, HUK-Coburg, BARMER, Telekom, Amazon etc.) mit echten Sandbox-PDF-Dateien, OCR-Texten, Rechnungsbeträgen, Fristen und Ordnerstrukturen für Emulator- und Funktionsprüfungen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+
+                Button(
+                    onClick = { showConfirmSeederDialog = true },
+                    enabled = !isSeeding,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("btn_seed_debug_data")
+                ) {
+                    if (isSeeding) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onTertiary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Generiere Testdaten & PDFs...")
+                    } else {
+                        Icon(Icons.Default.Science, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Testdaten generieren", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // SYSTEM- & DATENBANK-STATUS
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Text("Datenbank- & Sandbox-Status", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                }
+                Text("• Gespeicherte Dokumente: ${allDocs.size}", style = MaterialTheme.typography.bodySmall)
+                Text("• Definierte Zusatzfelder: ${customFields.size}", style = MaterialTheme.typography.bodySmall)
+                Text("• RAM & CPU: ${String.format(java.util.Locale.US, "%.1f", hardwareInfo.totalRamGb)} GB RAM (${hardwareInfo.cpuCores} Cores, ${hardwareInfo.performanceTier})", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        if (showConfirmSeederDialog) {
+            AlertDialog(
+                onDismissRequest = { showConfirmSeederDialog = false },
+                icon = { Icon(Icons.Default.Science, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
+                title = { Text("Testdaten generieren?", fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "Möchtest du die lokale Datenbank leeren und 12 realistische Testdokumente (Finanzen, Verträge, Gesundheit, Wohnen) samt druckbaren PDF-Dateien und OCR-Texten neu anlegen?"
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showConfirmSeederDialog = false
+                            isSeeding = true
+                            viewModel.seedDebugData { count ->
+                                isSeeding = false
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "✅ $count Testdokumente & PDFs erfolgreich generiert!",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                    ) {
+                        Text("Ja, Testdaten einspielen")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showConfirmSeederDialog = false }) {
+                        Text("Abbrechen")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -4447,6 +4581,24 @@ fun CloudSyncSettingsTab(viewModel: DocAnizerViewModel) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+
+        // DEDIZIERTE SYSTEM-DIAGNOSE & AUDIT-LOG
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "System-Diagnose & Inferenz Audit-Log",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                SystemDiagnosticsAndLogTab(viewModel = viewModel, modifier = Modifier.heightIn(max = 400.dp))
             }
         }
     }

@@ -2,6 +2,7 @@ package com.example.service
 
 import android.app.ActivityManager
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.example.model.DeviceHardwareInfo
 import com.example.model.DocRule
@@ -14,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
@@ -285,24 +287,26 @@ class LlmService(private val context: Context) {
                 }
             }
 
-            _availableModels.value = _availableModels.value.map { model ->
-                val targetName = model.fileName.ifBlank { "${model.id}.gguf" }.lowercase()
-                val foundFile = existingFiles[targetName] ?: existingFiles.values.firstOrNull { 
-                    it.name.contains(model.id, ignoreCase = true) 
-                }
+            _availableModels.update { currentModels ->
+                currentModels.map { model ->
+                    val targetName = model.fileName.ifBlank { "${model.id}.gguf" }.lowercase()
+                    val foundFile = existingFiles[targetName] ?: existingFiles.values.firstOrNull { 
+                        it.name.contains(model.id, ignoreCase = true) 
+                    }
 
-                if (foundFile != null && foundFile.exists()) {
-                    linkedCount++
-                    model.copy(
-                        isDownloaded = true,
-                        localFileSizeBytes = foundFile.length(),
-                        downloadProgress = 1.0f
-                    )
-                } else {
-                    model.copy(
-                        isDownloaded = isModelPhysicallyOnDisk(model.fileName),
-                        localFileSizeBytes = getModelDiskSize(model.fileName)
-                    )
+                    if (foundFile != null && foundFile.exists()) {
+                        linkedCount++
+                        model.copy(
+                            isDownloaded = true,
+                            localFileSizeBytes = foundFile.length(),
+                            downloadProgress = 1.0f
+                        )
+                    } else {
+                        model.copy(
+                            isDownloaded = isModelPhysicallyOnDisk(model.fileName),
+                            localFileSizeBytes = getModelDiskSize(model.fileName)
+                        )
+                    }
                 }
             }
 
@@ -318,6 +322,46 @@ class LlmService(private val context: Context) {
             Log.e("LlmService", "Fehler beim Durchsuchen nach Modellen: ${e.message}")
         }
         return linkedCount
+    }
+
+    /**
+     * Importiert eine vom Nutzer manuell per Dateiwähler ausgewählte .gguf-Datei,
+     * kopiert sie in das geschützte Modellverzeichnis und verknüpft sie mit der Modellliste.
+     */
+    suspend fun importModelFromUri(context: Context, uri: Uri): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            var fileName = "imported_model.gguf"
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1 && cursor.moveToFirst()) {
+                    val rawName = cursor.getString(nameIndex)
+                    if (!rawName.isNullOrBlank()) {
+                        fileName = rawName
+                    }
+                }
+            }
+            if (!fileName.endsWith(".gguf", ignoreCase = true)) {
+                fileName = "$fileName.gguf"
+            }
+            val targetFile = File(modelsDir, fileName)
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                targetFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            val linked = scanAndLinkExistingModels()
+            val sizeMb = targetFile.length() / (1024 * 1024)
+            AppAuditLogger.log(
+                category = LogCategory.AI_INFERENCE,
+                tag = "ModelImport",
+                message = "Modell-Datei '$fileName' ($sizeMb MB) erfolgreich importiert.",
+                details = "Zielpfad: ${targetFile.absolutePath}"
+            )
+            Result.success("Modell '$fileName' ($sizeMb MB) erfolgreich importiert und verknüpft.")
+        } catch (e: Exception) {
+            Log.e("LlmService", "Fehler beim Modell-Import: ${e.message}")
+            Result.failure(e)
+        }
     }
 
     private fun createInitialModels(hw: DeviceHardwareInfo): List<HuggingFaceModelInfo> {
@@ -689,20 +733,24 @@ class LlmService(private val context: Context) {
     fun refreshHardwareInfo() {
         val hw = detectDeviceHardware()
         _deviceHardware.value = hw
-        _availableModels.value = _availableModels.value.map {
-            val diskSize = getModelDiskSize(it.fileName)
-            val onDisk = diskSize > 1024 * 1024
-            it.copy(
-                compatibilityLevel = calculateCompatibility(it.recommendedRamGb, hw),
-                isDownloaded = onDisk,
-                localFileSizeBytes = diskSize
-            )
+        _availableModels.update { currentModels ->
+            currentModels.map {
+                val diskSize = getModelDiskSize(it.fileName)
+                val onDisk = diskSize > 1024 * 1024
+                it.copy(
+                    compatibilityLevel = calculateCompatibility(it.recommendedRamGb, hw),
+                    isDownloaded = onDisk,
+                    localFileSizeBytes = diskSize
+                )
+            }
         }
     }
 
     fun selectModel(modelId: String) {
-        _availableModels.value = _availableModels.value.map {
-            it.copy(isSelected = it.id == modelId)
+        _availableModels.update { currentModels ->
+            currentModels.map {
+                it.copy(isSelected = it.id == modelId)
+            }
         }
         val selected = _availableModels.value.find { it.id == modelId }
         if (selected != null) {

@@ -285,6 +285,25 @@ object SplashSoundSynthesizer {
                                 .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                                 .build()
                         )
+                        setOnCompletionListener { player ->
+                            try {
+                                player.reset()
+                                player.release()
+                            } catch (_: Throwable) {}
+                            synchronized(lock) {
+                                if (mediaPlayer == player) mediaPlayer = null
+                            }
+                        }
+                        setOnErrorListener { player, _, _ ->
+                            try {
+                                player.reset()
+                                player.release()
+                            } catch (_: Throwable) {}
+                            synchronized(lock) {
+                                if (mediaPlayer == player) mediaPlayer = null
+                            }
+                            true
+                        }
                         prepare()
                         start()
                     }
@@ -301,11 +320,16 @@ object SplashSoundSynthesizer {
     fun stop() {
         synchronized(lock) {
             try {
-                mediaPlayer?.let {
-                    if (it.isPlaying) {
-                        it.stop()
-                    }
-                    it.release()
+                mediaPlayer?.let { player ->
+                    try {
+                        player.setOnCompletionListener(null)
+                        player.setOnErrorListener(null)
+                        if (player.isPlaying) {
+                            player.stop()
+                        }
+                        player.reset()
+                        player.release()
+                    } catch (_: Throwable) {}
                 }
                 mediaPlayer = null
             } catch (_: Throwable) {}
@@ -327,7 +351,7 @@ fun AppStartSplashAnimation(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val totalDurationMs = 2800 // Angenehme, filmreife 2.8 Sekunden für den perfekten visuellen & akustischen App-Start
+    val totalDurationMs = 1100 // Schnelle, flüssige 1.1s für sofortiges Start-Feedback ohne Blockade
     val progressAnim = remember { Animatable(0f) }
     val infiniteTransition = rememberInfiniteTransition(label = "splash_infinite")
 

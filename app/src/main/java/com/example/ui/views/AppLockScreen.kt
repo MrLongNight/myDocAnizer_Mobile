@@ -53,9 +53,13 @@ fun AppLockScreen(
 
     val syncPasswordKey by viewModel.syncPasswordKey.collectAsState()
 
-    // Automatische Auslösung der Biometrie beim Start
+    val isBiometricAvailable = remember {
+        viewModel.biometricAuthManager.checkBiometricAvailability() == com.example.service.BiometricAuthManager.BiometricHardwareStatus.AVAILABLE
+    }
+
+    // Automatische Auslösung der Biometrie beim Start nur wenn Hardware verfügbar ist
     LaunchedEffect(Unit) {
-        if (activity != null) {
+        if (activity != null && isBiometricAvailable) {
             viewModel.authenticateBiometric(
                 activity = activity,
                 onSuccess = {

@@ -46,11 +46,13 @@ data class TourStation(
     val title: String,
     val subtitle: String,
     val targetElementName: String,
+    val clickPath: String,
     val icon: ImageVector,
     val badgeLabel: String,
     val description: String,
     val tips: List<String>,
     val targetTab: MainNavigationTab,
+    val targetSubTab: Int? = null,
     val spotlightAlignment: Alignment = Alignment.Center,
     val spotlightOffsetX: Float = 0f,
     val spotlightOffsetY: Float = 0f,
@@ -80,6 +82,7 @@ fun FirstStepsTourModal(
                 title = "Dokumenten Tresor",
                 subtitle = "Private Aktenablage nach DIN-Aktenplan",
                 targetElementName = "DIN-Ordnerleiste & Dokumenten-Übersicht",
+                clickPath = "1️⃣ Unten im Menü auf [Dokumente] tippen  ➔  2️⃣ Hauptkategorie wählen (z. B. A02 Finanzen)",
                 icon = Icons.Default.FolderSpecial,
                 badgeLabel = "Kernbereich • DIN 5008",
                 description = "Der Dokumenten Tresor ist das Herzstück von myDocAnizer. Hier werden alle gescannten und importierten Unterlagen nach einem 2-stufigen Aktenplan (Hauptkategorien A01–A08 & Unterkategorien) strukturiert archiviert.",
@@ -98,6 +101,7 @@ fun FirstStepsTourModal(
                 title = "Scan InBox & Kamera",
                 subtitle = "Dokumente & Belege digitalisieren mit Schärfefilter",
                 targetElementName = "Kamera-Sucher & Schnellauslöser",
+                clickPath = "1️⃣ Unten im Menü auf [Scan Eingang] tippen  ➔  2️⃣ Auslöser drücken oder Lautstärketaste nutzen",
                 icon = Icons.Default.DocumentScanner,
                 badgeLabel = "Schnellerfassung",
                 description = "Digitalisiere Briefe, Kassenbelege oder mehrseitige Verträge in Sekunden. Die Kamera erkennt Papierränder automatisch und korrigiert Schatten.",
@@ -113,27 +117,30 @@ fun FirstStepsTourModal(
             ),
             TourStation(
                 stepNumber = 3,
-                title = "On-Device KI & Regeln",
+                title = "onDevice AI-Agent & Regeln",
                 subtitle = "Automatische Erkennung zu 100% offline ohne Cloud",
                 targetElementName = "Lokale HuggingFace LLMs & Schlagwort-Regeln",
+                clickPath = "1️⃣ Unten im Menü auf [Einstellungen] tippen  ➔  2️⃣ Oben den Reiter [onDevice AI-Agent] wählen",
                 icon = Icons.Default.Psychology,
-                badgeLabel = "Zero-Cloud KI",
+                badgeLabel = "Zero-Cloud AI-Agent",
                 description = "myDocAnizer liest Texte direkt auf deinem Prozessor. Es erkennt Absender (z.B. Deutsche Post, Telekom), Rechnungsbetrag, Fälligkeitsdatum und ordnet alles selbstständig zu.",
                 tips = listOf(
                     "Kein Datenabfluss: Deine sensiblen Dokumente verlassen niemals dein Telefon!",
-                    "Wähle in den Einstellungen unter 'Regeln & KI' aus verschiedenen quantisierten HuggingFace LLM-Modellen.",
+                    "Wähle in den Einstellungen unter 'onDevice AI-Agent' aus verschiedenen quantisierten HuggingFace LLM-Modellen.",
                     "Eigene Schlagwort-Regeln erfassen wiederkehrende Dokumente blitzschnell und deterministisch."
                 ),
                 targetTab = MainNavigationTab.SETTINGS,
+                targetSubTab = 5,
                 spotlightAlignment = Alignment.Center,
                 spotlightOffsetY = -60f,
-                actionButtonText = "KI & Regeln verstehen"
+                actionButtonText = "AI-Agent & Regeln verstehen"
             ),
             TourStation(
                 stepNumber = 4,
                 title = "Dashboard & Finanzen",
                 subtitle = "Einnahmen, Ausgaben & Fristen-Radar im Blick",
                 targetElementName = "Fristen-Radar & monatliches Finanz-Cockpit",
+                clickPath = "1️⃣ Unten im Menü auf [Dashboard] tippen  ➔  2️⃣ Fristen-Radar & Fixkosten prüfen",
                 icon = Icons.Default.Dashboard,
                 badgeLabel = "Überblick & Kontrolle",
                 description = "Das Dashboard fasst deinen aktuellen Status zusammen: Welche Rechnungen sind fällig? Wann läuft ein Vertrag aus? Und wie steht es um deine monatlichen Fixkosten?",
@@ -152,6 +159,7 @@ fun FirstStepsTourModal(
                 title = "Sicherheit & PC-Kopplung",
                 subtitle = "Biometrischer Tresorschutz & kabelloser Desktop-Sync",
                 targetElementName = "Tresor-Verschlüsselung & Lokale Desktop-Kopplung",
+                clickPath = "1️⃣ Unten im Menü auf [Einstellungen] tippen  ➔  2️⃣ Oben den Reiter [Sicherheit] oder [WLAN & P2P Sync] wählen",
                 icon = Icons.Default.Security,
                 badgeLabel = "Datenschutz & P2P",
                 description = "Volle Kontrolle über deine Privatsphäre: Schütze deine Akten mit Fingerabdruck oder Passkeys und übertrage Dateien ohne Cloud direkt an deinen PC.",
@@ -161,6 +169,7 @@ fun FirstStepsTourModal(
                     "AES-256 Backups auf Google Drive, USB-Stick oder lokales NAS sorgen für absolute Ausfallsicherheit."
                 ),
                 targetTab = MainNavigationTab.SETTINGS,
+                targetSubTab = 6,
                 spotlightAlignment = Alignment.BottomCenter,
                 spotlightOffsetY = -120f,
                 actionButtonText = "Tour abschließen & Loslegen!"
@@ -182,10 +191,17 @@ fun FirstStepsTourModal(
 
     // Automatische Animation & Tab-Umschaltung beim Schrittwechsel
     LaunchedEffect(currentStepIndex) {
-        onNavigateToTab(currentStation.targetTab)
         isMinimizedForSpotlight = true
-        // 2 Sekunden Demonstration mit animiertem Spotlight, danach sanftes Wiederaufklappen
-        delay(2200L)
+        // Schritt 1: Zuerst auf Haupt-Tab schalten und dem Nutzer das Navigations-Element in der Leiste zeigen
+        onNavigateToTab(currentStation.targetTab)
+        if (currentStation.targetSubTab != null) {
+            delay(1200L) // 1.2s Verweilzeit, damit der Nutzer sieht, welcher Haupt-Tab gedrückt wurde
+            // Schritt 2: Nun das Untermenü / Subtab ansteuern
+            viewModel.setTargetSettingsSubTab(currentStation.targetSubTab)
+            delay(4800L)
+        } else {
+            delay(6000L)
+        }
         isMinimizedForSpotlight = false
     }
 
@@ -290,16 +306,17 @@ fun FirstStepsTourModal(
                         }
                         Column {
                             Text(
-                                text = "👉 Hier: ${currentStation.targetElementName}",
+                                text = "👉 Ziel: ${currentStation.targetElementName}",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White
                             )
                             Text(
-                                text = "Tippe hier oder warte kurz für Details...",
+                                text = "📍 Navigation: ${currentStation.clickPath}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = cyanAccent,
-                                fontSize = 10.sp
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
@@ -539,6 +556,44 @@ fun FirstStepsTourModal(
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // WO FINDE ICH DIESE FUNKTION? (KLICK-PFAD)
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = cyanAccent.copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, cyanAccent.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.TouchApp,
+                                        contentDescription = null,
+                                        tint = cyanAccent,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = "So erreichst du diese Funktion in der App:",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = cyanAccent
+                                    )
+                                }
+                                Text(
+                                    text = currentStation.clickPath,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontSize = 11.5.sp
+                                )
+                            }
+                        }
+
                         // BESCHREIBUNG
                         Text(
                             text = currentStation.description,

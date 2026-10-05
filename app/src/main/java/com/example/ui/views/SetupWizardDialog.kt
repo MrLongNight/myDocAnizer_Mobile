@@ -37,6 +37,9 @@ import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.credentials.CreatePasswordRequest
 import androidx.credentials.exceptions.CreateCredentialCancellationException
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import com.example.model.AppViewLevel
 import com.example.model.DOC_NAMING_STYLE_OPTIONS
 import com.example.model.PREFIX_STYLE_OPTIONS
@@ -190,27 +193,18 @@ fun SetupWizardDialog(
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
-                // Header: myDocAnizer Logo-Banner (ab Schritt 2) & Schrittzähler
+                // Header: Identisches Branding & dezenter Schrittzähler auf allen Wizard-Seiten
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (safeStepIndex == 0) {
-                        Text(
-                            text = if (isManualReconfig) "App-Konfiguration anpassen" else "Ersteinrichtung",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    } else {
-                        AppLogoBanner(
-                            iconHeight = 58.dp,
-                            fontSize = 16f,
-                            includeContainer = false,
-                            showTagline = false
-                        )
-                    }
+                    AppLogoBanner(
+                        iconHeight = 52.dp,
+                        fontSize = 16f,
+                        includeContainer = false,
+                        showTagline = false
+                    )
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.primaryContainer
@@ -220,7 +214,7 @@ fun SetupWizardDialog(
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
                 }
@@ -380,207 +374,454 @@ private fun StepWelcome(
     isManualReconfig: Boolean = false
 ) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        // Hero Card mit Dokumenten Tresor Logo-Banner
+        // Hero Card mit Dokumenten Tresor Logo-Banner & Begrüßung
         Surface(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(16.dp)
             ) {
-                AppLogoBanner(
-                    iconHeight = 70.dp,
-                    fontSize = 18f,
-                    includeContainer = false,
-                    showTagline = true,
-                    tagline = "first private and smart document management system"
+                Text(
+                    text = if (isManualReconfig) "App-Konfiguration deines Dokumenten-Tresors" else "Willkommen in deinem Dokumenten-Tresor!",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center
                 )
 
                 Text(
-                    text = if (isManualReconfig) "App-Konfiguration deines Dokumenten-Tresors" else "Willkommen in deinem Dokumenten-Tresor!",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
+                    text = "myDocAnizer-Mobile – Deine persönliche, hochsichere Festung für Dokumente, Verträge, Rechnungen und sensible Unterlagen.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center
                 )
 
                 Text(
-                    text = "Schützt deine wichtigsten Dokumente, Verträge und Belege – 100% lokal auf deinem Smartphone ohne fremde Cloud.",
+                    text = "100% lokal auf deinem Smartphone: Alle Dokumente, Notizen und Metadaten werden ausschließlich auf diesem Gerät verarbeitet und verschlüsselt gespeichert – ganz ohne Cloud-Zwang, Werbetracking oder externe Server-Abhängigkeiten.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    fontSize = 11.sp
+                    textAlign = TextAlign.Center
                 )
             }
         }
 
         Text(
             text = "Deine Vorteile & Kernfunktionen im Überblick:",
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
 
-        // Feature 1: 100% Lokaler Datenschutz
+        // Feature 1: 100% Lokaler Datenschutz & DSGVO-Konform
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
-                modifier = Modifier.padding(10.dp),
+                modifier = Modifier.padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Surface(
-                    shape = CircleShape,
+                    shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    modifier = Modifier.size(38.dp)
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                    modifier = Modifier.size(64.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(22.dp)
+                        Image(
+                            painter = painterResource(id = R.drawable.icon_datensicherheit),
+                            contentDescription = "Datensicherheit Icon",
+                            modifier = Modifier.size(54.dp)
                         )
                     }
                 }
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
                         text = "100% Lokaler Datenschutz & DSGVO-Konform",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Keine Server-Übertragung. Alle Dokumente und Metadaten bleiben sicher verschlüsselt auf deinem Gerät.",
+                        text = "Keine Server-Übertragung, keine fremde Cloud und kein Datenabfluss. Deine Dokumente und privaten Daten verbleiben zu jedem Zeitpunkt streng isoliert auf deinem Smartphone. Alle Dateien werden im geschützten App-Speicher mit robuster On-Device Verschlüsselung gesichert.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "AES-256 On-Device",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = "Zero-Cloud Zwang",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        // Feature 2: Smarte On-Device KI & OCR
+        // Feature 2: Smarte On-Device KI & OCR-Texterkennung
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
-                modifier = Modifier.padding(10.dp),
+                modifier = Modifier.padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Surface(
-                    shape = CircleShape,
+                    shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
-                    modifier = Modifier.size(38.dp)
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
+                    modifier = Modifier.size(64.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Psychology,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(22.dp)
+                        Image(
+                            painter = painterResource(id = R.drawable.icon_ondevice_ai_agent_hq),
+                            contentDescription = "On-Device KI Icon",
+                            modifier = Modifier.size(54.dp)
                         )
                     }
                 }
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
-                        text = "Smarte On-Device KI & OCR",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
+                        text = "Smarte On-Device KI & OCR-Texterkennung",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Vollautomatische Texterkennung, Dokumenten-Gruppen und Frist-Erkennung ohne Internetverbindung.",
+                        text = "Autonome Dokumentenerkennung direkt auf deinem Mobilprozessor: Die integrierte OCR liest Absender, Rechnungsnummern, IBAN, Fälligkeiten und Beträge vollautomatisch aus. Du profitierst von intelligenten Vorschlägen für Ordner und Kategorien – komplett offline ohne Internetverbindung.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "Autonome OCR",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = "Frist- & Betragserkennung",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        // Feature 3: Strukturierte Ordner & Aktenplan
+        // Feature 3: Strukturierter Aktenplan & Intelligente Ordner
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
-                modifier = Modifier.padding(10.dp),
+                modifier = Modifier.padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Surface(
-                    shape = CircleShape,
+                    shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
-                    modifier = Modifier.size(38.dp)
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f)),
+                    modifier = Modifier.size(64.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.AccountTree,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.size(22.dp)
+                        Image(
+                            painter = painterResource(id = R.drawable.mydocanizer_icon_only),
+                            contentDescription = "myDocAnizer Icon",
+                            modifier = Modifier.size(54.dp)
                         )
                     }
                 }
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
-                        text = "Strukturierter Aktenplan & Ordner",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
+                        text = "Strukturierter Aktenplan & Intelligente Ordner",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Standardisierter Aktenplan nach deutschem Standard mit flexibler Ordner-Struktur und Volltext-Suche.",
+                        text = "Ordnung wie im Profi-Archiv: Nutze den bewährten Standard-Aktenplan nach deutschem Standard (Finanzen, Verträge, Steuern, Gesundheit, Privat) oder passe Ordner beliebig an. Mit dynamischen Zusatzfeldern, Status-Tags und blitzschneller Volltextsuche findest du jedes Dokument in Sekunden.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "DIN-Aktenplan",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = "Dynamische Zusatzfelder",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
 
         // Feature 4: 3-2-1 Datensicherheit & P2P-WLAN-Sync
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
-                modifier = Modifier.padding(10.dp),
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFF0284C7).copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, Color(0xFF0284C7).copy(alpha = 0.35f)),
+                    modifier = Modifier.size(64.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Image(
+                            painter = painterResource(id = R.drawable.icon_app_connect),
+                            contentDescription = "P2P WLAN Sync Icon",
+                            modifier = Modifier.size(54.dp)
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "3-2-1 Datensicherheit & P2P-WLAN-Sync",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Verbinde dein Smartphone nahtlos mit der myDocAnizer Desktop-Anwendung über dein lokales Heim-WLAN (Peer-to-Peer). Unterstützt die professionelle 3-2-1 Sicherungsstrategie: Exportiere verschlüsselte Backups auf USB-Sticks, SD-Karten oder dein eigenes privates Heim-NAS (WebDAV).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF0284C7).copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "Lokaler P2P-Sync",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0284C7),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = "NAS & USB-Backup",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Feature 5: Biometrischer Tresor-Schutz & Revisionssicheres Audit-Log
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                    modifier = Modifier.size(64.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = "Sicherheit & Audit Icon",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Biometrische Absicherung & Audit-Sicherheit",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Schütze deine vertraulichen Unterlagen vor neugierigen Blicken mit Fingerabdruck, Face Unlock oder Master-Passwort. Das integrierte lokale Audit-Protokoll dokumentiert alle Dateioperationen lückenlos, nachvollziehbar und manipulationssicher.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "Biometrie & PIN",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = "Revisionssicheres Audit",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Info Card / Datenübernahme & Backup Hinweis
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f),
+            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.45f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFF0284C7).copy(alpha = 0.15f),
-                    modifier = Modifier.size(38.dp)
+                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
+                    modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.Devices,
+                            imageVector = Icons.Default.SettingsBackupRestore,
                             contentDescription = null,
-                            tint = Color(0xFF0284C7),
-                            modifier = Modifier.size(22.dp)
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(26.dp)
                         )
                     }
                 }
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "3-2-1 Datensicherheit & P2P-WLAN-Sync",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
+                        text = "Bereits myDocAnizer-Nutzer? Schnelle Datenrettung",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Master-Master Synchronisation im heimischen WLAN mit PC sowie sichere USB- und NAS-Backups.",
+                        text = "Du wechselst das Smartphone oder besitzt bereits eine Datensicherung von deinem PC? Im nächsten Schritt kannst du dein verschlüsseltes Backup mit einem Klick vollständig einspielen.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -588,28 +829,29 @@ private fun StepWelcome(
             }
         }
 
-        // Info Card / Nächster Schritt Hinweis
+        // Orientierungs-Card / Nächster Schritt Hinweis
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.30f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
-                modifier = Modifier.padding(10.dp),
+                modifier = Modifier.padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Info,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(24.dp)
                 )
                 Text(
-                    text = "In den folgenden Schritten richten wir deinen Tresor optimal ein. Tippe auf 'Weiter', um deine Ansichtsebene zu wählen oder vorhandene Backups einzuspielen.",
+                    text = "In den folgenden Schritten richten wir deinen Tresor optimal ein: Ansichtsebene wählen, Scan-Parameter, KI-Optionen und Backup-Ziele konfigurieren. Tippe auf 'Weiter', um loszulegen.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }
@@ -926,7 +1168,7 @@ private fun StepIncomeExpenseConfig(
                 }
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = "Ein-&Ausgaben Erfassung aktivieren",
+                        text = "Finanz- & Belegerfassung aktivieren",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -1340,9 +1582,10 @@ private fun StepStorageLocation(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column {
             Text(
-                text = "Schritt 2: Speicherort & Namensgebung",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
+                text = "Speicherort & Namensgebung",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
             Text(
                 text = "Konfiguriere, wo deine gescannten Dokumente abgelegt und wie sie benannt werden.",
@@ -1787,9 +2030,10 @@ private fun StepScanCaptureAndTrigger(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = "Schritt 3: Scan-Modi, Stativ & Stapelverarbeitung",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold
+            text = "Scan-Modi, Stativ & Stapelverarbeitung",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
         )
         Text(
             text = "Passe die Kamera-Erfassung an deine Arbeitsweise an – von manuellen Einzelbelegen bis zum berührungsfreien Dauerscan ganzer Aktenordner.",
@@ -2115,9 +2359,10 @@ private fun StepQualityAndAutoColor(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column {
             Text(
-                text = "Schritt 4: Bildoptimierung & Farberkennung",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
+                text = "Bildoptimierung & Farberkennung",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
             Text(
                 text = "Automatische Entzerrung, Schärfekorrektur und intelligente Farberkennung.",
@@ -2305,9 +2550,10 @@ private fun StepLlmModelSelection(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Schritt 5: KI-Modellauswahl",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+                    text = "KI-Modellauswahl",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = "100% Offline direkt auf dem Gerät. Wähle dein bevorzugtes On-Device Modell:",
@@ -2535,9 +2781,10 @@ private fun StepLlmInferenceSettings(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Schritt 6: KI-Inferenz & Einstellungen",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+                    text = "KI-Inferenz & Leistungseinstellungen",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
                     text = "Präzision, Erkennungsfokus & Prozessornutzung steuern.",
@@ -2710,9 +2957,10 @@ private fun StepSecurityAndBiometrics(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Column {
             Text(
-                text = "Schritt 7: Sicherheit, Passkey & Tresor-Schutz",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
+                text = "Sicherheit, Passkey & Tresor-Schutz",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
             Text(
                 text = "Wähle dein bevorzugtes Sicherheitsverfahren für den verschlüsselten Dokumenten-Tresor.",
@@ -3029,9 +3277,10 @@ private fun StepBackupAndRecoveryStrategy(
     ) {
         Column {
             Text(
-                text = "Schritt 8: Backup & Ausfallsicherheit",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
+                text = "Backup & Ausfallsicherheit",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
             )
             Text(
                 text = "Schütze deine Unterlagen vor Geräteverlust, Brand und Katastrophen.",
