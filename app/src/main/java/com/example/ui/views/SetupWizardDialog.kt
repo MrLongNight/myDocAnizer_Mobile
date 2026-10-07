@@ -27,17 +27,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.credentials.CreatePasswordRequest
 import androidx.credentials.exceptions.CreateCredentialCancellationException
 import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import com.example.R
 import com.example.model.AppViewLevel
@@ -309,7 +318,11 @@ fun SetupWizardDialog(
                             showSkipDialog = true
                         }
                     }) {
-                        Text(if (isManualReconfig) "Schließen" else "Überspringen")
+                        Text(
+                            if (isManualReconfig) "Schließen"
+                            else if (safeStepIndex == 0) "Standard-Setup"
+                            else "Überspringen"
+                        )
                     }
                 }
 
@@ -350,6 +363,8 @@ fun SetupWizardDialog(
                     Text(
                         if (isLastStep) {
                             if (isManualReconfig) "Konfiguration speichern" else "Einrichtung abschließen"
+                        } else if (safeStepIndex == 0) {
+                            "Einrichtung starten"
                         } else "Weiter"
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -366,7 +381,7 @@ fun SetupWizardDialog(
 }
 
 /**
- * Schritt 1: Willkommens-Seite mit Dokumenten Tresor Branding & Übersicht
+ * Schritt 1: Willkommens-Seite mit myDocAnizer-Mobile Branding & Übersicht
  */
 @Composable
 private fun StepWelcome(
@@ -374,14 +389,13 @@ private fun StepWelcome(
     isManualReconfig: Boolean = false
 ) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(7.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        // Hero Card mit Dokumenten Tresor Logo-Banner
+        // Hero Card mit myDocAnizer Begrüßung (ohne Rahmen)
         Surface(
             shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.20f),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
@@ -390,7 +404,7 @@ private fun StepWelcome(
                 modifier = Modifier.padding(vertical = 8.dp, horizontal = 12.dp)
             ) {
                 Text(
-                    text = if (isManualReconfig) "App-Konfiguration deines Dokumenten-Tresors" else "Willkommen in deinem Dokumenten-Tresor!",
+                    text = if (isManualReconfig) "App-Konfiguration von myDocAnizer" else "Willkommen bei myDocAnizer",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -398,206 +412,273 @@ private fun StepWelcome(
                 )
 
                 Text(
-                    text = "Schützt deine wichtigsten Dokumente, Verträge und Belege – 100% lokal auf deinem Smartphone ohne fremde Cloud.",
+                    text = "Deine sichere App für Dokumente, Rechnungen und Verträge – mit automatischer Texterkennung und flexibler Datensicherung.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     fontSize = 11.5.sp
                 )
             }
         }
 
-        Text(
-            text = "Deine Vorteile & Kernfunktionen im Überblick:",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
+        // Feature-Blöcke im Zeitungsartikel-Stil: Text umfließt die Grafik dynamisch
+        val titleColor = MaterialTheme.colorScheme.onSurface
+        val bodyColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+        val text1 = remember(titleColor, bodyColor) {
+            buildAnnotatedString {
+                withStyle(
+                    SpanStyle(
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor,
+                        fontSize = 12.5.sp
+                    )
+                ) {
+                    append("Sicher & geschützt: ")
+                }
+                withStyle(
+                    SpanStyle(
+                        color = bodyColor,
+                        fontSize = 11.5.sp
+                    )
+                ) {
+                    append("Deine Dokumente gehören dir. Sie werden sicher verschlüsselt direkt auf deinem Smartphone gespeichert – ohne Schnüffelei oder ungefragte Datenweitergabe.")
+                }
+            }
+        }
+
+        FlowingArticleBlock(
+            iconRes = R.drawable.icon_datensicherheit,
+            iconDescription = "Sicher & geschützt",
+            iconWidth = 80.dp,
+            iconHeight = 80.dp,
+            iconAlignment = Alignment.Start,
+            text = text1
         )
 
-        // Feature 1: 100% Lokaler Datenschutz
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(vertical = 7.dp, horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    modifier = Modifier.size(50.dp)
+        val text2 = remember(titleColor, bodyColor) {
+            buildAnnotatedString {
+                withStyle(
+                    SpanStyle(
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor,
+                        fontSize = 12.5.sp
+                    )
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Image(
-                            painter = painterResource(id = R.drawable.icon_datensicherheit),
-                            contentDescription = "Datensicherheit",
-                            modifier = Modifier.size(44.dp)
-                        )
-                    }
+                    append("Automatische Belegerkennung: ")
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "100% Lokaler Datenschutz & DSGVO-Konform",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
+                withStyle(
+                    SpanStyle(
+                        color = bodyColor,
+                        fontSize = 11.5.sp
                     )
-                    Text(
-                        text = "Keine Server-Übertragung. Alle Dokumente und Metadaten bleiben sicher verschlüsselt auf deinem Gerät.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp
-                    )
+                ) {
+                    append("Die smarte Erkennung liest Rechnungen und Briefe direkt auf dem Handy. Wichtige Daten wie Beträge, Absender und Fristen werden sofort gefunden, ohne dass etwas ins Internet geschickt wird.")
                 }
             }
         }
 
-        // Feature 2: Smarte On-Device KI & OCR
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(vertical = 7.dp, horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
-                    modifier = Modifier.size(50.dp)
+        FlowingArticleBlock(
+            iconRes = R.drawable.icon_ondevice_ai_agent_hq,
+            iconDescription = "Automatische Belegerkennung",
+            iconWidth = 76.dp,
+            iconHeight = 76.dp,
+            iconAlignment = Alignment.End,
+            text = text2
+        )
+
+        val text3 = remember(titleColor, bodyColor) {
+            buildAnnotatedString {
+                withStyle(
+                    SpanStyle(
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor,
+                        fontSize = 12.5.sp
+                    )
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Image(
-                            painter = painterResource(id = R.drawable.icon_ondevice_ai_agent_hq),
-                            contentDescription = "On-Device KI",
-                            modifier = Modifier.size(44.dp)
-                        )
-                    }
+                    append("Übersichtliche Ordner: ")
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Smarte On-Device KI & OCR",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
+                withStyle(
+                    SpanStyle(
+                        color = bodyColor,
+                        fontSize = 11.5.sp
                     )
-                    Text(
-                        text = "Vollautomatische Texterkennung, Dokumenten-Gruppen und Frist-Erkennung ohne Internetverbindung.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp
-                    )
+                ) {
+                    append("Sortiere alles so, wie du es brauchst: mit praktischen Ordnern, eigenen Notizfeldern und einer schnellen Suche nach jedem Stichwort.")
                 }
             }
         }
 
-        // Feature 3: Strukturierte Ordner & Aktenplan
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(vertical = 7.dp, horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
-                    modifier = Modifier.size(50.dp)
+        FlowingArticleBlock(
+            iconRes = R.drawable.icon_ordnerstruktur,
+            iconDescription = "Übersichtliche Ordner",
+            iconWidth = 90.dp,
+            iconHeight = 90.dp,
+            iconAlignment = Alignment.Start,
+            text = text3
+        )
+
+        val text4 = remember(titleColor, bodyColor) {
+            buildAnnotatedString {
+                withStyle(
+                    SpanStyle(
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor,
+                        fontSize = 12.5.sp
+                    )
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Image(
-                            painter = painterResource(id = R.drawable.mydocanizer_icon_only),
-                            contentDescription = "myDocAnizer",
-                            modifier = Modifier.size(44.dp)
-                        )
-                    }
+                    append("Automatische Sicherung: ")
                 }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Strukturierter Aktenplan & Ordner",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
+                withStyle(
+                    SpanStyle(
+                        color = bodyColor,
+                        fontSize = 11.5.sp
                     )
-                    Text(
-                        text = "Standardisierter Aktenplan nach deutschem Standard mit flexibler Ordner-Struktur und Volltext-Suche.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp
-                    )
+                ) {
+                    append("Schütze dich vor Datenverlust: Gleiche deine Dokumente kabellos mit deinem Computer oder Tablet ab und erstelle verschlüsselte Sicherheitskopien (z. B. auf Google Drive oder auf USB-Sticks).")
                 }
             }
         }
 
-        // Feature 4: 3-2-1 Datensicherheit & P2P-WLAN-Sync
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(vertical = 7.dp, horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF0284C7).copy(alpha = 0.15f),
-                    modifier = Modifier.size(50.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Image(
-                            painter = painterResource(id = R.drawable.icon_app_connect),
-                            contentDescription = "P2P WLAN Sync",
-                            modifier = Modifier.size(44.dp)
-                        )
-                    }
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "3-2-1 Datensicherheit & P2P-WLAN-Sync",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Master-Master Synchronisation im heimischen WLAN mit PC sowie sichere USB- und NAS-Backups.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp
-                    )
-                }
-            }
-        }
+        FlowingArticleBlock(
+            iconRes = R.drawable.icon_app_connect,
+            iconDescription = "Automatische Sicherung",
+            iconWidth = 124.dp,
+            iconHeight = 84.dp,
+            iconAlignment = Alignment.End,
+            text = text4
+        )
+    }
+}
 
-        // Info Card / Nächster Schritt Hinweis
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-            modifier = Modifier.fillMaxWidth()
+/**
+ * Zeitungsartikel-Block: Text umfließt die Grafik dynamisch.
+ * Der Text beginnt neben dem Bild und läuft bei Überschreiten der Bildhöhe
+ * über die gesamte Breite unter dem Bild weiter (echter Textumfluss).
+ */
+@Composable
+private fun FlowingArticleBlock(
+    iconRes: Int,
+    iconDescription: String,
+    iconWidth: Dp,
+    iconHeight: Dp,
+    iconAlignment: Alignment.Horizontal,
+    text: AnnotatedString,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val textStyle = MaterialTheme.typography.bodySmall.copy(
+        fontSize = 11.5.sp,
+        lineHeight = 16.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(vertical = 6.dp, horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+            val totalWidthPx = constraints.maxWidth
+            val imageWidthPx = with(density) { iconWidth.roundToPx() }
+            val imageHeightPx = with(density) { iconHeight.roundToPx() }
+            val spacingPx = with(density) { 12.dp.roundToPx() }
+            val textBesideWidthPx = (totalWidthPx - imageWidthPx - spacingPx).coerceAtLeast(100)
+
+            val (textTop, textBottom) = remember(totalWidthPx, text, iconHeight) {
+                val layoutResult = textMeasurer.measure(
+                    text = text,
+                    style = textStyle,
+                    constraints = Constraints(maxWidth = textBesideWidthPx)
                 )
-                Text(
-                    text = "In den folgenden Schritten richten wir deinen Tresor optimal ein. Tippe auf 'Weiter', um deine Ansichtsebene zu wählen oder vorhandene Backups einzuspielen.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 11.sp
-                )
+
+                if (layoutResult.lineCount <= 1) {
+                    text to null
+                } else {
+                    val firstLineHeight = if (layoutResult.lineCount > 0) {
+                        layoutResult.getLineBottom(0) - layoutResult.getLineTop(0)
+                    } else 30f
+                    val maxBottom = imageHeightPx.toFloat() + (firstLineHeight * 0.35f)
+                    var lastLineBeside = -1
+                    for (i in 0 until layoutResult.lineCount) {
+                        val bottom = layoutResult.getLineBottom(i)
+                        if (bottom <= maxBottom) {
+                            lastLineBeside = i
+                        } else {
+                            break
+                        }
+                    }
+
+                    if (lastLineBeside >= layoutResult.lineCount - 1 || lastLineBeside < 0) {
+                        if (lastLineBeside < 0) {
+                            val splitOffset = layoutResult.getLineEnd(minOf(1, layoutResult.lineCount - 1), visibleEnd = true)
+                            var startIdx = splitOffset
+                            while (startIdx < text.length && (text.text[startIdx] == ' ' || text.text[startIdx] == '\n')) {
+                                startIdx++
+                            }
+                            text.subSequence(0, splitOffset) to (if (startIdx < text.length) text.subSequence(startIdx, text.length) else null)
+                        } else {
+                            text to null
+                        }
+                    } else {
+                        val splitOffset = layoutResult.getLineEnd(lastLineBeside, visibleEnd = true)
+                        var startIdx = splitOffset
+                        while (startIdx < text.length && (text.text[startIdx] == ' ' || text.text[startIdx] == '\n')) {
+                            startIdx++
+                        }
+                        val top = text.subSequence(0, splitOffset)
+                        val bottom = if (startIdx < text.length) text.subSequence(startIdx, text.length) else null
+                        top to bottom
+                    }
+                }
+            }
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (iconAlignment == Alignment.Start) {
+                        Image(
+                            painter = painterResource(id = iconRes),
+                            contentDescription = iconDescription,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(iconWidth, iconHeight)
+                        )
+                        Text(
+                            text = textTop ?: text,
+                            style = textStyle,
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        Text(
+                            text = textTop ?: text,
+                            style = textStyle,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Image(
+                            painter = painterResource(id = iconRes),
+                            contentDescription = iconDescription,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(iconWidth, iconHeight)
+                        )
+                    }
+                }
+
+                if (textBottom != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = textBottom,
+                        style = textStyle,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }
@@ -712,7 +793,7 @@ private fun StepViewModeAndRestore(
                         }
                     }
                     Text(
-                        text = "Fokussiert & einsteigerfreundlich: Speicherort, Kamera, automatische Farboptimierung, KI-Modell & 3-2-1 Backup.",
+                        text = "Fokussiert & einsteigerfreundlich: Speicherort, Kamera, automatische Farboptimierung, lokaler KI Agent & 3-2-1 Backup.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1289,8 +1370,8 @@ private fun StepStorageLocation(
             text = {
                 Text(
                     text = "Dateimanager sortieren Ordner auf Android und PCs standardmäßig streng nach dem Alphabet.\n\n" +
-                            "• Feste Reihenfolge: Durch vorangestellte Nummern (z.B. '01_Wohnung', '02_Finanzen' oder 'A01_Verträge') behält deine Aktenstruktur immer eine feste, übersichtliche Ordnung.\n" +
-                            "• Standardisierter Aktenplan: Angelehnt an bewährte Dokumenten-Ordnungssysteme für schnelles Wiederfinden.",
+                            "• Feste Reihenfolge: Durch vorangestellte Nummern (z.B. '01_Wohnung', '02_Finanzen' oder 'A01_Verträge') behält deine Ordnerstruktur immer eine feste, übersichtliche Ordnung.\n" +
+                            "• Strukturierte Ordnerhierarchie: Schnelles und intuitives Wiederfinden deiner Dokumente.",
                     style = MaterialTheme.typography.bodySmall
                 )
             },
@@ -2269,7 +2350,7 @@ private fun StepLlmModelSelection(
         AlertDialog(
             onDismissRequest = { showAiInfoDialog = false },
             icon = { Icon(Icons.Default.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text("🧠 Lokale KI-Modelle", fontWeight = FontWeight.Bold) },
+            title = { Text("🧠 Lokaler KI Agent: Modelle", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
                     text = "myDocAnizer führt modernste Sprachmodelle direkt auf deinem Smartphone aus – komplett offline ohne jegliche Cloud-Abhängigkeit.\n\n" +
@@ -2295,19 +2376,19 @@ private fun StepLlmModelSelection(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "KI-Modellauswahl",
+                    text = "Lokaler KI Agent: Modellauswahl",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "100% Offline direkt auf dem Gerät. Wähle dein bevorzugtes On-Device Modell:",
+                    text = "100% Offline direkt auf dem Gerät. Wähle das bevorzugte On-Device Modell für den lokalen KI Agenten:",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             IconButton(onClick = { showAiInfoDialog = true }) {
-                Icon(Icons.Default.Info, contentDescription = "Info zu On-Device KI", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.Info, contentDescription = "Info zum lokalen KI Agenten", tint = MaterialTheme.colorScheme.primary)
             }
         }
 
@@ -2500,7 +2581,7 @@ private fun StepLlmInferenceSettings(
         AlertDialog(
             onDismissRequest = { showInferenceInfoDialog = false },
             icon = { Icon(Icons.Default.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text("⚙️ KI-Inferenz & Parameter", fontWeight = FontWeight.Bold) },
+            title = { Text("⚙️ Lokaler KI Agent: Inferenz & Parameter", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
                     text = "Passe die Inferenz an deine Prioritäten an:\n\n" +
@@ -2526,7 +2607,7 @@ private fun StepLlmInferenceSettings(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "KI-Inferenz & Leistungseinstellungen",
+                    text = "Lokaler KI Agent: Inferenz & Leistung",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -3995,7 +4076,7 @@ private fun StepBackupAndRecoveryStrategy(
                             Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 Text("🔒 Lokaler SQLCipher Voll-Spiegel", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                                 Text("• Der PC hält eine verschlüsselte 1:1 Kopie deiner Dokumente und der Datenbank auf der Festplatte vor.", style = MaterialTheme.typography.labelSmall)
-                                Text("• Volltextsuche (FTS5) und Aktenplan-Navigation blitzschnell am großen Monitor.", style = MaterialTheme.typography.labelSmall)
+                                Text("• Volltextsuche (FTS5) und Navigation in der Ordnerstruktur blitzschnell am großen Monitor.", style = MaterialTheme.typography.labelSmall)
                                 Text("• Verbindung erfolgt berührungslos und sekundenschnell per QR-Code Scan.", style = MaterialTheme.typography.labelSmall)
                             }
                         }
@@ -4420,7 +4501,7 @@ private fun StepReadySummary(
             Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Icon(Icons.Default.Psychology, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(16.dp))
-                    Text("🧠 Lokale On-Device KI & OCR", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Text("🧠 Lokaler KI Agent & OCR", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 }
                 Text("• Modell: ${activeModel?.name ?: "SmolLM2 135M"} (100% Offline & DSGVO-sicher)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("• Fokus: $promptFocusText • Inferenz: ${llmConfig.threadCount} CPU-Threads", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

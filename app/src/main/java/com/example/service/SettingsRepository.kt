@@ -16,6 +16,8 @@ import com.example.model.STANDARD_DASHBOARD_TEMPLATES
 import com.example.model.SavedChatSession
 import com.example.model.ScannerSettings
 import com.example.model.TemplateItem
+import com.example.service.LogLevel
+import com.example.service.AppAuditLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -476,6 +478,23 @@ class SettingsRepository(context: Context) {
     fun setDefaultReminderDaysBefore(days: Int) {
         prefs.edit().putInt("default_reminder_days_before", days).apply()
         _defaultReminderDaysBefore.value = days
+    }
+
+    // Diagnose-Logging Modus: "NONE", "STANDARD", "DEVELOP"
+    private val _logLevel = MutableStateFlow(
+        LogLevel.valueOf(prefs.getString("app_log_level", LogLevel.STANDARD.name) ?: LogLevel.STANDARD.name)
+    )
+    val logLevel: StateFlow<LogLevel> = _logLevel.asStateFlow()
+
+    init {
+        // Initialisiere den Logger mit dem gespeicherten Level
+        AppAuditLogger.currentLogLevel = _logLevel.value
+    }
+
+    fun setLogLevel(level: LogLevel) {
+        prefs.edit().putString("app_log_level", level.name).apply()
+        _logLevel.value = level
+        AppAuditLogger.currentLogLevel = level
     }
 
     // App-Ansicht: STANDARD (fokussiert), ADVANCED (erweitert), EXPERT (volle Kontrolle)

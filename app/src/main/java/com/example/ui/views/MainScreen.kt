@@ -354,7 +354,7 @@ fun MainScreen(
                                 ) {
                                     Icon(
                                         painter = painterResource(id = R.drawable.ic_ondevice_ai_agent),
-                                        contentDescription = "myDocAnizer KI-Assistent & Chatbot öffnen",
+                                        contentDescription = "myDocAnizer: Lokalen KI Agenten öffnen",
                                         modifier = Modifier.size(26.dp)
                                     )
                                 }

@@ -15,6 +15,12 @@ import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
+enum class LogLevel {
+    NONE,
+    STANDARD,
+    DEVELOP
+}
+
 enum class LogCategory(val label: String, val icon: String) {
     AI_INFERENCE("Lokale KI", "🤖"),
     OCR("Texterkennung", "👁️"),
@@ -102,6 +108,13 @@ object AppAuditLogger {
     private val scope = CoroutineScope(Dispatchers.IO)
     private val logLock = Any()
 
+    private var _currentLogLevel = LogLevel.STANDARD
+    var currentLogLevel: LogLevel
+        get() = _currentLogLevel
+        set(value) {
+            _currentLogLevel = value
+        }
+
     fun init(context: Context) {
         val appCtx = context.applicationContext
         synchronized(logLock) {
@@ -120,6 +133,8 @@ object AppAuditLogger {
         details: String = "",
         isError: Boolean = false
     ) {
+        if (_currentLogLevel == LogLevel.NONE) return
+
         val entry = AuditLogEntry(
             category = category,
             tag = tag,
@@ -212,11 +227,19 @@ object AppAuditLogger {
     }
 
     fun logOcr(charCount: Int, durationMs: Long, preview: String) {
+        if (_currentLogLevel == LogLevel.NONE) return
+        
+        val detailsStr = if (_currentLogLevel == LogLevel.DEVELOP) {
+            "Textprobe: \"${preview.replace("\n", " ").take(100)}\""
+        } else {
+            "Textinhalt ausgeblendet (Standard-Log-Modus)"
+        }
+
         log(
             category = LogCategory.OCR,
             tag = "MLKitOcr",
             message = "$charCount Zeichen erfolgreich offline erkannt (${durationMs}ms)",
-            details = "Textprobe: \"${preview.replace("\n", " ").take(100)}\""
+            details = detailsStr
         )
     }
 

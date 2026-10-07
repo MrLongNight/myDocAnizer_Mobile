@@ -22,6 +22,8 @@ import com.example.model.BatchItemStatus
 import com.example.service.*
 import com.example.BuildConfig
 import com.example.util.DebugDataSeeder
+import com.example.util.UserProfileSimulation
+import com.example.util.UserPersonaFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -1321,6 +1323,39 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val pdfSettings: StateFlow<PdfSettings> = settingsRepo.pdfSettings
     val scannerSettings: StateFlow<ScannerSettings> = settingsRepo.scannerSettings
 
+    // Diagnose-Logging
+    val logLevel = settingsRepo.logLevel
+    fun setLogLevel(level: LogLevel) = settingsRepo.setLogLevel(level)
+
+    // Integriertes Test- & Diagnose-System
+    private val diagnosticService = DiagnosticService(getApplication(), db)
+    val diagnosticSteps = diagnosticService.steps
+    val isStressTesting = diagnosticService.isStressTesting
+    val lastAnalysisReport = diagnosticService.lastAnalysisReport
+    val lastSimulationResult = diagnosticService.lastSimulationResult
+
+    fun runIntegrityCheck() = diagnosticService.runIntegrityCheck()
+
+    fun copyDiagnosticReport(context: android.content.Context) {
+        val report = diagnosticService.generateDiagnosticReport()
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("myDocAnizer Diagnostic", report)
+        clipboard.setPrimaryClip(clip)
+    }
+
+    suspend fun startStressSimulation(profile: UserProfileSimulation): SimulationResult {
+        return diagnosticService.startStressSimulation(profile)
+    }
+
+    fun copySimulationResult(context: android.content.Context, result: SimulationResult) {
+        val report = diagnosticService.formatSimulationReport(result)
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clip = android.content.ClipData.newPlainText("myDocAnizer Simulation", report)
+        clipboard.setPrimaryClip(clip)
+    }
+
+    suspend fun runFinanceWorkflowCheck(): String = diagnosticService.runFinanceWorkflowCheck()
+
     val availableOptimizationTemplates: List<com.example.model.OptimizationTemplate> = com.example.model.PRESET_OPTIMIZATION_TEMPLATES
 
     val activeOptimizationTemplate: StateFlow<com.example.model.OptimizationTemplate> = pdfSettings.map { settings ->
@@ -2179,10 +2214,19 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 // 1. Echte Offline ML-Kit OCR
                 val ocrText = OcrService.recognizeText(processed, "", "")
 
+                // Integrierte Diagnose für Routine 2
+                val analysisReport = StringBuilder()
+                analysisReport.append("OCR-Länge: ${ocrText.length} Zeichen\n")
+                analysisReport.append("Vorschau: ${ocrText.take(100).replace("\n", " ")}...\n")
+
                 // 2. Regelwerk VOR KI abgleichen
                 val matchedRule = ruleRepo.matchRule(ocrText)
-
+                
                 if (matchedRule != null) {
+                    analysisReport.append("REGEL-TREFFER: '${matchedRule.name}'\n")
+                    analysisReport.append("Zuweisung: ${matchedRule.targetMainCategoryId} -> ${matchedRule.targetSubCategoryId}")
+                    diagnosticService.updateLastAnalysisReport(analysisReport.toString())
+                    
                     // Fall A: Regel matcht! Vollautomatische Zuordnung und Speicherung
                     saveProcessedBitmapWithRule(
                         bitmap = processed,
@@ -2192,8 +2236,19 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         onComplete = onComplete
                     )
                 } else {
+                    analysisReport.append("KEIN REGEL-TREFFER. Starte KI-Klassifizierung...\n")
+                    
                     // Fall B: Keine passende Regel -> Lokale On-Device KI erzeugt Regel-Vorschlag
                     val aiClass = llmService.classifyDocumentText(ocrText)
+                    
+                    analysisReport.append("KI-ERGEBNIS:\n")
+                    analysisReport.append("- Sender: ${aiClass.sender}\n")
+                    analysisReport.append("- Typ: ${aiClass.docType}\n")
+                    analysisReport.append("- Konfidenz: ${(aiClass.confidence * 100).toInt()}%\n")
+                    analysisReport.append("- Begründung: ${aiClass.explanation.take(100)}...")
+                    
+                    diagnosticService.updateLastAnalysisReport(analysisReport.toString())
+
                     val smartKeywords = if (aiClass.smartKeywords.isNotEmpty()) {
                         aiClass.smartKeywords
                     } else {

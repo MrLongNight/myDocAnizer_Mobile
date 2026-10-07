@@ -19,6 +19,7 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 /**
  * DebugDataSeeder & DummyDataFactory
@@ -546,9 +547,117 @@ object DebugDataSeeder {
     }
 
     /**
+     * Erzeugt eine Liste realistischer Dokumente für eine gegebene Spezifikation (z.B. UserPersona).
+     */
+    suspend fun seedDocumentsForSpecs(
+        context: Context,
+        database: AppDatabase,
+        specs: List<MockDocumentSpec>,
+        sandboxSubdir: String = "persona_sandbox",
+        onProgress: ((Int, Int) -> Unit)? = null
+    ): List<DocumentEntity> = withContext(Dispatchers.IO) {
+        if (!BuildConfig.DEBUG) return@withContext emptyList()
+        val docDao = database.documentDao()
+        val targetDir = File(context.filesDir, sandboxSubdir).apply { mkdirs() }
+        val createdEntities = mutableListOf<DocumentEntity>()
+        val now = System.currentTimeMillis()
+
+        specs.forEachIndexed { index, spec ->
+            val uniqueSuffix = UUID.randomUUID().toString().take(6)
+            val pdfFile = File(targetDir, "doc_${index + 1}_$uniqueSuffix.pdf")
+            generateMockPdfFile(pdfFile, spec)
+
+            val creationTime = now - (spec.daysAgo * 86400000L)
+            val entity = DocumentEntity(
+                title = spec.title,
+                sender = spec.sender,
+                fileName = pdfFile.name,
+                filePath = pdfFile.absolutePath,
+                mainCategory = spec.mainCategory,
+                subCategory = spec.subCategory,
+                mainCategoryId = spec.mainCategoryId,
+                subCategoryId = spec.subCategoryId,
+                docType = spec.docType,
+                tags = spec.tags,
+                ocrText = spec.ocrText,
+                colorMode = "COLOR",
+                pageCount = 1,
+                fileSizeFormatted = "${(pdfFile.length() / 1024).coerceAtLeast(14)} KB",
+                isEncrypted = false,
+                isSynced = false,
+                createdAt = creationTime,
+                isDeleted = false,
+                deletedAt = null,
+                contractEndDate = spec.contractEndDate,
+                cancellationDeadline = spec.cancellationDeadline,
+                reminderDaysBefore = 14,
+                hasCalendarReminder = spec.cancellationDeadline != null,
+                calendarEventType = "BOTH",
+                reminderNotes = if (spec.cancellationDeadline != null) "Automatische Frist-Erinnerung" else "",
+                amount = spec.amount,
+                customIcon = spec.customIcon,
+                companyLogo = spec.companyLogo
+            )
+            docDao.insertDocument(entity)
+            createdEntities.add(entity)
+            onProgress?.invoke(index + 1, specs.size)
+        }
+        return@withContext createdEntities
+    }
+
+    /**
+     * Erzeugt eine große Menge an Testdokumenten für Stress- & Performance-Tests.
+     */
+    suspend fun seedMassDocuments(
+        context: Context,
+        database: AppDatabase,
+        count: Int
+    ): Int = withContext(Dispatchers.IO) {
+        if (!BuildConfig.DEBUG) return@withContext 0
+        
+        val docDao = database.documentDao()
+        val now = System.currentTimeMillis()
+        var created = 0
+        
+        for (i in 1..count) {
+            val spec = DUMMY_DOCUMENTS[i % DUMMY_DOCUMENTS.size]
+            val uniqueId = UUID.randomUUID().toString().take(6)
+            val title = "StressTest #$i - ${spec.sender} ($uniqueId)"
+            
+            val targetDir = File(context.filesDir, "stress_test_sandbox").apply { mkdirs() }
+            val pdfFile = File(targetDir, "stress_$i.pdf")
+            
+            // Minimal PDF für Speed
+            writeMinimalPdfFallback(pdfFile, spec.copy(title = title))
+            
+            val entity = DocumentEntity(
+                title = title,
+                sender = spec.sender,
+                fileName = pdfFile.name,
+                filePath = pdfFile.absolutePath,
+                mainCategory = spec.mainCategory,
+                subCategory = spec.subCategory,
+                mainCategoryId = spec.mainCategoryId,
+                subCategoryId = spec.subCategoryId,
+                docType = spec.docType,
+                tags = "#stresstest, ${spec.tags}",
+                ocrText = "STRESS TEST OCR CONTENT #$i\n" + spec.ocrText,
+                createdAt = now - (i * 1000L), // Millisekunden Abstand
+                isSynced = false,
+                amount = (10..500).random().toDouble(),
+                companyLogo = spec.companyLogo,
+                customIcon = spec.customIcon
+            )
+            docDao.insertDocument(entity)
+            created++
+        }
+        return@withContext created
+    }
+
+    /**
      * Erzeugt eine visuell ansprechende und standardkonforme PDF-Datei im Sandbox-Speicher.
      */
-    private fun generateMockPdfFile(targetFile: File, spec: MockDocumentSpec) {
+    fun generateMockPdfFile(targetFile: File, spec: MockDocumentSpec) {
         targetFile.parentFile?.mkdirs()
         try {
             val pdfDocument = PdfDocument()

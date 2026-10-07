@@ -800,7 +800,7 @@ private fun Step3ConfigureDestination(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Direkt per KI-Regeln einsortieren (Zero-Touch)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        "Gescannte Dokumente werden sofort per lokaler On-Device KI analysiert und nach deinen Schlagwort-Regeln automatisch in die passenden Zielordner verschoben.",
+                        "Gescannte Dokumente werden sofort vom lokalen KI Agenten analysiert und nach deinen Schlagwort-Regeln automatisch in die passenden Zielordner verschoben.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

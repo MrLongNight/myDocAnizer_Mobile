@@ -80,12 +80,12 @@ fun FirstStepsTourModal(
             TourStation(
                 stepNumber = 1,
                 title = "Dokumenten Tresor",
-                subtitle = "Private Aktenablage nach DIN-Aktenplan",
-                targetElementName = "DIN-Ordnerleiste & Dokumenten-Übersicht",
+                subtitle = "Dokumente und Ordnerstruktur",
+                targetElementName = "Ordnerleiste & Dokumenten-Übersicht",
                 clickPath = "1️⃣ Unten im Menü auf [Dokumente] tippen  ➔  2️⃣ Hauptkategorie wählen (z. B. A02 Finanzen)",
                 icon = Icons.Default.FolderSpecial,
-                badgeLabel = "Kernbereich • DIN 5008",
-                description = "Der Dokumenten Tresor ist das Herzstück von myDocAnizer. Hier werden alle gescannten und importierten Unterlagen nach einem 2-stufigen Aktenplan (Hauptkategorien A01–A08 & Unterkategorien) strukturiert archiviert.",
+                badgeLabel = "Kernbereich • Dokumenten-Tresor",
+                description = "Der Dokumenten Tresor ist der Bereich für deine Dokumente und Ordnerstruktur in myDocAnizer-Mobile. Hier werden alle gescannten und importierten Unterlagen in einer 2-stufigen Ordnerstruktur (Hauptkategorien A01–A08 & Unterkategorien) strukturiert archiviert.",
                 tips = listOf(
                     "Tippe auf einen Ordner, um sofort alle zugehörigen Dokumente zu filtern.",
                     "Nutze die Suchleiste: Sie durchsucht dank Offline-OCR jedes Wort im gesamten Text!",
@@ -117,23 +117,23 @@ fun FirstStepsTourModal(
             ),
             TourStation(
                 stepNumber = 3,
-                title = "onDevice AI-Agent & Regeln",
+                title = "Lokaler KI Agent & Regeln",
                 subtitle = "Automatische Erkennung zu 100% offline ohne Cloud",
-                targetElementName = "Lokale HuggingFace LLMs & Schlagwort-Regeln",
-                clickPath = "1️⃣ Unten im Menü auf [Einstellungen] tippen  ➔  2️⃣ Oben den Reiter [onDevice AI-Agent] wählen",
+                targetElementName = "Lokale On-Device Modelle & Schlagwort-Regeln",
+                clickPath = "1️⃣ Unten im Menü auf [Einstellungen] tippen  ➔  2️⃣ Oben den Reiter [Lokaler KI Agent] wählen",
                 icon = Icons.Default.Psychology,
-                badgeLabel = "Zero-Cloud AI-Agent",
-                description = "myDocAnizer liest Texte direkt auf deinem Prozessor. Es erkennt Absender (z.B. Deutsche Post, Telekom), Rechnungsbetrag, Fälligkeitsdatum und ordnet alles selbstständig zu.",
+                badgeLabel = "Lokaler KI Agent",
+                description = "Der lokale KI Agent analysiert Texte automatisiert direkt auf dem Mobilprozessor. Er erkennt Absender (z.B. Deutsche Post, Telekom), Rechnungsbetrag, Fälligkeitsdatum und ordnet Belege passend zu.",
                 tips = listOf(
                     "Kein Datenabfluss: Deine sensiblen Dokumente verlassen niemals dein Telefon!",
-                    "Wähle in den Einstellungen unter 'onDevice AI-Agent' aus verschiedenen quantisierten HuggingFace LLM-Modellen.",
+                    "Wähle in den Einstellungen unter 'Lokaler KI Agent' aus verschiedenen quantisierten On-Device Modellen.",
                     "Eigene Schlagwort-Regeln erfassen wiederkehrende Dokumente blitzschnell und deterministisch."
                 ),
                 targetTab = MainNavigationTab.SETTINGS,
                 targetSubTab = 5,
                 spotlightAlignment = Alignment.Center,
                 spotlightOffsetY = -60f,
-                actionButtonText = "AI-Agent & Regeln verstehen"
+                actionButtonText = "Lokalen KI Agenten verstehen"
             ),
             TourStation(
                 stepNumber = 4,

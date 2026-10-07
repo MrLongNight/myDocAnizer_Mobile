@@ -57,6 +57,7 @@ import com.example.model.TemplateItem
 import com.example.service.CloudSyncWorkerService
 import com.example.ui.DocAnizerViewModel
 import com.example.ui.components.TemplateEditorDialog
+import com.example.ui.views.settings.DeveloperSettingsTab
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -96,7 +97,7 @@ fun SettingsView(
         SettingsTabItem("Ein-&Ausgaben", Icons.Default.AccountBalanceWallet),
         SettingsTabItem("Gruppen & Zusatzfelder", Icons.Default.Label),
         SettingsTabItem("Dokumenten-Regeln", Icons.Default.FilterList),
-        SettingsTabItem("onDevice AI-Agent", Icons.Default.AutoAwesome),
+        SettingsTabItem("Lokaler KI Agent", Icons.Default.AutoAwesome),
         SettingsTabItem("Sicherheit", Icons.Default.Security),
         SettingsTabItem("WLAN & P2P Sync", Icons.Default.SyncAlt),
         SettingsTabItem("Cloud & Backup", Icons.Default.CloudSync),
@@ -3048,149 +3049,11 @@ fun HelpAndWizardsTab(viewModel: DocAnizerViewModel) {
                     Text("Wissenswertes & Datenschutz", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 }
                 Text(
-                    text = "• 100% Offline-Tresor: Alle Dokumente und OCR-Texte verbleiben verschlüsselt auf deinem Smartphone.\n• DIN 5008 Aktenplan: 2-stufige Ordnerhierarchie für maximale Übersicht.\n• Zero-Cloud KI: HuggingFace LLMs laufen lokal auf dem Handy-Prozessor ohne Cloud-Upload.",
+                    text = "• 100% Offline-Tresor: Alle Dokumente und OCR-Texte verbleiben verschlüsselt auf deinem Smartphone.\n• Dokumente und Ordnerstruktur: 2-stufige Ordnerhierarchie für maximale Übersicht.\n• Zero-Cloud KI: Lokaler KI Agent läuft direkt auf dem Mobilprozessor ohne Cloud-Upload.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        }
-    }
-}
-
-/**
- * TAB 11: Entwickler-Optionen & Debug-Werkzeuge
- */
-@Composable
-fun DeveloperSettingsTab(viewModel: DocAnizerViewModel) {
-    var showConfirmSeederDialog by remember { mutableStateOf(false) }
-    var isSeeding by remember { mutableStateOf(false) }
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val allDocs by viewModel.allDocuments.collectAsState()
-    val customFields by viewModel.customFields.collectAsState()
-    val hardwareInfo by viewModel.deviceHardwareInfo.collectAsState()
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // ENTWICKLER-TESTDATEN GENERATOR
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("card_debug_data_seeder"),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)),
-            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.tertiary),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Science,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Text(
-                        text = "Entwickler-Testdaten (Debug Data Seeder)",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                }
-
-                Text(
-                    text = "Generiert 12 realistische Testdokumente (Vodafone, Allianz, SWM, Deutsche Bank, Helios Klinikum, HUK-Coburg, BARMER, Telekom, Amazon etc.) mit echten Sandbox-PDF-Dateien, OCR-Texten, Rechnungsbeträgen, Fristen und Ordnerstrukturen für Emulator- und Funktionsprüfungen.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-
-                Button(
-                    onClick = { showConfirmSeederDialog = true },
-                    enabled = !isSeeding,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("btn_seed_debug_data")
-                ) {
-                    if (isSeeding) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = MaterialTheme.colorScheme.onTertiary,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Generiere Testdaten & PDFs...")
-                    } else {
-                        Icon(Icons.Default.Science, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Testdaten generieren", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // SYSTEM- & DATENBANK-STATUS
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    Text("Datenbank- & Sandbox-Status", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                }
-                Text("• Gespeicherte Dokumente: ${allDocs.size}", style = MaterialTheme.typography.bodySmall)
-                Text("• Definierte Zusatzfelder: ${customFields.size}", style = MaterialTheme.typography.bodySmall)
-                Text("• RAM & CPU: ${String.format(java.util.Locale.US, "%.1f", hardwareInfo.totalRamGb)} GB RAM (${hardwareInfo.cpuCores} Cores, ${hardwareInfo.performanceTier})", style = MaterialTheme.typography.bodySmall)
-            }
-        }
-
-        if (showConfirmSeederDialog) {
-            AlertDialog(
-                onDismissRequest = { showConfirmSeederDialog = false },
-                icon = { Icon(Icons.Default.Science, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary) },
-                title = { Text("Testdaten generieren?", fontWeight = FontWeight.Bold) },
-                text = {
-                    Text(
-                        "Möchtest du die lokale Datenbank leeren und 12 realistische Testdokumente (Finanzen, Verträge, Gesundheit, Wohnen) samt druckbaren PDF-Dateien und OCR-Texten neu anlegen?"
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            showConfirmSeederDialog = false
-                            isSeeding = true
-                            viewModel.seedDebugData { count ->
-                                isSeeding = false
-                                android.widget.Toast.makeText(
-                                    context,
-                                    "✅ $count Testdokumente & PDFs erfolgreich generiert!",
-                                    android.widget.Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
-                    ) {
-                        Text("Ja, Testdaten einspielen")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showConfirmSeederDialog = false }) {
-                        Text("Abbrechen")
-                    }
-                }
-            )
         }
     }
 }

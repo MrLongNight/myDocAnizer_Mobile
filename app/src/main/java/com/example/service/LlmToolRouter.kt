@@ -173,7 +173,7 @@ class LlmToolRouter(
         if (toolName == null && json.has("tool_call")) {
             val nested = json.optJSONObject("tool_call")
             if (nested != null) {
-                toolName = nested.optString("name", null)
+                toolName = nested.optString("name", "").takeIf { it.isNotBlank() }
                 argsObj = nested.optJSONObject("arguments")
             }
         }

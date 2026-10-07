@@ -671,10 +671,10 @@ data class PrefixStyleOption(
 val PREFIX_STYLE_OPTIONS: List<PrefixStyleOption> = listOf(
     PrefixStyleOption(
         id = "AKTENPLAN_STANDARD",
-        title = "Aktenplan-Standard (A01_ / B1.01-)",
+        title = "Standard-Ordnerstruktur (A01_ / B1.01-)",
         shortName = "A01_ / B1.01-",
         example = "A01_Versicherung / B1.01-Policen",
-        description = "Klassische 2-stufige myDocAnizer Systematik nach DIN-Aktenplan."
+        description = "Klassische 2-stufige myDocAnizer Dokumente und Ordnerstruktur."
     ),
     PrefixStyleOption(
         id = "NUMERIC_DOT",

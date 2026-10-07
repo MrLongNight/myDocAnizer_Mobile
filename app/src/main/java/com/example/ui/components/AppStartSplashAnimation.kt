@@ -59,6 +59,7 @@ object SplashSoundSynthesizer {
     private var wavFile: File? = null
     private val lock = Any()
     private var isPrecomputing = false
+    private var isStopped = false
     private var appContext: Context? = null
 
     fun precompute(context: Context) {
@@ -96,25 +97,25 @@ object SplashSoundSynthesizer {
             val byteRate = sampleRate * 2
 
             val header = ByteArray(44)
-            header[0] = 'R'.toByte() // RIFF
-            header[1] = 'I'.toByte()
-            header[2] = 'F'.toByte()
-            header[3] = 'F'.toByte()
+            header[0] = 'R'.code.toByte() // RIFF
+            header[1] = 'I'.code.toByte()
+            header[2] = 'F'.code.toByte()
+            header[3] = 'F'.code.toByte()
             
             header[4] = (totalDataLen and 0xff).toByte()
             header[5] = ((totalDataLen shr 8) and 0xff).toByte()
             header[6] = ((totalDataLen shr 16) and 0xff).toByte()
             header[7] = ((totalDataLen shr 24) and 0xff).toByte()
             
-            header[8] = 'W'.toByte() // WAVE
-            header[9] = 'A'.toByte()
-            header[10] = 'V'.toByte()
-            header[11] = 'E'.toByte()
+            header[8] = 'W'.code.toByte() // WAVE
+            header[9] = 'A'.code.toByte()
+            header[10] = 'V'.code.toByte()
+            header[11] = 'E'.code.toByte()
             
-            header[12] = 'f'.toByte() // fmt 
-            header[13] = 'm'.toByte()
-            header[14] = 't'.toByte()
-            header[15] = ' '.toByte()
+            header[12] = 'f'.code.toByte() // fmt 
+            header[13] = 'm'.code.toByte()
+            header[14] = 't'.code.toByte()
+            header[15] = ' '.code.toByte()
             
             header[16] = 16 // Sub-chunk size = 16
             header[17] = 0
@@ -143,10 +144,10 @@ object SplashSoundSynthesizer {
             header[34] = 16 // Bits per sample = 16
             header[35] = 0
             
-            header[36] = 'd'.toByte() // data
-            header[37] = 'a'.toByte()
-            header[38] = 't'.toByte()
-            header[39] = 'a'.toByte()
+            header[36] = 'd'.code.toByte() // data
+            header[37] = 'a'.code.toByte()
+            header[38] = 't'.code.toByte()
+            header[39] = 'a'.code.toByte()
             
             header[40] = (totalAudioLen and 0xff).toByte()
             header[41] = ((totalAudioLen shr 8) and 0xff).toByte()
@@ -257,10 +258,11 @@ object SplashSoundSynthesizer {
 
     fun playPremiumSplashSound(context: Context? = null) {
         val ctx = context?.applicationContext ?: appContext ?: return
+        synchronized(lock) {
+            isStopped = false
+        }
         Thread {
             try {
-                stop() // Laufenden Ton sofort beenden
-
                 val file = synchronized(lock) {
                     var f = wavFile
                     if (f == null || !f.exists()) {
@@ -277,38 +279,59 @@ object SplashSoundSynthesizer {
                 }
 
                 if (file != null && file.exists()) {
-                    val mp = MediaPlayer().apply {
-                        setDataSource(file.absolutePath)
-                        setAudioAttributes(
-                            AudioAttributes.Builder()
-                                .setUsage(AudioAttributes.USAGE_MEDIA)
-                                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                                .build()
-                        )
-                        setOnCompletionListener { player ->
-                            try {
-                                player.reset()
-                                player.release()
-                            } catch (_: Throwable) {}
-                            synchronized(lock) {
-                                if (mediaPlayer == player) mediaPlayer = null
-                            }
+                    var mp: MediaPlayer? = null
+                    try {
+                        synchronized(lock) {
+                            if (isStopped) return@Thread
                         }
-                        setOnErrorListener { player, _, _ ->
-                            try {
-                                player.reset()
-                                player.release()
-                            } catch (_: Throwable) {}
-                            synchronized(lock) {
-                                if (mediaPlayer == player) mediaPlayer = null
+                        mp = MediaPlayer().apply {
+                            setDataSource(file.absolutePath)
+                            setAudioAttributes(
+                                AudioAttributes.Builder()
+                                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                    .build()
+                            )
+                            setOnCompletionListener { player ->
+                                try {
+                                    player.reset()
+                                    player.release()
+                                } catch (_: Throwable) {}
+                                synchronized(lock) {
+                                    if (mediaPlayer == player) mediaPlayer = null
+                                }
                             }
-                            true
+                            setOnErrorListener { player, _, _ ->
+                                try {
+                                    player.reset()
+                                    player.release()
+                                } catch (_: Throwable) {}
+                                synchronized(lock) {
+                                    if (mediaPlayer == player) mediaPlayer = null
+                                }
+                                true
+                            }
+                            prepare()
                         }
-                        prepare()
-                        start()
-                    }
-                    synchronized(lock) {
-                        mediaPlayer = mp
+                        synchronized(lock) {
+                            if (isStopped) {
+                                try {
+                                    mp.reset()
+                                    mp.release()
+                                } catch (_: Throwable) {}
+                                return@Thread
+                            }
+                            mediaPlayer = mp
+                        }
+                        mp.start()
+                    } catch (_: Throwable) {
+                        try {
+                            mp?.reset()
+                            mp?.release()
+                        } catch (_: Throwable) {}
+                        synchronized(lock) {
+                            if (mediaPlayer == mp) mediaPlayer = null
+                        }
                     }
                 }
             } catch (_: Throwable) {
@@ -319,6 +342,7 @@ object SplashSoundSynthesizer {
 
     fun stop() {
         synchronized(lock) {
+            isStopped = true
             try {
                 mediaPlayer?.let { player ->
                     try {
@@ -338,11 +362,10 @@ object SplashSoundSynthesizer {
 }
 
 /**
- * Überarbeitete, edle 2.8-Sekunden High-Fidelity App-Start-Animation mit futuristischem Audio.
+ * Überarbeitete, ultra-schnelle High-Fidelity App-Start-Animation.
  * - Kontinuierlicher 0-100% Ladebalken & System-Telemetrie.
  * - Neon-Laser Scanner, orbital rotierende Cyber-Partikel.
- * - Dynamisches Hologramm-Logo (slow scale-up & floating 3D-rotation).
- * - Visueller Schockwellen-Impuls bei 82.5% Fortschritt, exakt synchron zum Audio-Chime!
+ * - Dynamisches Hologramm-Logo.
  * - Garantiert abbruchsicher mit Tap-to-Skip.
  */
 @Composable
@@ -351,7 +374,7 @@ fun AppStartSplashAnimation(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val totalDurationMs = 1100 // Schnelle, flüssige 1.1s für sofortiges Start-Feedback ohne Blockade
+    val totalDurationMs = 600 // Ultra-schnelle 600ms für sofortige Verfügbarkeit der App
     val progressAnim = remember { Animatable(0f) }
     val infiniteTransition = rememberInfiniteTransition(label = "splash_infinite")
 

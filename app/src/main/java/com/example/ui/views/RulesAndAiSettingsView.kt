@@ -82,7 +82,7 @@ fun DocumentRulesSettingsTab(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("AI-Agent Assistent", style = MaterialTheme.typography.labelMedium)
+                    Text("Lokaler KI Agent", style = MaterialTheme.typography.labelMedium)
                 }
                 Button(
                     onClick = { showCreateRuleDialog = true },
@@ -230,7 +230,7 @@ fun RulesListContent(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Lass dir vom lokalen KI-Assistenten passende Regeln vorschlagen oder erstelle manuell eigene Schlagwort-Filter für deine Dokumente.",
+                    text = "Lass dir vom lokalen KI Agenten passende Regeln vorschlagen oder erstelle manuell eigene Schlagwort-Filter für deine Dokumente.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center

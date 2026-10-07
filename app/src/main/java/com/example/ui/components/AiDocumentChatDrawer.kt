@@ -179,14 +179,14 @@ fun AiDocumentChatDrawer(
                             ) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_ondevice_ai_agent),
-                                    contentDescription = "On-Device KI Assistent",
+                                    contentDescription = "Lokaler KI Agent",
                                     tint = Color.White,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
                             Column {
                                 Text(
-                                    text = "myDocAnizer Assistent",
+                                    text = "Lokaler KI Agent",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1
