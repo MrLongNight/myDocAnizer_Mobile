@@ -177,11 +177,9 @@ fun AiDocumentChatDrawer(
                                     .background(Brush.linearGradient(listOf(cyanColor, lilaColor))),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_ondevice_ai_agent),
-                                    contentDescription = "Lokaler KI Agent",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(26.dp)
+                                LocalAiAgentIcon(
+                                    modifier = Modifier.size(28.dp),
+                                    tint = Color.White
                                 )
                             }
                             Column {
@@ -815,7 +813,7 @@ private fun DrawerChatBubble(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(painter = painterResource(id = R.drawable.ic_ondevice_ai_agent), contentDescription = null, tint = Color(0xFFA855F7), modifier = Modifier.size(20.dp))
+                            LocalAiAgentIcon(modifier = Modifier.size(20.dp), tint = Color(0xFFA855F7))
                             Text("Assistent", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFFA855F7))
                         }
                         IconButton(
@@ -988,7 +986,7 @@ private fun DrawerThinkingIndicator() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(painter = painterResource(id = R.drawable.ic_ondevice_ai_agent), contentDescription = null, tint = Color(0xFFA855F7), modifier = Modifier.size(20.dp))
+            LocalAiAgentIcon(modifier = Modifier.size(20.dp), tint = Color(0xFFA855F7))
             Text("Assistent denkt nach...", style = MaterialTheme.typography.labelSmall)
             Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF00E5FF).copy(alpha = alpha)))
         }

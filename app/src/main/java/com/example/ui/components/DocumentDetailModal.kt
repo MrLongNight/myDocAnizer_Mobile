@@ -306,11 +306,9 @@ fun DocumentDetailModal(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_ondevice_ai_agent),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                            com.example.ui.components.LocalAiAgentIcon(
+                                modifier = Modifier.size(22.dp),
+                                tint = MaterialTheme.colorScheme.primary
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(

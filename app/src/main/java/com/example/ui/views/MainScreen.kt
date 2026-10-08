@@ -344,18 +344,16 @@ fun MainScreen(
                                         viewModel.openAiChatDrawer()
                                     },
                                     containerColor = MaterialTheme.colorScheme.secondary,
-                                    contentColor = MaterialTheme.colorScheme.onSecondary,
+                                    contentColor = Color.Black,
                                     shape = CircleShape,
                                     elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
                                     modifier = Modifier
-                                        .size(58.dp)
+                                        .size(62.dp)
                                         .testTag("main_chatbot_fab")
                                 ) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_ondevice_ai_agent),
-                                        contentDescription = "myDocAnizer: Lokalen KI Agenten öffnen",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(44.dp)
+                                    com.example.ui.components.LocalAiAgentIcon(
+                                        modifier = Modifier.size(52.dp),
+                                        tint = Color.Black
                                     )
                                 }
                             }

@@ -72,10 +72,9 @@ fun DocumentRulesSettingsTab(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                     modifier = Modifier.height(34.dp).testTag("btn_open_ai_rule_generator")
                 ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_ondevice_ai_agent),
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
+                    com.example.ui.components.LocalAiAgentIcon(
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.width(3.dp))
                     Text("KI", style = MaterialTheme.typography.labelSmall)
