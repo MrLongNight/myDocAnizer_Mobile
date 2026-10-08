@@ -348,14 +348,14 @@ fun MainScreen(
                                     shape = CircleShape,
                                     elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
                                     modifier = Modifier
-                                        .size(54.dp)
+                                        .size(58.dp)
                                         .testTag("main_chatbot_fab")
                                 ) {
                                     Icon(
                                         painter = painterResource(id = R.drawable.ic_ondevice_ai_agent),
                                         contentDescription = "myDocAnizer: Lokalen KI Agenten öffnen",
                                         tint = Color.White,
-                                        modifier = Modifier.size(34.dp)
+                                        modifier = Modifier.size(44.dp)
                                     )
                                 }
                             }
@@ -379,14 +379,14 @@ fun MainScreen(
                                     shape = CircleShape,
                                     elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
                                     modifier = Modifier
-                                        .size(54.dp)
+                                        .size(58.dp)
                                         .testTag("main_add_fab")
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Add,
                                         contentDescription = if (isFabExpanded) "Menü schließen" else "Scan- & Importmenü öffnen",
                                         modifier = Modifier
-                                            .size(28.dp)
+                                            .size(30.dp)
                                             .graphicsLayer { rotationZ = fabRotation }
                                     )
                                 }

@@ -172,7 +172,7 @@ fun AiDocumentChatDrawer(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(32.dp)
+                                    .size(38.dp)
                                     .clip(CircleShape)
                                     .background(Brush.linearGradient(listOf(cyanColor, lilaColor))),
                                 contentAlignment = Alignment.Center
@@ -181,7 +181,7 @@ fun AiDocumentChatDrawer(
                                     painter = painterResource(id = R.drawable.ic_ondevice_ai_agent),
                                     contentDescription = "Lokaler KI Agent",
                                     tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
                             Column {
@@ -815,7 +815,7 @@ private fun DrawerChatBubble(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(painter = painterResource(id = R.drawable.ic_ondevice_ai_agent), contentDescription = null, tint = Color(0xFFA855F7), modifier = Modifier.size(14.dp))
+                            Icon(painter = painterResource(id = R.drawable.ic_ondevice_ai_agent), contentDescription = null, tint = Color(0xFFA855F7), modifier = Modifier.size(20.dp))
                             Text("Assistent", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFFA855F7))
                         }
                         IconButton(
@@ -988,7 +988,7 @@ private fun DrawerThinkingIndicator() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(painter = painterResource(id = R.drawable.ic_ondevice_ai_agent), contentDescription = null, tint = Color(0xFFA855F7), modifier = Modifier.size(15.dp))
+            Icon(painter = painterResource(id = R.drawable.ic_ondevice_ai_agent), contentDescription = null, tint = Color(0xFFA855F7), modifier = Modifier.size(20.dp))
             Text("Assistent denkt nach...", style = MaterialTheme.typography.labelSmall)
             Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF00E5FF).copy(alpha = alpha)))
         }

@@ -5,146 +5,146 @@
     android:viewportWidth="512"
     android:viewportHeight="512">
 
-    <!-- Smartphone Outer Frame -->
+    <!-- Smartphone Outer Frame (Bold & Prominent) -->
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M 178,44 L 334,44 A 42,42 0 0,1 376,86 L 376,426 A 42,42 0 0,1 334,468 L 178,468 A 42,42 0 0,1 136,426 L 136,86 A 42,42 0 0,1 178,44 Z" />
+        android:pathData="M 166,32 L 346,32 A 44,44 0 0,1 390,76 L 390,436 A 44,44 0 0,1 346,480 L 166,480 A 44,44 0 0,1 122,436 L 122,76 A 44,44 0 0,1 166,32 Z" />
 
     <!-- Top Speaker Notch -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M 226,66 L 286,66 A 6,6 0 0,1 292,72 L 292,72 A 6,6 0 0,1 286,78 L 226,78 A 6,6 0 0,1 220,72 L 220,72 A 6,6 0 0,1 226,66 Z" />
+        android:pathData="M 220,56 L 292,56 A 7,7 0 0,1 299,63 L 299,63 A 7,7 0 0,1 292,70 L 220,70 A 7,7 0 0,1 213,63 L 213,63 A 7,7 0 0,1 220,56 Z" />
 
     <!-- Left Circuit Traces -->
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M 160,224 L 116,186 L 72,186" />
+        android:pathData="M 150,222 L 102,182 L 56,182" />
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M 160,256 L 126,256 L 96,280 L 72,280" />
+        android:pathData="M 150,256 L 112,256 L 80,282 L 56,282" />
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M 160,288 L 116,358 L 72,358" />
+        android:pathData="M 150,290 L 102,364 L 56,364" />
 
-    <!-- Left Circular Nodes -->
+    <!-- Left Circular Nodes (Bigger, Hollow Rings) -->
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
-        android:pathData="M 52,168 A 18,18 0 1,1 51.99,168 Z" />
+        android:pathData="M 36,162 A 20,20 0 1,1 35.99,162 Z" />
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
-        android:pathData="M 52,262 A 18,18 0 1,1 51.99,262 Z" />
+        android:pathData="M 36,262 A 20,20 0 1,1 35.99,262 Z" />
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
-        android:pathData="M 52,340 A 18,18 0 1,1 51.99,340 Z" />
+        android:pathData="M 36,344 A 20,20 0 1,1 35.99,344 Z" />
 
     <!-- Right Circuit Traces -->
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M 352,224 L 396,186 L 440,186" />
+        android:pathData="M 362,222 L 410,182 L 456,182" />
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M 352,256 L 386,256 L 416,280 L 440,280" />
+        android:pathData="M 362,256 L 400,256 L 432,282 L 456,282" />
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M 352,288 L 396,358 L 440,358" />
+        android:pathData="M 362,290 L 410,364 L 456,364" />
 
-    <!-- Right Circular Nodes -->
+    <!-- Right Circular Nodes (Bigger, Hollow Rings) -->
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
-        android:pathData="M 460,168 A 18,18 0 1,1 459.99,168 Z" />
+        android:pathData="M 476,162 A 20,20 0 1,1 475.99,162 Z" />
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
-        android:pathData="M 460,262 A 18,18 0 1,1 459.99,262 Z" />
+        android:pathData="M 476,262 A 20,20 0 1,1 475.99,262 Z" />
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
-        android:pathData="M 460,340 A 18,18 0 1,1 459.99,340 Z" />
+        android:pathData="M 476,344 A 20,20 0 1,1 475.99,344 Z" />
 
     <!-- Top Pins -->
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="12"
+        android:strokeWidth="14"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
-        android:pathData="M 226,192 L 226,164 M 256,192 L 256,164 M 286,192 L 286,164" />
+        android:pathData="M 224,188 L 224,156 M 256,188 L 256,156 M 288,188 L 288,156" />
 
     <!-- Bottom Pins -->
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="12"
+        android:strokeWidth="14"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
-        android:pathData="M 226,320 L 226,348 M 256,320 L 256,348 M 286,320 L 286,348" />
+        android:pathData="M 224,324 L 224,356 M 256,324 L 256,356 M 288,324 L 288,356" />
 
     <!-- Left Pins -->
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="12"
+        android:strokeWidth="14"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
-        android:pathData="M 192,224 L 164,224 M 192,256 L 164,256 M 192,288 L 164,288" />
+        android:pathData="M 188,222 L 156,222 M 188,256 L 156,256 M 188,290 L 156,290" />
 
     <!-- Right Pins -->
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="12"
+        android:strokeWidth="14"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
-        android:pathData="M 320,224 L 348,224 M 320,256 L 348,256 M 320,288 L 348,288" />
+        android:pathData="M 324,222 L 356,222 M 324,256 L 356,256 M 324,290 L 356,290" />
 
-    <!-- Center AI Chip Body -->
+    <!-- Center AI Chip Body (Larger & Centered) -->
     <path
         android:strokeColor="#FFFFFFFF"
-        android:strokeWidth="16"
+        android:strokeWidth="18"
         android:fillColor="#00000000"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M 210,192 L 302,192 A 18,18 0 0,1 320,210 L 320,302 A 18,18 0 0,1 302,320 L 210,320 A 18,18 0 0,1 192,302 L 192,210 A 18,18 0 0,1 210,192 Z" />
+        android:pathData="M 208,188 L 304,188 A 20,20 0 0,1 324,208 L 324,304 A 20,20 0 0,1 304,324 L 208,324 A 20,20 0 0,1 188,304 L 188,208 A 20,20 0 0,1 208,188 Z" />
 
-    <!-- AI Text -->
+    <!-- Bold, Large AI Text -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M 214,284 L 230,228 L 244,228 L 260,284 L 246,284 L 242,268 L 224,268 L 220,284 Z M 227,255 L 238,255 L 233,238 Z" />
+        android:pathData="M 212,286 L 228,226 L 244,226 L 260,286 L 245,286 L 241,269 L 222,269 L 218,286 Z M 226,255 L 237,255 L 232,237 Z" />
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M 272,228 L 286,228 L 286,284 L 272,284 Z" />
+        android:pathData="M 272,226 L 287,226 L 287,286 L 272,286 Z" />
 </vector>
