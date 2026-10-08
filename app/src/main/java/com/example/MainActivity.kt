@@ -30,6 +30,7 @@ open class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         try {
             com.example.service.AppAuditLogger.init(this)
+            com.example.ui.components.SplashSoundSynthesizer.precompute(this)
         } catch (t: Throwable) {
             android.util.Log.e("MainActivity", "AuditLogger init failed: ${t.message}")
         }

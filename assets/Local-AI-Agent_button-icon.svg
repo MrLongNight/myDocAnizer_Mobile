@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Smartphone Outer Frame -->
+    <rect x="136" y="44" width="240" height="424" rx="42" ry="42" />
+    
+    <!-- Top Speaker Notch -->
+    <rect x="220" y="66" width="72" height="12" rx="6" ry="6" fill="currentColor" stroke="none" />
+    
+    <!-- Left Circuit Traces -->
+    <path d="M 160 224 L 116 186 L 72 186" />
+    <path d="M 160 256 L 126 256 L 96 280 L 72 280" />
+    <path d="M 160 288 L 116 358 L 72 358" />
+    
+    <!-- Left Circular Nodes -->
+    <circle cx="52" cy="186" r="18" />
+    <circle cx="52" cy="280" r="18" />
+    <circle cx="52" cy="358" r="18" />
+    
+    <!-- Right Circuit Traces -->
+    <path d="M 352 224 L 396 186 L 440 186" />
+    <path d="M 352 256 L 386 256 L 416 280 L 440 280" />
+    <path d="M 352 288 L 396 358 L 440 358" />
+    
+    <!-- Right Circular Nodes -->
+    <circle cx="460" cy="186" r="18" />
+    <circle cx="460" cy="280" r="18" />
+    <circle cx="460" cy="358" r="18" />
+    
+    <!-- Top Pins -->
+    <line x1="226" y1="192" x2="226" y2="164" stroke-width="12" />
+    <line x1="256" y1="192" x2="256" y2="164" stroke-width="12" />
+    <line x1="286" y1="192" x2="286" y2="164" stroke-width="12" />
+    
+    <!-- Bottom Pins -->
+    <line x1="226" y1="320" x2="226" y2="348" stroke-width="12" />
+    <line x1="256" y1="320" x2="256" y2="348" stroke-width="12" />
+    <line x1="286" y1="320" x2="286" y2="348" stroke-width="12" />
+    
+    <!-- Left Pins -->
+    <line x1="192" y1="224" x2="164" y2="224" stroke-width="12" />
+    <line x1="192" y1="256" x2="164" y2="256" stroke-width="12" />
+    <line x1="192" y1="288" x2="164" y2="288" stroke-width="12" />
+    
+    <!-- Right Pins -->
+    <line x1="320" y1="224" x2="348" y2="224" stroke-width="12" />
+    <line x1="320" y1="256" x2="348" y2="256" stroke-width="12" />
+    <line x1="320" y1="288" x2="348" y2="288" stroke-width="12" />
+    
+    <!-- Center AI Chip Body -->
+    <rect x="192" y="192" width="128" height="128" rx="18" ry="18" stroke-width="16" />
+    
+    <!-- AI Text -->
+    <path d="M 214 284 L 230 228 L 244 228 L 260 284 L 246 284 L 242 268 L 224 268 L 220 284 Z M 227 255 L 238 255 L 233 238 Z" fill="currentColor" stroke="none" />
+    <rect x="272" y="228" width="14" height="56" fill="currentColor" stroke="none" />
+</svg>

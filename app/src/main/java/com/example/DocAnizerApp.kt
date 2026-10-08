@@ -14,6 +14,9 @@ class DocAnizerApp : Application() {
         super.onCreate()
         try {
             AppAuditLogger.init(this)
+            try {
+                com.example.ui.components.SplashSoundSynthesizer.precompute(this)
+            } catch (_: Throwable) {}
             
             // Globaler Crash-Guard & Logging für maximale Stabilität
             val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()

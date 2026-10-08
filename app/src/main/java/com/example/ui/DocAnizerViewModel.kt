@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.model.DocTypeItem
 import com.example.model.DocumentEntity
+import com.example.model.PendingRuleSuggestion
 import com.example.model.ChatMessage
 import com.example.model.SavedChatSession
 import com.example.model.LlmUndoAction
@@ -44,6 +45,15 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val biometricAuthManager = BiometricAuthManager(application)
     val passkeyAuthManager = PasskeyAuthManager(application)
     val p2pSyncManager = P2pSyncManager(application, db)
+
+    // Domain Managers
+    val dmsManager = DmsManager(application, documentDao, customFieldDao, ruleRepo, settingsRepo, llmService, viewModelScope) {
+        incrementScannedDocumentCount()
+    }
+    val financeManager = FinanceManager(financeDao, settingsRepo, viewModelScope) {
+        triggerRatingPromptOnSuccess()
+    }
+    val syncManager = SyncManager(p2pSyncManager, settingsRepo, viewModelScope)
 
     init {
         AppAuditLogger.init(application)
@@ -281,183 +291,48 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         _directOpenReconciliation.value = open
     }
 
-    // Bargeld-Transaktionen & Kontoauszüge
-    val cashTransactions: StateFlow<List<com.example.model.CashTransactionEntity>> = financeDao.getAllCashTransactions()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Delegated to FinanceManager
+    val cashTransactions: StateFlow<List<com.example.model.CashTransactionEntity>> = financeManager.cashTransactions
+    val bankStatementEntries: StateFlow<List<com.example.model.BankStatementEntryEntity>> = financeManager.bankStatementEntries
+    fun addCashTransaction(tx: com.example.model.CashTransactionEntity) = financeManager.addCashTransaction(tx)
+    fun updateCashTransaction(tx: com.example.model.CashTransactionEntity) = financeManager.updateCashTransaction(tx)
+    fun deleteCashTransaction(id: String) = financeManager.deleteCashTransaction(id)
+    fun importBankStatementEntries(entries: List<com.example.model.BankStatementEntryEntity>, onComplete: ((Int) -> Unit)? = null) = financeManager.importBankStatementEntries(entries, onComplete)
+    fun importDemoBankStatement(monthKey: String, onComplete: ((Int) -> Unit)? = null) = financeManager.importDemoBankStatement(monthKey, onComplete)
+    fun deleteBankStatementEntry(id: String) = financeManager.deleteBankStatementEntry(id)
+    fun clearBankStatementEntries() = financeManager.clearBankStatementEntries()
+    suspend fun importBankStatementEntriesSync(entries: List<com.example.model.BankStatementEntryEntity>): Int = financeManager.importBankStatementEntriesSync(entries)
 
-    val bankStatementEntries: StateFlow<List<com.example.model.BankStatementEntryEntity>> = financeDao.getAllBankStatementEntries()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Delegated to DmsManager (Custom Fields)
+    fun addCustomField(field: com.example.model.CustomFieldEntity) = dmsManager.addCustomField(field)
+    suspend fun addCustomFieldSync(field: com.example.model.CustomFieldEntity): Boolean = dmsManager.addCustomFieldSync(field)
+    fun updateCustomField(field: com.example.model.CustomFieldEntity) = dmsManager.updateCustomField(field)
+    suspend fun updateCustomFieldSync(field: com.example.model.CustomFieldEntity): Boolean = dmsManager.updateCustomFieldSync(field)
+    fun deleteCustomField(fieldId: String) = dmsManager.deleteCustomField(fieldId)
+    fun setDocumentCustomFieldValue(documentId: Long, customFieldId: String, value: String) = dmsManager.setDocumentCustomFieldValue(documentId, customFieldId, value)
 
-    fun addCashTransaction(tx: com.example.model.CashTransactionEntity) {
-        viewModelScope.launch(Dispatchers.IO) {
-            financeDao.insertCashTransaction(tx)
-            withContext(Dispatchers.Main) {
-                triggerRatingPromptOnSuccess()
-            }
-        }
-    }
+    // Delegated to SyncManager (P2P Sync)
+    val p2pPairedDevices: StateFlow<List<com.example.model.PairedDevice>> = syncManager.p2pPairedDevices
+    val p2pServerStatus: StateFlow<com.example.model.P2pServerStatus> = syncManager.p2pServerStatus
+    val p2pHostPairingPin: StateFlow<String?> = syncManager.p2pHostPairingPin
+    val p2pPendingPairingRequests: StateFlow<List<com.example.model.IncomingPairingRequest>> = syncManager.p2pPendingPairingRequests
+    val p2pSyncProgress: StateFlow<com.example.model.P2pSyncProgressState> = syncManager.p2pSyncProgress
+    val p2pActiveConflicts: StateFlow<List<com.example.model.SyncConflict>> = syncManager.p2pActiveConflicts
+    val p2pSyncHistory: StateFlow<List<com.example.model.P2pSyncLog>> = syncManager.p2pSyncHistory
+    val p2pLocalDeviceName: StateFlow<String> = syncManager.p2pLocalDeviceName
 
-    fun updateCashTransaction(tx: com.example.model.CashTransactionEntity) {
-        viewModelScope.launch(Dispatchers.IO) {
-            financeDao.updateCashTransaction(tx)
-        }
-    }
-
-    fun deleteCashTransaction(id: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            financeDao.deleteCashTransactionById(id)
-        }
-    }
-
-    suspend fun importBankStatementEntriesSync(entries: List<com.example.model.BankStatementEntryEntity>): Int {
-        val existing = financeDao.getAllBankStatementEntriesList()
-        val existingKeys = existing.map { "${it.date}_${it.amount}_${it.bookingText.trim().lowercase()}" }.toSet()
-        val newEntries = entries.filter {
-            val key = "${it.date}_${it.amount}_${it.bookingText.trim().lowercase()}"
-            !existingKeys.contains(key)
-        }
-        if (newEntries.isNotEmpty()) {
-            financeDao.insertBankStatementEntries(newEntries)
-        }
-        return newEntries.size
-    }
-
-    fun importBankStatementEntries(entries: List<com.example.model.BankStatementEntryEntity>, onComplete: ((Int) -> Unit)? = null) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val insertedCount = importBankStatementEntriesSync(entries)
-            withContext(Dispatchers.Main) {
-                onComplete?.invoke(insertedCount)
-            }
-        }
-    }
-
-    fun importDemoBankStatement(monthKey: String, onComplete: ((Int) -> Unit)? = null) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val demoEntries = com.example.service.BankStatementParserService.generateDemoStatement(monthKey)
-            val insertedCount = importBankStatementEntriesSync(demoEntries)
-            withContext(Dispatchers.Main) {
-                onComplete?.invoke(insertedCount)
-            }
-        }
-    }
-
-    fun deleteBankStatementEntry(id: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            financeDao.deleteBankStatementEntryById(id)
-        }
-    }
-
-    fun clearBankStatementEntries() {
-        viewModelScope.launch(Dispatchers.IO) {
-            financeDao.clearAllBankStatementEntries()
-        }
-    }
-
-    suspend fun addCustomFieldSync(field: com.example.model.CustomFieldEntity): Boolean {
-        val existing = customFieldDao.getAllCustomFieldsList()
-        // Nur eindeutige Feldbezeichnungen erlauben
-        if (existing.any { it.name.trim().equals(field.name.trim(), ignoreCase = true) }) {
-            return false
-        }
-        customFieldDao.insertCustomField(field)
-        return true
-    }
-
-    fun addCustomField(field: com.example.model.CustomFieldEntity) {
-        viewModelScope.launch(Dispatchers.IO) {
-            addCustomFieldSync(field)
-        }
-    }
-
-    suspend fun updateCustomFieldSync(field: com.example.model.CustomFieldEntity): Boolean {
-        val existing = customFieldDao.getAllCustomFieldsList()
-        // Nur eindeutige Feldbezeichnungen erlauben
-        if (existing.any { it.id != field.id && it.name.trim().equals(field.name.trim(), ignoreCase = true) }) {
-            return false
-        }
-        customFieldDao.updateCustomField(field)
-        return true
-    }
-
-    fun updateCustomField(field: com.example.model.CustomFieldEntity) {
-        viewModelScope.launch(Dispatchers.IO) {
-            updateCustomFieldSync(field)
-        }
-    }
-
-    fun deleteCustomField(fieldId: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            customFieldDao.deleteCustomFieldById(fieldId)
-        }
-    }
-
-    fun setDocumentCustomFieldValue(documentId: Long, customFieldId: String, value: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            if (value.isBlank()) {
-                customFieldDao.deleteFieldValue(documentId, customFieldId)
-            } else {
-                customFieldDao.insertOrUpdateFieldValue(
-                    com.example.model.DocumentCustomFieldValueEntity(
-                        documentId = documentId,
-                        customFieldId = customFieldId,
-                        fieldValue = value
-                    )
-                )
-            }
-        }
-    }
-
-    // Lokaler WLAN / P2P Master-Master Sync
-    val p2pPairedDevices: StateFlow<List<com.example.model.PairedDevice>> = p2pSyncManager.pairedDevices
-    val p2pServerStatus: StateFlow<com.example.model.P2pServerStatus> = p2pSyncManager.serverStatus
-    val p2pHostPairingPin: StateFlow<String?> = p2pSyncManager.hostPairingPin
-    val p2pPendingPairingRequests: StateFlow<List<com.example.model.IncomingPairingRequest>> = p2pSyncManager.pendingPairingRequests
-    val p2pSyncProgress: StateFlow<com.example.model.P2pSyncProgressState> = p2pSyncManager.syncProgress
-    val p2pActiveConflicts: StateFlow<List<com.example.model.SyncConflict>> = p2pSyncManager.activeConflicts
-    val p2pSyncHistory: StateFlow<List<com.example.model.P2pSyncLog>> = p2pSyncManager.syncHistory
-    val p2pLocalDeviceName: StateFlow<String> = p2pSyncManager.localDeviceName
-
-    fun setP2pDeviceName(name: String) = p2pSyncManager.setLocalDeviceName(name)
-    fun startP2pServer() = p2pSyncManager.startServer()
-    fun stopP2pServer() = p2pSyncManager.stopServer()
-    fun startP2pHostPairingMode(): String = p2pSyncManager.startHostPairingMode()
-    fun stopP2pHostPairingMode() = p2pSyncManager.stopHostPairingMode()
-    fun authorizeP2pPairingRequest(requestId: String, allow: Boolean) = p2pSyncManager.authorizePairingRequest(requestId, allow)
-    fun pairWithP2pDevice(ip: String, port: Int = 8765, pin: String, onResult: (Result<PairingResult>) -> Unit) {
-        viewModelScope.launch {
-            val res = p2pSyncManager.pairWithRemoteDevice(ip, port, pin)
-            onResult(res)
-        }
-    }
-    fun syncWithP2pDevice(device: com.example.model.PairedDevice, onResult: (Result<com.example.model.P2pSyncLog>) -> Unit = {}) {
-        viewModelScope.launch {
-            val res = p2pSyncManager.syncWithDevice(device)
-            onResult(res)
-        }
-    }
-    fun syncAllP2pDevices(onComplete: (Int, Int) -> Unit = { _, _ -> }) {
-        p2pSyncManager.syncAllPairedDevices(onComplete)
-    }
-    fun resolveP2pConflict(conflict: com.example.model.SyncConflict, action: com.example.model.ConflictResolutionAction) {
-        viewModelScope.launch {
-            p2pSyncManager.resolveConflict(conflict, action)
-        }
-    }
-    fun removeP2pPairedDevice(deviceId: String) = p2pSyncManager.removePairedDevice(deviceId)
-
-    /**
-     * Koppelt die myDocAnizer-Desktop App über den vom Desktop-Monitor gescannten QR-Code
-     */
-    fun pairWithDesktopLightApp(qrJson: String, onResult: (Boolean, String) -> Unit) {
-        viewModelScope.launch {
-            val res = p2pSyncManager.pairWithDesktopQrData(qrJson)
-            res.onSuccess { dev ->
-                onResult(true, "✅ Erfolgreich mit Desktop '${dev.name}' verbunden!")
-            }.onFailure { err ->
-                onResult(false, "Verbindung fehlgeschlagen: ${err.localizedMessage ?: "Unbekannter Fehler"}")
-            }
-        }
-    }
+    fun setP2pDeviceName(name: String) = syncManager.setP2pDeviceName(name)
+    fun startP2pServer() = syncManager.startP2pServer()
+    fun stopP2pServer() = syncManager.stopP2pServer()
+    fun startP2pHostPairingMode(): String = syncManager.startP2pHostPairingMode()
+    fun stopP2pHostPairingMode() = syncManager.stopP2pHostPairingMode()
+    fun authorizeP2pPairingRequest(requestId: String, allow: Boolean) = syncManager.authorizeP2pPairingRequest(requestId, allow)
+    fun pairWithP2pDevice(ip: String, port: Int = 8765, pin: String, onResult: (Result<PairingResult>) -> Unit) = syncManager.pairWithP2pDevice(ip, port, pin, onResult)
+    fun syncWithP2pDevice(device: com.example.model.PairedDevice, onResult: (Result<com.example.model.P2pSyncLog>) -> Unit = {}) = syncManager.syncWithP2pDevice(device, onResult)
+    fun syncAllP2pDevices(onComplete: (Int, Int) -> Unit = { _, _ -> }) = syncManager.syncAllP2pDevices(onComplete)
+    fun resolveP2pConflict(conflict: com.example.model.SyncConflict, action: com.example.model.ConflictResolutionAction) = syncManager.resolveP2pConflict(conflict, action)
+    fun removeP2pPairedDevice(deviceId: String) = syncManager.removeP2pPairedDevice(deviceId)
+    fun pairWithDesktopLightApp(qrJson: String, onResult: (Boolean, String) -> Unit) = syncManager.pairWithDesktopLightApp(qrJson, onResult)
 
     // Biometrische Autorisierung (Fingerabdruck, Face Unlock, PIN)
     val biometricAuthEnabled: StateFlow<Boolean> = settingsRepo.biometricAuthEnabled
@@ -509,14 +384,13 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    // Deterministische Schlagwort-Regeln (vor KI)
-    val docRules: StateFlow<List<com.example.model.DocRule>> = ruleRepo.rules
-
-    fun addDocRule(rule: com.example.model.DocRule) = ruleRepo.addRule(rule)
-    fun addDocRules(rules: List<com.example.model.DocRule>) = ruleRepo.addRules(rules)
-    fun updateDocRule(rule: com.example.model.DocRule) = ruleRepo.updateRule(rule)
-    fun deleteDocRule(ruleId: String) = ruleRepo.deleteRule(ruleId)
-    fun toggleDocRule(ruleId: String, enabled: Boolean) = ruleRepo.toggleRule(ruleId, enabled)
+    // Delegated to DmsManager (Rules)
+    val docRules: StateFlow<List<com.example.model.DocRule>> = dmsManager.docRules
+    fun addDocRule(rule: com.example.model.DocRule) = dmsManager.addDocRule(rule)
+    fun addDocRules(rules: List<com.example.model.DocRule>) = dmsManager.addDocRules(rules)
+    fun updateDocRule(rule: com.example.model.DocRule) = dmsManager.updateDocRule(rule)
+    fun deleteDocRule(ruleId: String) = dmsManager.deleteDocRule(ruleId)
+    fun toggleDocRule(ruleId: String, enabled: Boolean) = dmsManager.toggleDocRule(ruleId, enabled)
 
     // On-Device LLM Modelle & Hardware-Telemetrie
     val availableModels: StateFlow<List<HuggingFaceModelInfo>> = llmService.availableModels
@@ -734,16 +608,16 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         _showPcCompanionWizard.value = false
     }
 
-    // Cloud-Sync & AES-256-GCM Zero-Knowledge Verschlüsselung
+    // Delegated to SyncManager (Cloud Sync)
     val syncState: StateFlow<CloudSyncWorkerService.SyncState> = CloudSyncWorkerService.syncState
-    val syncPasswordKey: StateFlow<String> = settingsRepo.syncPasswordKey
-    val autoCloudSyncEnabled: StateFlow<Boolean> = settingsRepo.autoCloudSyncEnabled
-    val lastSyncTimestamp: StateFlow<Long> = settingsRepo.lastSyncTimestamp
-    val cloudSyncConfig: StateFlow<com.example.model.CloudSyncConfig> = settingsRepo.cloudSyncConfig
+    val syncPasswordKey: StateFlow<String> = syncManager.syncPasswordKey
+    val autoCloudSyncEnabled: StateFlow<Boolean> = syncManager.autoCloudSyncEnabled
+    val lastSyncTimestamp: StateFlow<Long> = syncManager.lastSyncTimestamp
+    val cloudSyncConfig: StateFlow<com.example.model.CloudSyncConfig> = syncManager.cloudSyncConfig
 
-    fun setSyncPasswordKey(key: String) = settingsRepo.setSyncPasswordKey(key)
-    fun setAutoCloudSyncEnabled(enabled: Boolean) = settingsRepo.setAutoCloudSyncEnabled(enabled)
-    fun updateCloudSyncConfig(config: com.example.model.CloudSyncConfig) = settingsRepo.updateCloudSyncConfig(config)
+    fun setSyncPasswordKey(key: String) = syncManager.setSyncPasswordKey(key)
+    fun setAutoCloudSyncEnabled(enabled: Boolean) = syncManager.setAutoCloudSyncEnabled(enabled)
+    fun updateCloudSyncConfig(config: com.example.model.CloudSyncConfig) = syncManager.updateCloudSyncConfig(config)
 
     // Passkey & Tresor-Sicherheitsverfahren
     val securityMethod: StateFlow<String> = settingsRepo.securityMethod
@@ -752,16 +626,16 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     fun setSecurityMethod(method: String) = settingsRepo.setSecurityMethod(method)
     fun registerPasskey(name: String) = settingsRepo.registerPasskey(name)
 
-    // USB Backup-Sticks Verwaltung
-    val usbBackupDrives: StateFlow<List<com.example.model.UsbBackupDrive>> = settingsRepo.usbBackupDrives
+    // Delegated to SyncManager (USB Backup)
+    val usbBackupDrives: StateFlow<List<com.example.model.UsbBackupDrive>> = syncManager.usbBackupDrives
     val usbDrives: StateFlow<List<com.example.model.UsbBackupDrive>> get() = usbBackupDrives
-    fun addUsbBackupDrive(name: String, location: String) = settingsRepo.addUsbBackupDrive(name, location)
-    fun addUsbDrive(name: String, locationNote: String = "Zuhause") = settingsRepo.addUsbBackupDrive(name, locationNote)
-    fun deleteUsbBackupDrive(id: String) = settingsRepo.deleteUsbBackupDrive(id)
-    fun removeUsbDrive(id: String) = settingsRepo.deleteUsbBackupDrive(id)
+    fun addUsbBackupDrive(name: String, location: String) = syncManager.addUsbBackupDrive(name, location)
+    fun addUsbDrive(name: String, locationNote: String = "Zuhause") = syncManager.addUsbBackupDrive(name, locationNote)
+    fun deleteUsbBackupDrive(id: String) = syncManager.deleteUsbBackupDrive(id)
+    fun removeUsbDrive(id: String) = syncManager.deleteUsbBackupDrive(id)
     fun syncUsbDrive(id: String, onComplete: ((Boolean, String) -> Unit)? = null) {
         val count = allDocuments.value.size
-        settingsRepo.syncUsbDrive(id, count)
+        syncManager.syncUsbDrive(id, count)
         _pendingUsbSyncWarning.value = null
         onComplete?.invoke(true, "USB-Stick erfolgreich synchronisiert ($count Dokumente gesichert)")
     }
@@ -901,265 +775,22 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    // Stapel-Puffer & Post-Processing (Review-Inbox)
-    private val _batchQueue = MutableStateFlow<List<com.example.model.BatchDocumentItem>>(emptyList())
-    val batchQueue: StateFlow<List<com.example.model.BatchDocumentItem>> = _batchQueue.asStateFlow()
+    // Delegated to DmsManager (Batch Queue)
+    val batchQueue: StateFlow<List<com.example.model.BatchDocumentItem>> = dmsManager.batchQueue
+    val isProcessingBatchQueue: StateFlow<Boolean> = dmsManager.isProcessingBatchQueue
+    val pendingRuleSuggestion: StateFlow<com.example.model.PendingRuleSuggestion?> = dmsManager.pendingRuleSuggestion
+    val isBatchModeActive: StateFlow<Boolean> = dmsManager.isBatchModeActive
 
-    private val _isProcessingBatchQueue = MutableStateFlow(false)
-    val isProcessingBatchQueue: StateFlow<Boolean> = _isProcessingBatchQueue.asStateFlow()
+    fun setBatchModeActive(active: Boolean) = dmsManager.setBatchModeActive(active)
+    fun clearPendingRuleSuggestion() = dmsManager.clearPendingRuleSuggestion()
 
-    // Dialog für neuen Regel-Vorschlag, falls kein automatischer Treffer
-    private val _pendingRuleSuggestion = MutableStateFlow<com.example.model.PendingRuleSuggestion?>(null)
-    val pendingRuleSuggestion: StateFlow<com.example.model.PendingRuleSuggestion?> = _pendingRuleSuggestion.asStateFlow()
-
-    fun clearPendingRuleSuggestion() {
-        _pendingRuleSuggestion.value = null
-    }
-
-    private val _isBatchModeActive = MutableStateFlow(false)
-    val isBatchModeActive: StateFlow<Boolean> = _isBatchModeActive.asStateFlow()
-
-    fun setBatchModeActive(active: Boolean) {
-        _isBatchModeActive.value = active
-    }
-
-    /**
-     * Fügt ein frisch gescanntes Blatt/Dokument in den Stapel-Puffer (Inbox) ein.
-     * Bleibt im Status PENDING_PROCESS, damit der Nutzer am Stativ ohne jede Verzögerung
-     * Blatt für Blatt auflegen und erfassen kann.
-     */
-    fun enqueueBatchDocument(bitmap: Bitmap, onEnqueued: () -> Unit = {}) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val context = getApplication<Application>()
-            // Temporäres Bild speichern für spätere PDF-Erstellung
-            val tempFile = File(context.cacheDir, "batch_${UUID.randomUUID()}.jpg")
-            tempFile.outputStream().use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
-            }
-
-            val item = com.example.model.BatchDocumentItem(
-                tempImagePaths = listOf(tempFile.absolutePath),
-                status = com.example.model.BatchItemStatus.PENDING_PROCESS
-            )
-            _batchQueue.value = _batchQueue.value + item
-            withContext(Dispatchers.Main) { onEnqueued() }
-        }
-    }
-
-    /**
-     * Manuell getriggerte Stapelverarbeitung:
-     * Analysiert alle im Puffer liegenden Dokumente mit OCR, prüft die Regeln
-     * und zieht bei fehlender Regel den KI-Vorschlag hinzu.
-     */
-    fun processPendingBatchQueue(onComplete: (Int) -> Unit = {}) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _isProcessingBatchQueue.value = true
-            val itemsToProcess = _batchQueue.value.filter {
-                it.status == com.example.model.BatchItemStatus.PENDING_PROCESS ||
-                it.status == com.example.model.BatchItemStatus.WAITING_OCR
-            }
-
-            var processedCount = 0
-            for (item in itemsToProcess) {
-                // Status auf WAITING_OCR setzen
-                updateBatchItem(item.copy(status = com.example.model.BatchItemStatus.WAITING_OCR))
-
-                val bitmap = item.tempImagePaths.firstOrNull()?.let { path ->
-                    try {
-                        android.graphics.BitmapFactory.decodeFile(path)
-                    } catch (_: Throwable) {
-                        null
-                    }
-                }
-
-                if (bitmap != null) {
-                    try {
-                        // 1. Echte Offline ML-Kit OCR ausführen
-                        val ocrText = OcrService.recognizeText(bitmap, "", "")
-
-                        // 2. Regelwerk VOR KI abgleichen
-                        val matchedRule = ruleRepo.matchRule(ocrText)
-
-                        if (matchedRule != null) {
-                            // Eindeutiger Regeltreffer! 100% deterministisch ohne KI-Unsicherheit
-                            val updated = item.copy(
-                                ocrText = ocrText,
-                                status = com.example.model.BatchItemStatus.RULE_MATCHED,
-                                suggestedTitle = matchedRule.name,
-                                suggestedSender = matchedRule.detectedSender,
-                                suggestedMainCategoryId = matchedRule.targetMainCategoryId,
-                                suggestedSubCategoryId = matchedRule.targetSubCategoryId,
-                                suggestedDocType = matchedRule.targetDocType,
-                                suggestedTags = matchedRule.targetTags,
-                                matchedRuleName = matchedRule.name,
-                                aiReasoning = "Exakter Treffer durch Schlagwort-Regel '${matchedRule.name}'"
-                            )
-                            updateBatchItem(updated)
-                        } else {
-                            // 3. Fallback: On-Device KI zur Erkennung & Regelvorschlag
-                            val aiResult = llmService.classifyDocumentText(ocrText)
-                            val updated = item.copy(
-                                ocrText = ocrText,
-                                status = com.example.model.BatchItemStatus.AI_SUGGESTED,
-                                suggestedTitle = aiResult.title,
-                                suggestedSender = aiResult.sender,
-                                suggestedMainCategoryId = aiResult.mainCategoryId,
-                                suggestedSubCategoryId = aiResult.subCategoryId,
-                                suggestedDocType = aiResult.docType,
-                                suggestedTags = aiResult.tags,
-                                aiReasoning = aiResult.explanation
-                            )
-                            updateBatchItem(updated)
-                        }
-                        processedCount++
-                    } catch (t: Throwable) {
-                        Log.e("DocAnizerViewModel", "Fehler bei Stapelverarbeitung von Element ${item.id}: ${t.message}", t)
-                        val errorItem = item.copy(
-                            status = com.example.model.BatchItemStatus.ERROR,
-                            aiReasoning = "Verarbeitung fehlgeschlagen: ${t.localizedMessage ?: "Unbekannter Fehler"}"
-                        )
-                        updateBatchItem(errorItem)
-                    } finally {
-                        bitmap.recycle()
-                    }
-                } else {
-                    val errorItem = item.copy(
-                        status = com.example.model.BatchItemStatus.ERROR,
-                        aiReasoning = "Bilddatei konnte nicht geladen oder dekodiert werden"
-                    )
-                    updateBatchItem(errorItem)
-                }
-            }
-
-            _isProcessingBatchQueue.value = false
-            withContext(Dispatchers.Main) {
-                onComplete(processedCount)
-            }
-        }
-    }
-
-    fun updateBatchItem(item: com.example.model.BatchDocumentItem) {
-        _batchQueue.value = _batchQueue.value.map { if (it.id == item.id) item else it }
-    }
-
-    fun removeBatchItem(itemId: String) {
-        val found = _batchQueue.value.find { it.id == itemId }
-        found?.tempImagePaths?.forEach { File(it).delete() }
-        _batchQueue.value = _batchQueue.value.filter { it.id != itemId }
-    }
-
-    fun clearBatchQueue() {
-        _batchQueue.value.forEach { item ->
-            item.tempImagePaths.forEach { File(it).delete() }
-        }
-        _batchQueue.value = emptyList()
-    }
-
-    /**
-     * Speichert ein einzelnes freigegebenes Dokument aus dem Stapel-Puffer final im Archiv
-     */
-    private suspend fun commitBatchItemInternal(item: com.example.model.BatchDocumentItem): DocumentEntity? {
-        val context = getApplication<Application>()
-        val bitmaps = item.tempImagePaths.mapNotNull { path ->
-            try {
-                android.graphics.BitmapFactory.decodeFile(path)
-            } catch (_: Throwable) {
-                null
-            }
-        }
-        if (bitmaps.isEmpty()) return null
-
-        try {
-            val template = templates.value.find {
-                it.mainCategoryId == item.suggestedMainCategoryId && it.subCategoryId == item.suggestedSubCategoryId
-            } ?: templates.value.firstOrNull() ?: createFolderAndTemplate("Allgemein", "Dokumente", "A01", "B1.01")
-
-            val sender = item.suggestedSender.ifBlank { "Dokument" }
-            val title = item.suggestedTitle.ifBlank { template.subCategory }
-
-            val targetDir = DocumentStorageService.getDocumentDirectory(
-                context = context,
-                mainCategory = template.mainCategory,
-                subCategory = template.subCategory,
-                mainCategoryId = item.suggestedMainCategoryId.ifBlank { template.mainCategoryId },
-                subCategoryId = item.suggestedSubCategoryId.ifBlank { template.subCategoryId },
-                useIdPrefixes = pdfSettings.value.useIdPrefixes,
-                folderPrefixStyle = pdfSettings.value.folderPrefixStyle,
-                locationType = pdfSettings.value.baseStorageLocation,
-                customPath = pdfSettings.value.customStoragePath
-            )
-
-            val fileName = DocumentStorageService.formatFileName(sender, title)
-            val targetPdfFile = File(targetDir, fileName)
-            val tagsStr = item.suggestedTags.joinToString(", ")
-
-            DocumentStorageService.generatePdf(
-                context = context,
-                pageBitmaps = bitmaps,
-                ocrText = item.ocrText,
-                metadataTags = tagsStr,
-                docType = item.suggestedDocType.ifBlank { template.defaultDocType },
-                mainCategory = template.mainCategory,
-                subCategory = template.subCategory,
-                outputFile = targetPdfFile,
-                settings = pdfSettings.value
-            )
-
-            val docEntity = DocumentEntity(
-                title = title,
-                sender = sender,
-                fileName = fileName,
-                filePath = targetPdfFile.absolutePath,
-                mainCategory = template.mainCategory,
-                subCategory = template.subCategory,
-                mainCategoryId = item.suggestedMainCategoryId.ifBlank { template.mainCategoryId },
-                subCategoryId = item.suggestedSubCategoryId.ifBlank { template.subCategoryId },
-                docType = item.suggestedDocType.ifBlank { template.defaultDocType },
-                tags = tagsStr,
-                ocrText = item.ocrText,
-                colorMode = if (_isColorMode.value) "COLOR" else "BW",
-                pageCount = bitmaps.size,
-                fileSizeFormatted = "${targetPdfFile.length() / 1024} KB"
-            )
-            documentDao.insertDocument(docEntity)
-            incrementScannedDocumentCount()
-
-            // Aus dem Puffer entfernen
-            removeBatchItem(item.id)
-            return docEntity
-        } finally {
-            bitmaps.forEach { it.recycle() }
-        }
-    }
-
-    fun commitBatchItem(item: com.example.model.BatchDocumentItem, onFinished: (DocumentEntity) -> Unit = {}) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val docEntity = commitBatchItemInternal(item)
-            if (docEntity != null) {
-                withContext(Dispatchers.Main) {
-                    onFinished(docEntity)
-                }
-            }
-        }
-    }
-
-    /**
-     * Speichert ALLE Dokumente im Stapel-Puffer nacheinander ab (Bulk-Commit).
-     * Sequentielle Abarbeitung verhindert gleichzeitige Bitmap-Ladevorgänge und OOM-Crashes.
-     */
-    fun commitAllBatchItems(onComplete: (Int) -> Unit = {}) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val list = _batchQueue.value.toList()
-            var count = 0
-            for (item in list) {
-                val doc = commitBatchItemInternal(item)
-                if (doc != null) count++
-            }
-            withContext(Dispatchers.Main) {
-                onComplete(count)
-            }
-        }
-    }
+    fun enqueueBatchDocument(bitmap: Bitmap, onEnqueued: () -> Unit = {}) = dmsManager.enqueueBatchDocument(bitmap, onEnqueued)
+    fun processPendingBatchQueue(onComplete: (Int) -> Unit = {}) = dmsManager.processPendingBatchQueue(onComplete)
+    fun updateBatchItem(item: com.example.model.BatchDocumentItem) = dmsManager.updateBatchItem(item)
+    fun removeBatchItem(itemId: String) = dmsManager.removeBatchItem(itemId)
+    fun clearBatchQueue() = dmsManager.clearBatchQueue()
+    fun commitBatchItem(item: com.example.model.BatchDocumentItem, onFinished: (DocumentEntity) -> Unit = {}) = dmsManager.commitBatchItem(item, pdfSettings.value, _isColorMode.value, onFinished)
+    fun commitAllBatchItems(onComplete: (Int) -> Unit = {}) = dmsManager.commitAllBatchItems(pdfSettings.value, _isColorMode.value, onComplete)
 
     // KI-Regelgenerator: Erstellt DocRule-Vorschläge anhand von Benutzer-Eingaben
     suspend fun generateRulesWithAi(userDescription: String): List<com.example.model.DocRule> {
@@ -1193,9 +824,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val largeTouchTargets: StateFlow<Boolean> = settingsRepo.largeTouchTargets
     fun setLargeTouchTargets(enabled: Boolean) = settingsRepo.setLargeTouchTargets(enabled)
 
-    // Dokumente aus Room-Datenbank (Nur aktive, ungelöschte Dokumente)
-    val allDocuments: StateFlow<List<DocumentEntity>> = documentDao.getAllDocuments()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Delegated to DmsManager (Documents)
+    val allDocuments: StateFlow<List<DocumentEntity>> = dmsManager.allDocuments
 
     // Papierkorb / Mülleimer
     val trashDocuments: StateFlow<List<DocumentEntity>> = documentDao.getTrashDocuments()
@@ -1387,125 +1017,30 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         updateScannerSettings(scannerSettings.value.copy(triggerMode = mode))
     }
 
-    // Dynamische Vorlagen & Doc-Typen & Ordner-Struktur
-    val templates: StateFlow<List<TemplateItem>> = settingsRepo.templates
-    val docTypes: StateFlow<List<DocTypeItem>> = settingsRepo.docTypes
-    val importTemplates: StateFlow<List<ImportTemplateItem>> = settingsRepo.importTemplates
-    val folders: StateFlow<List<com.example.model.FolderCategoryItem>> = settingsRepo.folders
+    // Delegated to DmsManager (DMS & Folders)
+    val templates: StateFlow<List<TemplateItem>> = dmsManager.templates
+    val docTypes: StateFlow<List<DocTypeItem>> = dmsManager.docTypes
+    val importTemplates: StateFlow<List<ImportTemplateItem>> = dmsManager.importTemplates
+    val folders: StateFlow<List<com.example.model.FolderCategoryItem>> = dmsManager.folders
 
-    fun addDocType(docType: DocTypeItem) = settingsRepo.addDocType(docType)
-    fun updateDocType(docType: DocTypeItem) = settingsRepo.updateDocType(docType)
-    fun deleteDocType(docTypeId: String) = settingsRepo.deleteDocType(docTypeId)
+    fun addDocType(docType: DocTypeItem) = dmsManager.addDocType(docType)
+    fun updateDocType(docType: DocTypeItem) = dmsManager.updateDocType(docType)
+    fun deleteDocType(docTypeId: String) = dmsManager.deleteDocType(docTypeId)
 
-    fun addImportTemplate(item: ImportTemplateItem) = settingsRepo.addImportTemplate(item)
-    fun deleteImportTemplate(templateId: String) = settingsRepo.deleteImportTemplate(templateId)
+    fun addImportTemplate(item: ImportTemplateItem) = dmsManager.addImportTemplate(item)
+    fun deleteImportTemplate(templateId: String) = dmsManager.deleteImportTemplate(templateId)
 
-    // Ordner-Verwaltung (Ebene 1 Hauptkategorien & Ebene 2 Unterordner)
-    fun addMainFolder(name: String, prefixId: String = "") {
-        settingsRepo.addMainFolder(name, prefixId)
-    }
+    fun addMainFolder(name: String, prefixId: String = "") = dmsManager.addMainFolder(name, prefixId)
+    fun addSubFolder(mainFolderIdOrName: String, name: String, prefixId: String = "") = dmsManager.addSubFolder(mainFolderIdOrName, name, prefixId)
+    fun updateFolderIconAndLogo(mainCatNameOrId: String, subCatNameOrId: String? = null, iconName: String, companyLogo: String, customLogoUri: String = "") = dmsManager.updateFolderIconAndLogo(mainCatNameOrId, subCatNameOrId, iconName, companyLogo, customLogoUri)
 
-    fun addSubFolder(mainFolderIdOrName: String, name: String, prefixId: String = "") {
-        settingsRepo.addSubFolder(mainFolderIdOrName, name, prefixId)
-    }
+    fun renameMainFolder(oldName: String, newName: String) = dmsManager.renameMainFolder(oldName, newName)
+    fun renameSubFolder(mainCatName: String, oldSubName: String, newSubName: String) = dmsManager.renameSubFolder(mainCatName, oldSubName, newSubName)
+    fun deleteMainFolder(mainCatName: String, deleteDocuments: Boolean = false) = dmsManager.deleteMainFolder(mainCatName, deleteDocuments)
+    fun deleteSubFolder(mainCatName: String, subCatName: String, deleteDocuments: Boolean = false) = dmsManager.deleteSubFolder(mainCatName, subCatName, deleteDocuments)
+    fun saveFolderStructure(mainCat: String, mainPrefix: String, subCat: String, subPrefix: String) = dmsManager.saveFolderStructure(mainCat, mainPrefix, subCat, subPrefix)
 
-    fun updateFolderIconAndLogo(
-        mainCatNameOrId: String,
-        subCatNameOrId: String? = null,
-        iconName: String,
-        companyLogo: String,
-        customLogoUri: String = ""
-    ) {
-        settingsRepo.updateFolderIconAndLogo(
-            mainFolderId = mainCatNameOrId,
-            subFolderId = subCatNameOrId,
-            iconName = iconName,
-            companyLogo = companyLogo,
-            customLogoUri = customLogoUri
-        )
-    }
-
-    fun updateDocumentIconAndLogo(
-        documentId: Long,
-        customIcon: String,
-        companyLogo: String
-    ) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val doc = documentDao.getDocumentById(documentId) ?: return@launch
-            documentDao.updateDocument(doc.copy(customIcon = customIcon, companyLogo = companyLogo))
-        }
-    }
-
-    fun renameMainFolder(oldName: String, newName: String) {
-        val cleanNewName = newName.trim()
-        if (cleanNewName.isBlank() || oldName == cleanNewName) return
-        settingsRepo.renameMainFolder(oldName, cleanNewName)
-        viewModelScope.launch(Dispatchers.IO) {
-            val docs = documentDao.getAllDocuments().first()
-            docs.filter { it.mainCategory.equals(oldName, ignoreCase = true) }.forEach { doc ->
-                documentDao.updateDocument(doc.copy(mainCategory = cleanNewName))
-            }
-        }
-    }
-
-    fun renameSubFolder(mainCatName: String, oldSubName: String, newSubName: String) {
-        val cleanNewSubName = newSubName.trim()
-        if (cleanNewSubName.isBlank() || oldSubName == cleanNewSubName) return
-        settingsRepo.renameSubFolder(mainCatName, oldSubName, cleanNewSubName)
-        viewModelScope.launch(Dispatchers.IO) {
-            val docs = documentDao.getAllDocuments().first()
-            docs.filter {
-                it.mainCategory.equals(mainCatName, ignoreCase = true) &&
-                it.subCategory.equals(oldSubName, ignoreCase = true)
-            }.forEach { doc ->
-                documentDao.updateDocument(doc.copy(subCategory = cleanNewSubName))
-            }
-        }
-    }
-
-    fun deleteMainFolder(mainCatName: String, deleteDocuments: Boolean = false) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val docs = documentDao.getAllDocuments().first()
-            val docsToDelete = docs.filter { it.mainCategory.equals(mainCatName, ignoreCase = true) }
-            if (docsToDelete.isNotEmpty() && deleteDocuments) {
-                docsToDelete.forEach { doc ->
-                    try {
-                        val f = File(doc.filePath)
-                        if (f.exists()) f.delete()
-                    } catch (_: Exception) {}
-                    documentDao.deleteDocument(doc)
-                }
-            }
-            settingsRepo.deleteMainFolder(mainCatName)
-        }
-    }
-
-    fun deleteSubFolder(mainCatName: String, subCatName: String, deleteDocuments: Boolean = false) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val docs = documentDao.getAllDocuments().first()
-            val docsToDelete = docs.filter {
-                it.mainCategory.equals(mainCatName, ignoreCase = true) &&
-                it.subCategory.equals(subCatName, ignoreCase = true)
-            }
-            if (docsToDelete.isNotEmpty() && deleteDocuments) {
-                docsToDelete.forEach { doc ->
-                    try {
-                        val f = File(doc.filePath)
-                        if (f.exists()) f.delete()
-                    } catch (_: Exception) {}
-                    documentDao.deleteDocument(doc)
-                }
-            }
-            settingsRepo.deleteSubFolder(mainCatName, subCatName)
-        }
-    }
-
-    fun saveFolderStructure(mainCat: String, mainPrefix: String, subCat: String, subPrefix: String) {
-        addMainFolder(mainCat, mainPrefix)
-        if (subCat.isNotBlank()) {
-            addSubFolder(mainCat, subCat, subPrefix)
-        }
-    }
+    fun updateDocumentIconAndLogo(documentId: Long, customIcon: String, companyLogo: String) = dmsManager.updateDocumentIconAndLogo(documentId, customIcon, companyLogo)
 
     // Hardware-Taste Auslöser Event (Lautstärketasten)
     private val _hardwareTriggerEvent = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -2304,12 +1839,12 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     _isProcessingScan.value = false
 
                     // Dialog für Nutzer-Entscheidung anzeigen
-                    _pendingRuleSuggestion.value = com.example.model.PendingRuleSuggestion(
+                    dmsManager.setPendingRuleSuggestion(com.example.model.PendingRuleSuggestion(
                         bitmap = processed,
                         ocrText = ocrText,
                         suggestedRule = suggestedRule,
                         onSingleUseOnly = { finalRule ->
-                            _pendingRuleSuggestion.value = null
+                            dmsManager.clearPendingRuleSuggestion()
                             saveProcessedBitmapWithRule(
                                 bitmap = processed,
                                 ocrText = ocrText,
@@ -2319,7 +1854,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                             )
                         },
                         onSaveAsPermanentRule = { finalRule ->
-                            _pendingRuleSuggestion.value = null
+                            dmsManager.clearPendingRuleSuggestion()
                             // Regel dauerhaft im Repository speichern
                             addDocRule(finalRule)
                             saveProcessedBitmapWithRule(
@@ -2331,10 +1866,10 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                             )
                         },
                         onDismiss = {
-                            _pendingRuleSuggestion.value = null
+                            dmsManager.clearPendingRuleSuggestion()
                             runCatching { processed.recycle() }
                         }
-                    )
+                    ))
                 }
             } catch (e: Exception) {
                 Log.e("DocAnizerViewModel", "Fehler in saveSinglePageBulk: ${e.message}", e)

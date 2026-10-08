@@ -144,10 +144,10 @@ fun DmsExplorerView(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
-                // 1. Schlankes Suchfeld mit modernem "Suchen..." Platzhalter
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+                // 1. Mittig platziertes, schlankes Suchfeld mit integriertem Filter-Button (innenliegend)
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
                 ) {
                     OutlinedTextField(
                         value = searchQuery,
@@ -161,51 +161,58 @@ fun DmsExplorerView(
                             )
                         },
                         trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                    Icon(imageVector = Icons.Default.Close, contentDescription = "Löschen")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(end = 4.dp)
+                            ) {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = { viewModel.setSearchQuery("") },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Löschen",
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
+                                // Filter-Button mit Badge direkt innerhalb des Suchelements platziert
+                                BadgedBox(
+                                    badge = {
+                                        if (activeFilterCount > 0) {
+                                            Badge(containerColor = MaterialTheme.colorScheme.primary) {
+                                                Text("$activeFilterCount")
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    IconButton(
+                                        onClick = { currentFilterSheet = ActiveFilterSheet.SELECT_DIMENSION },
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .testTag("btn_open_filter_menu")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tune,
+                                            contentDescription = "Filter konfigurieren",
+                                            tint = if (activeFilterCount > 0)
+                                                MaterialTheme.colorScheme.primary
+                                            else
+                                                MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
                         },
                         shape = RoundedCornerShape(24.dp),
                         singleLine = true,
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .testTag("docanizer_search_input")
                     )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // Filter-Button mit Badge für aktive Filter
-                    BadgedBox(
-                        badge = {
-                            if (activeFilterCount > 0) {
-                                Badge(containerColor = MaterialTheme.colorScheme.primary) {
-                                    Text("$activeFilterCount")
-                                }
-                            }
-                        }
-                    ) {
-                        FilledTonalIconButton(
-                            onClick = { currentFilterSheet = ActiveFilterSheet.SELECT_DIMENSION },
-                            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = if (activeFilterCount > 0)
-                                    MaterialTheme.colorScheme.primaryContainer
-                                else
-                                    MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            modifier = Modifier.testTag("btn_open_filter_menu")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Tune,
-                                contentDescription = "Filter konfigurieren",
-                                tint = if (activeFilterCount > 0)
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
                 }
 
                 // 2. STATE OF THE ART DYNAMISCHE FILTER-LEISTE (Progressive Disclosure)

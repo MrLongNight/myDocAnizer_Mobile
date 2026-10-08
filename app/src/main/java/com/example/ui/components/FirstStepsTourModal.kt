@@ -130,7 +130,7 @@ fun FirstStepsTourModal(
                     "Eigene Schlagwort-Regeln erfassen wiederkehrende Dokumente blitzschnell und deterministisch."
                 ),
                 targetTab = MainNavigationTab.SETTINGS,
-                targetSubTab = 5,
+                targetSubTab = 1,
                 spotlightAlignment = Alignment.Center,
                 spotlightOffsetY = -60f,
                 actionButtonText = "Lokalen KI Agenten verstehen"
@@ -169,7 +169,7 @@ fun FirstStepsTourModal(
                     "AES-256 Backups auf Google Drive, USB-Stick oder lokales NAS sorgen für absolute Ausfallsicherheit."
                 ),
                 targetTab = MainNavigationTab.SETTINGS,
-                targetSubTab = 6,
+                targetSubTab = 3,
                 spotlightAlignment = Alignment.BottomCenter,
                 spotlightOffsetY = -120f,
                 actionButtonText = "Tour abschließen & Loslegen!"

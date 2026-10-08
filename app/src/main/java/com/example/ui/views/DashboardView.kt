@@ -45,6 +45,7 @@ import com.example.model.CustomDashboardWidget
 import com.example.model.DocumentEntity
 import com.example.model.ElementPeriodScope
 import com.example.ui.DocAnizerViewModel
+import com.example.ui.views.dashboard.*
 import com.example.widget.BargeldTrackerWidget
 import com.example.widget.BelegQuickScanWidget
 import java.io.File
@@ -531,179 +532,21 @@ fun DashboardView(
 
                         // STANDARD: KÜRZLICH HINZUGEFÜGTE DOKUMENTE
                         "STANDARD_RECENT_DOCS" -> {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            ) {
-                                Column {
-                                    if (isEditMode) {
-                                        WidgetEditModeHeader(
-                                            title = "Kürzlich hinzugefügt",
-                                            onMoveUp = { viewModel.moveDashboardWidgetUp("STANDARD_RECENT_DOCS") },
-                                            onMoveDown = { viewModel.moveDashboardWidgetDown("STANDARD_RECENT_DOCS") },
-                                            onHide = { viewModel.setShowRecentDocsWidget(false) }
-                                        )
-                                    }
-                                    Column(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.weight(1f),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.History,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                                Text(
-                                                    text = "Kürzlich hinzugefügte Dokumente",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-
-                                            TextButton(
-                                                onClick = {
-                                                    viewModel.setTargetNavigationTab("DOCANIZER")
-                                                },
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                            ) {
-                                                Text("Alle anzeigen", fontSize = 12.sp, maxLines = 1)
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(14.dp))
-                                            }
-                                        }
-
-                                        val recentDocs = remember(allDocuments) {
-                                            allDocuments.take(4)
-                                        }
-
-                                        if (recentDocs.isEmpty()) {
-                                            Text(
-                                                text = "Noch keine Dokumente vorhanden. Nutze den Scan- oder Import-Button, um dein erstes Dokument abzulegen.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        } else {
-                                            val df = SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY)
-                                            recentDocs.forEach { doc ->
-                                                Surface(
-                                                    shape = RoundedCornerShape(10.dp),
-                                                    color = MaterialTheme.colorScheme.surface,
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .clickable {
-                                                            viewModel.setTargetNavigationTab("DOCANIZER")
-                                                        }
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier.padding(10.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.SpaceBetween
-                                                    ) {
-                                                        Column(modifier = Modifier.weight(1f)) {
-                                                            Text(
-                                                                text = doc.title,
-                                                                style = MaterialTheme.typography.bodyMedium,
-                                                                fontWeight = FontWeight.SemiBold,
-                                                                maxLines = 1,
-                                                                overflow = TextOverflow.Ellipsis
-                                                            )
-                                                            Text(
-                                                                text = "${doc.mainCategory.ifBlank { "Allgemein" }} • ${df.format(Date(doc.createdAt))}",
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                            )
-                                                        }
-                                                        if ((doc.amount ?: 0.0) > 0) {
-                                                            Text(
-                                                                text = currencyFormat.format(doc.amount),
-                                                                style = MaterialTheme.typography.bodySmall,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = MaterialTheme.colorScheme.primary
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            DashboardRecentDocsWidget(
+                                viewModel = viewModel,
+                                isEditMode = isEditMode,
+                                allDocuments = allDocuments
+                            )
                         }
 
                         // STANDARD: SCHNELLAKTIONEN
                         "STANDARD_QUICK_ACTIONS" -> {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            ) {
-                                Column {
-                                    if (isEditMode) {
-                                        WidgetEditModeHeader(
-                                            title = "Schnellaktionen",
-                                            onMoveUp = { viewModel.moveDashboardWidgetUp("STANDARD_QUICK_ACTIONS") },
-                                            onMoveDown = { viewModel.moveDashboardWidgetDown("STANDARD_QUICK_ACTIONS") },
-                                            onHide = { viewModel.setShowQuickActionsWidget(false) }
-                                        )
-                                    }
-                                    Column(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Text(
-                                            text = "SCHNELLAKTIONEN",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            FilledTonalButton(
-                                                onClick = onNavigateToScan,
-                                                modifier = Modifier.weight(1f),
-                                                contentPadding = PaddingValues(vertical = 12.dp)
-                                            ) {
-                                                Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("Scannen", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                            }
-
-                                            FilledTonalButton(
-                                                onClick = onNavigateToImport,
-                                                modifier = Modifier.weight(1f),
-                                                contentPadding = PaddingValues(vertical = 12.dp)
-                                            ) {
-                                                Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("Importieren", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            DashboardActionShortcutsWidget(
+                                viewModel = viewModel,
+                                isEditMode = isEditMode,
+                                onNavigateToScan = onNavigateToScan,
+                                onNavigateToImport = onNavigateToImport
+                            )
                         }
 
                         // STANDARD: BELEG QUICK-SCAN WIDGET
@@ -1064,236 +907,36 @@ fun DashboardView(
 
                         // STANDARD: FINANZ- & AUSGABEN-VERLAUF
                         "STANDARD_FINANCE_CHART" -> {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            ) {
-                                Column {
-                                    if (isEditMode) {
-                                        WidgetEditModeHeader(
-                                            title = "Finanz- & Ausgaben-Verlauf",
-                                            onMoveUp = { viewModel.moveDashboardWidgetUp("STANDARD_FINANCE_CHART") },
-                                            onMoveDown = { viewModel.moveDashboardWidgetDown("STANDARD_FINANCE_CHART") },
-                                            onHide = { viewModel.setShowFinanceWidget(false) }
-                                        )
-                                    }
-                                    Column(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.BarChart,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFF10B981),
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                                Text(
-                                                    text = "Finanz- & Ausgaben-Verlauf",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                ElementPeriodScopeChip(
-                                                    currentScope = financeScope,
-                                                    onScopeChange = { viewModel.setElementPeriodScope("STANDARD_FINANCE_CHART", it) }
-                                                )
-
-                                                Text(
-                                                    text = currencyFormat.format(financeTotalAmount),
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFF10B981)
-                                                )
-                                            }
-                                        }
-
-                                        // Balkendiagramm
-                                        val monthlyBuckets = remember(financeDocs) {
-                                            calculateMonthlyAmounts(financeDocs)
-                                        }
-
-                                        ExpenseBarChart(
-                                            buckets = monthlyBuckets,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(120.dp)
-                                        )
-                                    }
-                                }
+                            if (showFinanceWidget) {
+                                DashboardFinanceOverviewWidget(
+                                    viewModel = viewModel,
+                                    isEditMode = isEditMode,
+                                    financeScope = financeScope,
+                                    financeDocs = financeDocs,
+                                    financeTotalAmount = financeTotalAmount,
+                                    calculateMonthlyAmounts = ::calculateMonthlyAmounts
+                                )
                             }
                         }
 
                         // STANDARD: AUSGABEN- & BELEG-CHECK (RECONCILIATION)
                         "STANDARD_RECONCILIATION" -> {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f))
-                            ) {
-                                Column {
-                                    if (isEditMode) {
-                                        WidgetEditModeHeader(
-                                            title = "Ausgaben- & Beleg-Check",
-                                            onMoveUp = { viewModel.moveDashboardWidgetUp("STANDARD_RECONCILIATION") },
-                                            onMoveDown = { viewModel.moveDashboardWidgetDown("STANDARD_RECONCILIATION") },
-                                            onHide = { viewModel.setShowReconciliationWidget(false) }
-                                        )
-                                    }
-                                    Column(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.SyncAlt,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.tertiary,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                                Text(
-                                                    text = "Ausgaben- & Beleg-Check",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-
-                                            Surface(
-                                                shape = RoundedCornerShape(6.dp),
-                                                color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
-                                            ) {
-                                                Text(
-                                                    text = "SELBSTKONTROLLE",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.tertiary,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                        }
-
-                                        Text(
-                                            text = "Gleicht Bargeld-Abhebungen mit manuell erfassten Bar-Belegen ab. Sieh sofort wohin dein Geld fließt und ob Quittungen fehlen.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-
-                                        Button(
-                                            onClick = { showReconciliationDialog = true },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
-                                        ) {
-                                            Icon(Icons.Default.SyncAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Bargeld- & Beleg-Check öffnen", fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
+                            if (showReconciliationWidget) {
+                                DashboardReconciliationWidget(
+                                    viewModel = viewModel,
+                                    isEditMode = isEditMode,
+                                    onOpenReconciliation = { showReconciliationDialog = true }
+                                )
                             }
                         }
 
                         // STANDARD: 3-2-1 DATENSICHERHEITS-SCORE
                         "STANDARD_SECURITY_SCORE" -> {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                            ) {
-                                Column {
-                                    if (isEditMode) {
-                                        WidgetEditModeHeader(
-                                            title = "3-2-1 Datensicherheits-Score",
-                                            onMoveUp = { viewModel.moveDashboardWidgetUp("STANDARD_SECURITY_SCORE") },
-                                            onMoveDown = { viewModel.moveDashboardWidgetDown("STANDARD_SECURITY_SCORE") },
-                                            onHide = { viewModel.setShowSecurityScoreWidget(false) }
-                                        )
-                                    }
-                                    Column(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.weight(1f),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Shield,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFF0284C7),
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                                Text(
-                                                    text = "3-2-1 Datensicherheits-Score",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-
-                                            val score = calculateSecurityScore(backupSyncHealth)
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = if (score >= 70) Color(0xFF10B981).copy(alpha = 0.15f) else Color(0xFFF59E0B).copy(alpha = 0.15f)
-                                            ) {
-                                                Text(
-                                                    text = "$score% GESCHÜTZT",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (score >= 70) Color(0xFF10B981) else Color(0xFFF59E0B),
-                                                    maxLines = 1,
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                                )
-                                            }
-                                        }
-
-                                        val syncedCount = (backupSyncHealth.totalConfiguredLocations - backupSyncHealth.unsyncedLocationsCount).coerceAtLeast(0)
-                                        Text(
-                                            text = "Lokale Hardware-Verschlüsselung (AES-256) aktiv. Konfigurierte Backup-Ziele: $syncedCount von ${backupSyncHealth.totalConfiguredLocations.coerceAtLeast(1)} gesichert.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
+                            DashboardSyncStatusWidget(
+                                viewModel = viewModel,
+                                isEditMode = isEditMode,
+                                backupSyncHealth = backupSyncHealth
+                            )
                         }
 
                         // STANDARD: SCHNELLNOTIZ / MERKZETTEL
@@ -1701,7 +1344,7 @@ private fun KpiStatCard(
 }
 
 @Composable
-private fun ExpenseBarChart(
+fun ExpenseBarChart(
     buckets: List<Pair<String, Double>>,
     modifier: Modifier = Modifier
 ) {

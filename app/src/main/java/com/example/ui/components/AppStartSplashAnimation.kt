@@ -71,7 +71,7 @@ object SplashSoundSynthesizer {
         }
         Thread {
             try {
-                val file = File(appCtx.cacheDir, "splash_sound_v7.wav")
+                val file = File(appCtx.cacheDir, "splash_sound_v8.wav")
                 if (!file.exists()) {
                     val data = generateSamples()
                     writeWavFile(file, data)
@@ -173,85 +173,76 @@ object SplashSoundSynthesizer {
 
     private fun generateSamples(): ShortArray {
         val sampleRate = 44100
-        val durationSeconds = 4.0
+        val durationSeconds = 2.4
         val numSamples = (durationSeconds * sampleRate).toInt()
         val data = ShortArray(numSamples)
-        val riseSamples = (3.3 * sampleRate).toInt()
+        val chimeStart = (1.30 * sampleRate).toInt()
 
-        for (globalIndex in 0 until numSamples) {
-            val t = globalIndex.toDouble() / sampleRate
+        for (i in 0 until numSamples) {
+            val t = i.toDouble() / sampleRate
+            var sample = 0.0
 
-            if (globalIndex < riseSamples) {
-                // Phase 1: Edler, warmer Ambient-Synth-Swell (Slow Choral Pad in C)
-                // Extrem beruhigend, tief und luxuriös, komplett ohne kreischende Frequenzen oder Sirenen-Sweeps
-                val progress = globalIndex.toDouble() / riseSamples
-
-                // Akkord-Noten (C3, G3, C4, E4) mit leichtem Detuning (Chorus-Effekt für klangliche Wärme)
-                val c3_1 = 130.81
-                val c3_2 = 131.31
-                val g3_1 = 196.00
-                val g3_2 = 196.50
-                val c4_1 = 261.63
-                val c4_2 = 262.13
-                val e4_1 = 329.63
-                val e4_2 = 330.13
-
-                val wave = 0.30 * kotlin.math.sin(2.0 * Math.PI * c3_1 * t) +
-                           0.15 * kotlin.math.sin(2.0 * Math.PI * c3_2 * t) +
-                           0.20 * kotlin.math.sin(2.0 * Math.PI * g3_1 * t) +
-                           0.10 * kotlin.math.sin(2.0 * Math.PI * g3_2 * t) +
-                           0.15 * kotlin.math.sin(2.0 * Math.PI * c4_1 * t) +
-                           0.05 * kotlin.math.sin(2.0 * Math.PI * c4_2 * t) +
-                           0.10 * kotlin.math.sin(2.0 * Math.PI * e4_1 * t) +
-                           0.05 * kotlin.math.sin(2.0 * Math.PI * e4_2 * t)
-
-                // Sehr langsames, entspanntes Atmen des Pads (1.2 Hz)
-                val breathing = 0.85 + 0.15 * kotlin.math.sin(2.0 * Math.PI * 1.2 * t)
-
-                // Sanfte Lautstärkekurve (Cosine-Swell von 0% auf 22%)
-                val envelope = (1.0 - kotlin.math.cos(Math.PI * progress)) * 0.5 * 0.22 * breathing
-                val mixedSample = wave * envelope
-
-                data[globalIndex] = (mixedSample.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
-            } else {
-                // Phase 2: Premium Glockenspiel-Akkord (3.3s bis 4.0s)
-                val localIndex = globalIndex - riseSamples
-                val tChime = localIndex.toDouble() / sampleRate
-
-                val f1 = 261.63  // C4 (Bass-Fundament)
-                val f2 = 523.25  // C5 (Glocken-Kern)
-                val f3 = 659.25  // E5 (Terz für Wärme)
-                val f4 = 783.99  // G5 (Quinte für Glanz)
-                val f5 = 987.77  // B5 (große Septime für Eleganz)
-                val f6 = 1174.66 // D6 (große None für Ätherik)
-
-                // Individuelle Abkling-Envelopes für physikalisch authentischen Klang
-                val decay1 = kotlin.math.exp(-2.2 * tChime) // Bass schwingt länger nach
-                val decay2 = kotlin.math.exp(-3.8 * tChime)
-                val decay3 = kotlin.math.exp(-4.8 * tChime)
-                val decay4 = kotlin.math.exp(-5.8 * tChime)
-                val decay5 = kotlin.math.exp(-6.8 * tChime)
-                val decay6 = kotlin.math.exp(-8.5 * tChime) // Hohe Obertöne klingen schnell ab
-
-                // Sanfter Attack-Swell am Schlagmoment (20ms), um harten digitalen Einschalt-Klick zu verhindern
-                val attack = (tChime / 0.02).coerceIn(0.0, 1.0)
-
-                // Akkord-Synthese (Major-9th)
-                val bellWave = 0.25 * kotlin.math.sin(2.0 * Math.PI * f1 * tChime) * decay1 +
-                               0.30 * kotlin.math.sin(2.0 * Math.PI * f2 * tChime) * decay2 +
-                               0.20 * kotlin.math.sin(2.0 * Math.PI * f3 * tChime) * decay3 +
-                               0.15 * kotlin.math.sin(2.0 * Math.PI * f4 * tChime) * decay4 +
-                               0.10 * kotlin.math.sin(2.0 * Math.PI * f5 * tChime) * decay5 +
-                               0.05 * kotlin.math.sin(2.0 * Math.PI * f6 * tChime) * decay6
-
-                // Zusätzlicher linearer Fade-Out ganz am Ende (letzte 100ms), um Knacksen zu vermeiden
-                val fadeTimeLeft = 4.0 - t
-                val endFade = if (fadeTimeLeft < 0.1) (fadeTimeLeft / 0.1).coerceIn(0.0, 1.0) else 1.0
-
-                val mixedSample = bellWave * attack * endFade * 0.75
-
-                data[globalIndex] = (mixedSample.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
+            // 1. Digitaler Tech-Power-Up Sweep (0.0s bis 0.5s)
+            if (t < 0.55) {
+                val pProgress = t / 0.55
+                val sweepFreq = 65.0 + 110.0 * pProgress // 65Hz auf 175Hz
+                val subWave = sin(2.0 * Math.PI * sweepFreq * t)
+                val subEnvelope = sin(Math.PI * pProgress) * 0.35
+                sample += subWave * subEnvelope
             }
+
+            // 2. Warmer futuristischer Ambient Pad Swell (0.1s bis 1.5s)
+            if (t >= 0.08 && t < 1.55) {
+                val padProgress = (t - 0.08) / 1.47
+                val c3 = 130.81
+                val g3 = 196.00
+                val c4 = 261.63
+                val e4 = 329.63
+                val g4 = 392.00
+
+                val padWave = 0.28 * sin(2.0 * Math.PI * c3 * t) +
+                              0.18 * sin(2.0 * Math.PI * g3 * t) +
+                              0.24 * sin(2.0 * Math.PI * c4 * t) +
+                              0.16 * sin(2.0 * Math.PI * e4 * t) +
+                              0.10 * sin(2.0 * Math.PI * g4 * t)
+
+                val chorusLfo = 0.88 + 0.12 * sin(2.0 * Math.PI * 2.2 * t)
+                val padEnvelope = sin(Math.PI * padProgress) * 0.42 * chorusLfo
+                sample += padWave * padEnvelope
+            }
+
+            // 3. Kristall-Klarer "Vault Ready" Glocken- & Resonanz-Akkord (1.30s bis 2.4s)
+            if (i >= chimeStart) {
+                val tChime = (i - chimeStart).toDouble() / sampleRate
+
+                val fC5 = 523.25
+                val fE5 = 659.25
+                val fG5 = 783.99
+                val fB5 = 987.77
+                val fD6 = 1174.66
+                val fG6 = 1567.98
+
+                val dec1 = kotlin.math.exp(-2.2 * tChime)
+                val dec2 = kotlin.math.exp(-3.2 * tChime)
+                val dec3 = kotlin.math.exp(-4.2 * tChime)
+                val dec4 = kotlin.math.exp(-5.2 * tChime)
+                val dec5 = kotlin.math.exp(-6.5 * tChime)
+                val dec6 = kotlin.math.exp(-8.0 * tChime)
+
+                val attack = (tChime / 0.015).coerceIn(0.0, 1.0)
+
+                val chimeWave = 0.32 * sin(2.0 * Math.PI * fC5 * tChime) * dec1 +
+                                0.26 * sin(2.0 * Math.PI * fE5 * tChime) * dec2 +
+                                0.22 * sin(2.0 * Math.PI * fG5 * tChime) * dec3 +
+                                0.16 * sin(2.0 * Math.PI * fB5 * tChime) * dec4 +
+                                0.12 * sin(2.0 * Math.PI * fD6 * tChime) * dec5 +
+                                0.06 * sin(2.0 * Math.PI * fG6 * tChime) * dec6
+
+                val fadeOut = if (t > 2.28) ((2.4 - t) / 0.12).coerceIn(0.0, 1.0) else 1.0
+                sample += chimeWave * attack * fadeOut * 0.72
+            }
+
+            data[i] = (sample.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
         }
         return data
     }
@@ -266,7 +257,7 @@ object SplashSoundSynthesizer {
                 val file = synchronized(lock) {
                     var f = wavFile
                     if (f == null || !f.exists()) {
-                        f = File(ctx.cacheDir, "splash_sound_v7.wav")
+                        f = File(ctx.cacheDir, "splash_sound_v8.wav")
                         if (!f.exists()) {
                             try {
                                 val data = generateSamples()
@@ -289,9 +280,10 @@ object SplashSoundSynthesizer {
                             setAudioAttributes(
                                 AudioAttributes.Builder()
                                     .setUsage(AudioAttributes.USAGE_MEDIA)
-                                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                                     .build()
                             )
+                            setVolume(1.0f, 1.0f)
                             setOnCompletionListener { player ->
                                 try {
                                     player.reset()
@@ -362,10 +354,10 @@ object SplashSoundSynthesizer {
 }
 
 /**
- * Überarbeitete, ultra-schnelle High-Fidelity App-Start-Animation.
- * - Kontinuierlicher 0-100% Ladebalken & System-Telemetrie.
+ * High-Fidelity App-Start-Animation für myDocAnizer-Mobile.
+ * - Kontinuierlicher 0-100% Ladebalken & System-Telemetrie (2.4 Sekunden).
  * - Neon-Laser Scanner, orbital rotierende Cyber-Partikel.
- * - Dynamisches Hologramm-Logo.
+ * - Dynamisches Hologramm-Logo & passende Sound-Harmonie.
  * - Garantiert abbruchsicher mit Tap-to-Skip.
  */
 @Composable
@@ -374,7 +366,7 @@ fun AppStartSplashAnimation(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val totalDurationMs = 600 // Ultra-schnelle 600ms für sofortige Verfügbarkeit der App
+    val totalDurationMs = 2400 // Angenehme, elegante 2.4s für den vollständigen Start-Swell
     val progressAnim = remember { Animatable(0f) }
     val infiniteTransition = rememberInfiniteTransition(label = "splash_infinite")
 

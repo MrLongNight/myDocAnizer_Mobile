@@ -1,4 +1,4 @@
-package com.example.ui.views
+package com.example.ui.views.settings
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState

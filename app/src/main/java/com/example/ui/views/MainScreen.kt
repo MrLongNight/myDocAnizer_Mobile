@@ -202,14 +202,13 @@ fun MainScreen(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.BottomCenter
                     ) {
-                        // 1. Untere Navigationsleiste mit den 3 Haupt-Tabs
+                        // 1. Untere Navigationsleiste mit den 3 Haupt-Tabs (vollflächig ohne Lücken links/rechts)
                         NavigationBar(
                             containerColor = MaterialTheme.colorScheme.surface,
                             tonalElevation = 8.dp,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(72.dp)
-                                .padding(horizontal = 10.dp)
                                 .testTag("main_bottom_nav_bar")
                         ) {
                             // 1. Dokumente Tab
@@ -320,12 +319,11 @@ fun MainScreen(
                             )
                         }
 
-                        // 2. Die beiden über die obere Leistenkante hinausragenden FABs
+                        // 2. Die beiden über die obere Leistenkante hinausragenden FABs (ebenfalls ohne Rand-Lücken)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(72.dp)
-                                .padding(horizontal = 10.dp),
+                                .height(72.dp),
                             verticalAlignment = Alignment.Top,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -333,6 +331,7 @@ fun MainScreen(
                             Spacer(modifier = Modifier.weight(1.25f))
 
                             // FAB 1 (Links): KI-Chatbot Button ragt über die Leiste hinaus (offset y = -18.dp)
+                            // Verwendet das vom Nutzer bereitgestellte onDevice_AI-Agent Icon (Smartphone mit KI-Chip & Leiterbahnen)
                             Box(
                                 modifier = Modifier
                                     .weight(0.85f)
@@ -349,13 +348,14 @@ fun MainScreen(
                                     shape = CircleShape,
                                     elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
                                     modifier = Modifier
-                                        .size(52.dp)
+                                        .size(54.dp)
                                         .testTag("main_chatbot_fab")
                                 ) {
                                     Icon(
                                         painter = painterResource(id = R.drawable.ic_ondevice_ai_agent),
                                         contentDescription = "myDocAnizer: Lokalen KI Agenten öffnen",
-                                        modifier = Modifier.size(26.dp)
+                                        tint = Color.White,
+                                        modifier = Modifier.size(34.dp)
                                     )
                                 }
                             }
@@ -363,119 +363,32 @@ fun MainScreen(
                             // Platzhalter für Dashboard Tab
                             Spacer(modifier = Modifier.weight(1.1f))
 
-                            // FAB 2 (Rechts): Scan/Import Speed-Dial FAB (herausklappend!)
+                            // FAB 2 (Rechts): Scan/Import FAB (+ rotiert um 45° zum X bei Aktivierung)
                             Box(
                                 modifier = Modifier
                                     .weight(0.85f)
                                     .offset(y = (-18).dp),
-                                contentAlignment = Alignment.BottomCenter
+                                contentAlignment = Alignment.Center
                             ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                FloatingActionButton(
+                                    onClick = {
+                                        isFabExpanded = !isFabExpanded
+                                    },
+                                    containerColor = MaterialTheme.colorScheme.secondary,
+                                    contentColor = MaterialTheme.colorScheme.onSecondary,
+                                    shape = CircleShape,
+                                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
+                                    modifier = Modifier
+                                        .size(54.dp)
+                                        .testTag("main_add_fab")
                                 ) {
-                                    // 1. Herausklappende Speed-Dial Menüelemente
-                                    AnimatedVisibility(
-                                        visible = isFabExpanded,
-                                        enter = fadeIn(tween(180)) + slideInVertically(initialOffsetY = { it / 2 }) + scaleIn(initialScale = 0.8f),
-                                        exit = fadeOut(tween(150)) + slideOutVertically(targetOffsetY = { it / 2 }) + scaleOut(targetScale = 0.8f)
-                                    ) {
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                                            modifier = Modifier.padding(bottom = 4.dp)
-                                        ) {
-                                            // Option A: Datei-Import Button
-                                            Surface(
-                                                onClick = {
-                                                    isFabExpanded = false
-                                                    currentTab = MainNavigationTab.IMPORT
-                                                },
-                                                shape = RoundedCornerShape(20.dp),
-                                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                                shadowElevation = 6.dp,
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                                modifier = Modifier
-                                                    .height(42.dp)
-                                                    .testTag("fab_option_import")
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.FileUpload,
-                                                        contentDescription = "Datei importieren",
-                                                        tint = MaterialTheme.colorScheme.secondary,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                    Text(
-                                                        text = "Import",
-                                                        style = MaterialTheme.typography.labelLarge,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-
-                                            // Option B: Dokument scannen Button
-                                            Surface(
-                                                onClick = {
-                                                    isFabExpanded = false
-                                                    currentTab = MainNavigationTab.SCANNER
-                                                },
-                                                shape = RoundedCornerShape(20.dp),
-                                                color = MaterialTheme.colorScheme.primaryContainer,
-                                                shadowElevation = 6.dp,
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
-                                                modifier = Modifier
-                                                    .height(42.dp)
-                                                    .testTag("fab_option_scanner")
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.DocumentScanner,
-                                                        contentDescription = "Dokument scannen",
-                                                        tint = MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                    Text(
-                                                        text = "Scannen",
-                                                        style = MaterialTheme.typography.labelLarge,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // 2. Haupt-FAB (+ rotiert um 45° zum X bei Aktivierung)
-                                    FloatingActionButton(
-                                        onClick = {
-                                            isFabExpanded = !isFabExpanded
-                                        },
-                                        containerColor = MaterialTheme.colorScheme.secondary,
-                                        contentColor = MaterialTheme.colorScheme.onSecondary,
-                                        shape = CircleShape,
-                                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = if (isFabExpanded) "Menü schließen" else "Scan- & Importmenü öffnen",
                                         modifier = Modifier
-                                            .size(52.dp)
-                                            .testTag("main_add_fab")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Add,
-                                            contentDescription = if (isFabExpanded) "Menü schließen" else "Scan- & Importmenü öffnen",
-                                            modifier = Modifier
-                                                .size(26.dp)
-                                                .graphicsLayer { rotationZ = fabRotation }
-                                        )
-                                    }
+                                            .size(28.dp)
+                                            .graphicsLayer { rotationZ = fabRotation }
+                                    )
                                 }
                             }
 
@@ -739,7 +652,7 @@ fun MainScreen(
         }
 
         // =========================================================================
-        // 4. FAB SPEED-DIAL SCRIM (Abdunklung & Schließen bei Klick außerhalb)
+        // 4. FAB SPEED-DIAL OVERLAY (SCRIM + INTERAKTIVE SCHNELL-AKTIONEN)
         // =========================================================================
         AnimatedVisibility(
             visible = isFabExpanded,
@@ -747,16 +660,94 @@ fun MainScreen(
             exit = fadeOut(tween(150))
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.35f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // 1. Abdunkelnder Scrim (Klick außerhalb schließt das Menü)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            isFabExpanded = false
+                        }
+                )
+
+                // 2. Interaktive Aktions-Karten (über dem Scrim, garantiert ohne Klick-Blockade)
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 28.dp, bottom = 92.dp),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Option A: Datei-Import Button
+                    Surface(
+                        onClick = {
+                            isFabExpanded = false
+                            currentTab = MainNavigationTab.IMPORT
+                        },
+                        shape = RoundedCornerShape(22.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shadowElevation = 8.dp,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                        modifier = Modifier.testTag("fab_option_import")
                     ) {
-                        isFabExpanded = false
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FileUpload,
+                                contentDescription = "Datei importieren",
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "Datei importieren",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-            )
+
+                    // Option B: Dokument scannen Button
+                    Surface(
+                        onClick = {
+                            isFabExpanded = false
+                            currentTab = MainNavigationTab.SCANNER
+                        },
+                        shape = RoundedCornerShape(22.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shadowElevation = 8.dp,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                        modifier = Modifier.testTag("fab_option_scanner")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DocumentScanner,
+                                contentDescription = "Dokument scannen",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "Dokument scannen",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         // =========================================================================
