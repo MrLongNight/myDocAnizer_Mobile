@@ -82,11 +82,7 @@ class LlmService(private val context: Context) {
     }
 
     private fun calculateCompatibility(recommendedRamGb: Float, hw: DeviceHardwareInfo): ModelCompatibilityLevel {
-        return when {
-            hw.totalRamGb >= recommendedRamGb -> ModelCompatibilityLevel.OPTIMAL
-            hw.totalRamGb >= recommendedRamGb - 1.2f -> ModelCompatibilityLevel.LIMITED
-            else -> ModelCompatibilityLevel.NOT_RECOMMENDED
-        }
+        return hw.getCompatibility(recommendedRamGb)
     }
 
     fun getCandidateModelDirs(): List<File> {
@@ -316,6 +312,33 @@ class LlmService(private val context: Context) {
         }
 
         val baseList = listOf(
+            // --- CATEGORY 1: OPTIMAL (<= 5.0 GB recommended RAM) ---
+            HuggingFaceModelInfo(
+                id = "danube3-100m-chat",
+                name = "H2O Danube3 100M Chat",
+                author = "H2O.ai",
+                quantFormat = "Q4_K_M (GGUF)",
+                downloadSizeMb = 85,
+                parameterSize = "100 Mio",
+                recommendedRamGb = 1.2f,
+                ramBadge = "1 – 1.5 GB RAM",
+                descriptionDe = "Extrem kompaktes, schnelles Chatmodell. Perfekt für ressourcensparende Klassifizierungs- und Extraktionstätigkeiten im Hintergrund.",
+                criteria = listOf(
+                    "Latenz: Extrem schnell (< 100 ms)",
+                    "Speicher: Minimalster Akkuverbrauch",
+                    "Einsatz: Einfache Belege & Sortierung"
+                ),
+                compatibilityLevel = calculateCompatibility(1.2f, hw),
+                isHardwareRecommended = false,
+                hardwareRecommendationReason = "Minimaler Ressourcen-Footprint.",
+                downloadUrl = "https://huggingface.co/h2oai/h2o-danube3-100m-chat-GGUF/resolve/main/h2o-danube3-100m-chat-v2-q4_k_m.gguf",
+                fileName = "h2o-danube3-100m-chat-v2-q4_k_m.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("h2o-danube3-100m-chat-v2-q4_k_m.gguf"),
+                localFileSizeBytes = getModelDiskSize("h2o-danube3-100m-chat-v2-q4_k_m.gguf"),
+                isSelected = false,
+                isCuratedApproved = true,
+                modelCategory = "Allgemeiner Chat"
+            ),
             HuggingFaceModelInfo(
                 id = "smollm2-135m-instruct",
                 name = "SmolLM2 135M Instruct",
@@ -338,7 +361,9 @@ class LlmService(private val context: Context) {
                 fileName = "SmolLM2-135M-Instruct-Q4_K_M.gguf",
                 isDownloaded = isModelPhysicallyOnDisk("SmolLM2-135M-Instruct-Q4_K_M.gguf"),
                 localFileSizeBytes = getModelDiskSize("SmolLM2-135M-Instruct-Q4_K_M.gguf"),
-                isSelected = (recommendedModelId == "smollm2-135m-instruct")
+                isSelected = (recommendedModelId == "smollm2-135m-instruct"),
+                isCuratedApproved = true,
+                modelCategory = "Allgemeiner Chat"
             ),
             HuggingFaceModelInfo(
                 id = "smollm2-360m-instruct",
@@ -362,7 +387,61 @@ class LlmService(private val context: Context) {
                 fileName = "SmolLM2-360M-Instruct-Q4_K_M.gguf",
                 isDownloaded = isModelPhysicallyOnDisk("SmolLM2-360M-Instruct-Q4_K_M.gguf"),
                 localFileSizeBytes = getModelDiskSize("SmolLM2-360M-Instruct-Q4_K_M.gguf"),
-                isSelected = false
+                isSelected = false,
+                isCuratedApproved = true,
+                modelCategory = "Allgemeiner Chat"
+            ),
+            HuggingFaceModelInfo(
+                id = "h2o-danube3-500m-chat",
+                name = "H2O Danube3 500M Chat",
+                author = "H2O.ai",
+                quantFormat = "Q4_K_M (GGUF)",
+                downloadSizeMb = 310,
+                parameterSize = "500 Mio",
+                recommendedRamGb = 2.2f,
+                ramBadge = "2.2 – 3 GB RAM",
+                descriptionDe = "Effizientes, schnelles On-Device Modell. Bietet sauberes Textverständnis und zuverlässige Extraktion bei geringer Hardware-Belastung.",
+                criteria = listOf(
+                    "Latenz: Sehr zügig (~200 ms)",
+                    "Präzision: Ausgeglichene Metadaten-Erkennung",
+                    "Einsatz: Strukturierte Formulare & Verträge"
+                ),
+                compatibilityLevel = calculateCompatibility(2.2f, hw),
+                isHardwareRecommended = false,
+                hardwareRecommendationReason = "Sehr gute Inferenzzeiten.",
+                downloadUrl = "https://huggingface.co/h2oai/h2o-danube3-500m-chat-GGUF/resolve/main/h2o-danube3-500m-chat-v2-q4_k_m.gguf",
+                fileName = "h2o-danube3-500m-chat-v2-q4_k_m.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("h2o-danube3-500m-chat-v2-q4_k_m.gguf"),
+                localFileSizeBytes = getModelDiskSize("h2o-danube3-500m-chat-v2-q4_k_m.gguf"),
+                isSelected = false,
+                isCuratedApproved = true,
+                modelCategory = "Allgemeiner Chat"
+            ),
+            HuggingFaceModelInfo(
+                id = "distil-qwen-0.8b-invoice-triage-gguf",
+                name = "Distil-Qwen 0.8B Invoice Triage",
+                author = "distil-labs",
+                quantFormat = "Q4_K_M (GGUF)",
+                downloadSizeMb = 580,
+                parameterSize = "800 Mio",
+                recommendedRamGb = 2.5f,
+                ramBadge = "2.5 – 4 GB RAM",
+                descriptionDe = "Ultraschlankes, feingetuntes Spezialmodell zur automatischen Beleg- und Rechnungstriage. Klassifiziert Posteingänge präzise in Belege oder Dokumente.",
+                criteria = listOf(
+                    "Fokus: Blitzschnelle Posteingangs-Klassifikation",
+                    "Ressourcen: Extrem geringer Speicher- & Akkubedarf",
+                    "Latenz: Ultraschnell (< 180 ms)"
+                ),
+                compatibilityLevel = calculateCompatibility(2.5f, hw),
+                isHardwareRecommended = false,
+                hardwareRecommendationReason = "Geringer RAM-Bedarf, ideal für Posteingangs-Triage.",
+                downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+                fileName = "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("qwen2.5-0.5b-instruct-q4_k_m.gguf"),
+                localFileSizeBytes = getModelDiskSize("qwen2.5-0.5b-instruct-q4_k_m.gguf"),
+                isSelected = false,
+                isCuratedApproved = true,
+                modelCategory = "DMS & Rechnungsextraktion"
             ),
             HuggingFaceModelInfo(
                 id = "qwen2.5-0.5b-instruct",
@@ -371,22 +450,78 @@ class LlmService(private val context: Context) {
                 quantFormat = "Q4_K_M (GGUF)",
                 downloadSizeMb = 491,
                 parameterSize = "490 Mio",
-                recommendedRamGb = 3.0f,
-                ramBadge = "3 – 4 GB RAM",
+                recommendedRamGb = 2.8f,
+                ramBadge = "2.8 – 3.5 GB RAM",
                 descriptionDe = "Hervorragendes deutsches Sprachverständnis. Versteht auch unvollständigen oder schrägen OCR-Text und extrahiert strukturierte Metadaten.",
                 criteria = listOf(
                     "Latenz: Schnell (< 350 ms)",
                     "Sprache: Starkes deutsches Sprachgefühl",
                     "Einsatz: Verträge, Bescheide & Abrechnungen"
                 ),
-                compatibilityLevel = calculateCompatibility(3.0f, hw),
+                compatibilityLevel = calculateCompatibility(2.8f, hw),
                 isHardwareRecommended = (recommendedModelId == "qwen2.5-0.5b-instruct"),
                 hardwareRecommendationReason = "Perfekter Sweet Spot für dein ${hw.totalRamGb} GB Mittelklasse-Gerät: Hohe deutsche Sprachpräzision bei geringem RAM.",
                 downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
                 fileName = "qwen2.5-0.5b-instruct-q4_k_m.gguf",
                 isDownloaded = isModelPhysicallyOnDisk("qwen2.5-0.5b-instruct-q4_k_m.gguf"),
                 localFileSizeBytes = getModelDiskSize("qwen2.5-0.5b-instruct-q4_k_m.gguf"),
-                isSelected = (recommendedModelId == "qwen2.5-0.5b-instruct")
+                isSelected = (recommendedModelId == "qwen2.5-0.5b-instruct"),
+                isCuratedApproved = true,
+                modelCategory = "Allgemeiner Chat"
+            ),
+            HuggingFaceModelInfo(
+                id = "smollm2-1.7b-instruct",
+                name = "SmolLM2 1.7B Instruct",
+                author = "HuggingFaceTB",
+                quantFormat = "Q4_K_M (GGUF)",
+                downloadSizeMb = 1010,
+                parameterSize = "1.7 Mrd",
+                recommendedRamGb = 3.2f,
+                ramBadge = "3 – 4 GB RAM",
+                descriptionDe = "Großes Smol-Modell mit überzeugender Konversationsqualität. Bietet präzises Extrahieren von Datenpunkten und flüssigen Textaufbau.",
+                criteria = listOf(
+                    "Latenz: Flott (~350 ms)",
+                    "Konversation: Natürlicher deutscher Dialog",
+                    "Einsatz: Komplexere Beleganalysen & Zusammenfassungen"
+                ),
+                compatibilityLevel = calculateCompatibility(3.2f, hw),
+                isHardwareRecommended = false,
+                hardwareRecommendationReason = "Hervorragendes Verhältnis von Größe zu logischer Power.",
+                downloadUrl = "https://huggingface.co/bartowski/SmolLM2-1.7B-Instruct-GGUF/resolve/main/SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+                fileName = "SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("SmolLM2-1.7B-Instruct-Q4_K_M.gguf"),
+                localFileSizeBytes = getModelDiskSize("SmolLM2-1.7B-Instruct-Q4_K_M.gguf"),
+                isSelected = false,
+                isCuratedApproved = true,
+                modelCategory = "Allgemeiner Chat"
+            ),
+
+            // --- CATEGORY 2: LIMITED (3.5 GB - 5.5 GB recommended RAM) ---
+            HuggingFaceModelInfo(
+                id = "falcon3-1b-instruct",
+                name = "Falcon3 1B Instruct",
+                author = "TII UAE",
+                quantFormat = "Q4_K_M (GGUF)",
+                downloadSizeMb = 650,
+                parameterSize = "1.0 Mrd",
+                recommendedRamGb = 3.8f,
+                ramBadge = "3.8 – 5 GB RAM",
+                descriptionDe = "Moderne, performante Architektur mit erstaunlich starker Logik bei Klassifizierungen. Sehr gut für deutsche Posteingänge geeignet.",
+                criteria = listOf(
+                    "Stabilität: Geringer Ressourcen-Overhead im Betrieb",
+                    "Präzision: Exzellentes Einhalten strukturierter JSON-Vorgaben",
+                    "Latenz: Schnell (~300 ms)"
+                ),
+                compatibilityLevel = calculateCompatibility(3.8f, hw),
+                isHardwareRecommended = false,
+                hardwareRecommendationReason = "Geringer Rechenaufwand.",
+                downloadUrl = "https://huggingface.co/tiiuae/Falcon3-1B-Instruct-GGUF/resolve/main/Falcon3-1B-Instruct-Q4_K_M.gguf",
+                fileName = "Falcon3-1B-Instruct-Q4_K_M.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("Falcon3-1B-Instruct-Q4_K_M.gguf"),
+                localFileSizeBytes = getModelDiskSize("Falcon3-1B-Instruct-Q4_K_M.gguf"),
+                isSelected = false,
+                isCuratedApproved = true,
+                modelCategory = "Allgemeiner Chat"
             ),
             HuggingFaceModelInfo(
                 id = "llama-3.2-1b-instruct",
@@ -396,7 +531,7 @@ class LlmService(private val context: Context) {
                 downloadSizeMb = 807,
                 parameterSize = "1.23 Mrd",
                 recommendedRamGb = 4.0f,
-                ramBadge = "4 – 6 GB RAM",
+                ramBadge = "4 – 5.5 GB RAM",
                 descriptionDe = "Metas kompaktes On-Device Flaggschiff mit starker logischer Klassifizierung. Erzeugt treffsichere Schlagwörter und Tags.",
                 criteria = listOf(
                     "Latenz: Zügig (~400 ms)",
@@ -410,7 +545,9 @@ class LlmService(private val context: Context) {
                 fileName = "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
                 isDownloaded = isModelPhysicallyOnDisk("Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
                 localFileSizeBytes = getModelDiskSize("Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
-                isSelected = false
+                isSelected = false,
+                isCuratedApproved = true,
+                modelCategory = "Allgemeiner Chat"
             ),
             HuggingFaceModelInfo(
                 id = "qwen2.5-1.5b-instruct",
@@ -419,22 +556,24 @@ class LlmService(private val context: Context) {
                 quantFormat = "Q4_K_M (GGUF)",
                 downloadSizeMb = 1117,
                 parameterSize = "1.54 Mrd",
-                recommendedRamGb = 4.5f,
-                ramBadge = "4 – 6 GB RAM",
+                recommendedRamGb = 4.2f,
+                ramBadge = "4.2 – 6 GB RAM",
                 descriptionDe = "Leistungsstarkes Sprachmodell für tiefere Textanalyse. Erkennt komplexe Vertragsklauseln, Kündigungsfristen und mehrseitige Abrechnungen fehlerfrei.",
                 criteria = listOf(
                     "Latenz: Flott (~500 ms)",
                     "Intelligenz: Hohe semantische Zuverlässigkeit",
                     "Einsatz: Mehrseitige Verträge & Versicherungspolicen"
                 ),
-                compatibilityLevel = calculateCompatibility(4.5f, hw),
+                compatibilityLevel = calculateCompatibility(4.2f, hw),
                 isHardwareRecommended = (recommendedModelId == "qwen2.5-1.5b-instruct"),
                 hardwareRecommendationReason = "Empfehlung für deine Hardware (${hw.totalRamGb} GB RAM, ${hw.cpuCores} Kerne): Maximale semantische Präzision & Fristenerkennung.",
                 downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
                 fileName = "qwen2.5-1.5b-instruct-q4_k_m.gguf",
                 isDownloaded = isModelPhysicallyOnDisk("qwen2.5-1.5b-instruct-q4_k_m.gguf"),
                 localFileSizeBytes = getModelDiskSize("qwen2.5-1.5b-instruct-q4_k_m.gguf"),
-                isSelected = (recommendedModelId == "qwen2.5-1.5b-instruct")
+                isSelected = (recommendedModelId == "qwen2.5-1.5b-instruct"),
+                isCuratedApproved = true,
+                modelCategory = "Allgemeiner Chat"
             ),
             HuggingFaceModelInfo(
                 id = "deepseek-r1-distill-qwen-1.5b",
@@ -444,7 +583,7 @@ class LlmService(private val context: Context) {
                 downloadSizeMb = 1117,
                 parameterSize = "1.5 Mrd",
                 recommendedRamGb = 4.5f,
-                ramBadge = "4 – 6 GB RAM",
+                ramBadge = "4.5 – 6 GB RAM",
                 descriptionDe = "Open Reasoning-Modell mit Kettendenken (Chain-of-Thought). Exzellent für knifflige Steuerbelege, unvollständige Tabellen und komplexe Abzüge.",
                 criteria = listOf(
                     "Logik: Schrittweises Kettendenken (CoT)",
@@ -466,64 +605,6 @@ class LlmService(private val context: Context) {
                 modelCategory = "Reasoning & Logik"
             ),
             HuggingFaceModelInfo(
-                id = "phi-3.5-mini-instruct",
-                name = "Phi-3.5 Mini Instruct",
-                author = "Microsoft Research",
-                quantFormat = "Q4_K_M (GGUF)",
-                downloadSizeMb = 2393,
-                parameterSize = "3.8 Mrd",
-                recommendedRamGb = 6.0f,
-                ramBadge = "6 – 8 GB RAM",
-                descriptionDe = "Überragende logische Textanalyse für mehrseitige Verträge, Kündigungsbedingungen, AGBs und juristische Klauseln.",
-                criteria = listOf(
-                    "Logik: Höchste Sprachlogik bei Verträgen",
-                    "Kontext: Mehrseitige Klauseln & AGBs",
-                    "Latenz: ~750 ms"
-                ),
-                compatibilityLevel = calculateCompatibility(6.0f, hw),
-                isHardwareRecommended = false,
-                hardwareRecommendationReason = "Ideal für anspruchsvolle Vertragsprüfungen.",
-                downloadUrl = "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
-                fileName = "Phi-3.5-mini-instruct-Q4_K_M.gguf",
-                isDownloaded = isModelPhysicallyOnDisk("Phi-3.5-mini-instruct-Q4_K_M.gguf"),
-                localFileSizeBytes = getModelDiskSize("Phi-3.5-mini-instruct-Q4_K_M.gguf"),
-                isSelected = false,
-                isCuratedApproved = true,
-                approvalStatus = "Freigegeben von mr.locke84",
-                isNewRelease = true,
-                releaseDate = "2026.01",
-                modelCategory = "Verträge & Jura"
-            ),
-            HuggingFaceModelInfo(
-                id = "ministral-3b-instruct",
-                name = "Ministral 3B Instruct",
-                author = "Mistral AI",
-                quantFormat = "Q4_K_M (GGUF)",
-                downloadSizeMb = 1950,
-                parameterSize = "3.0 Mrd",
-                recommendedRamGb = 6.0f,
-                ramBadge = "6 – 8 GB RAM",
-                descriptionDe = "Europäisches Spitzenmodell mit exzellenter nativer Mehrsprachigkeit (DE, EN, FR, ES, IT). Perfekt für internationale Rechnungen & Hotelbelege.",
-                criteria = listOf(
-                    "Sprachen: Nativ mehrsprachig (DE/EN/FR/ES)",
-                    "Präzision: Strukturierte Extraktion",
-                    "Latenz: Flott (~600 ms)"
-                ),
-                compatibilityLevel = calculateCompatibility(6.0f, hw),
-                isHardwareRecommended = false,
-                hardwareRecommendationReason = "Optimal bei mehrsprachigen und internationalen Dokumenten.",
-                downloadUrl = "https://huggingface.co/mradermacher/Ministral-3b-instruct-GGUF/resolve/main/Ministral-3b-instruct.Q4_K_M.gguf",
-                fileName = "Ministral-3b-instruct.Q4_K_M.gguf",
-                isDownloaded = isModelPhysicallyOnDisk("Ministral-3b-instruct.Q4_K_M.gguf"),
-                localFileSizeBytes = getModelDiskSize("Ministral-3b-instruct.Q4_K_M.gguf"),
-                isSelected = false,
-                isCuratedApproved = true,
-                approvalStatus = "Freigegeben von mr.locke84",
-                isNewRelease = true,
-                releaseDate = "2026.03",
-                modelCategory = "Mehrsprachig"
-            ),
-            HuggingFaceModelInfo(
                 id = "qwen2.5-coder-1.5b",
                 name = "Qwen 2.5 Coder 1.5B (Finanzen)",
                 author = "Alibaba Cloud / Qwen",
@@ -531,7 +612,7 @@ class LlmService(private val context: Context) {
                 downloadSizeMb = 1117,
                 parameterSize = "1.54 Mrd",
                 recommendedRamGb = 4.5f,
-                ramBadge = "4 – 6 GB RAM",
+                ramBadge = "4.5 – 6 GB RAM",
                 descriptionDe = "Spezialisiert auf Zahlenstrukturen, CSV-Tabellen, tabellarische Einzelposten und buchhalterische Betragskontrollen.",
                 criteria = listOf(
                     "Struktur: Perfekt für Tabellen & CSV",
@@ -559,16 +640,16 @@ class LlmService(private val context: Context) {
                 quantFormat = "Q4_K_M (GGUF)",
                 downloadSizeMb = 1450,
                 parameterSize = "2.0 Mrd",
-                recommendedRamGb = 4.5f,
-                ramBadge = "4 – 6 GB RAM",
-                descriptionDe = "Hochspezialisiertes On-Device Modell für strukturierte Beleg- & Rechnungsextraktion. Liest Beträge, IBAN, Rechnungsnummern und Fristen nach vordefinierten Schemas aus.",
+                recommendedRamGb = 4.8f,
+                ramBadge = "4.8 – 6.5 GB RAM",
+                descriptionDe = "Hochspezialisiertes On-Device Modell für strukturierte Beleg- & Rechnungsextraktion. Liest Beträge, IBAN, Rechnungsnummern und Fristen fehlerfrei aus.",
                 criteria = listOf(
                     "Spezialist: Rechnungs-, Beleg- & Formular-Extraktion",
                     "Schema: Striktes JSON-Parsing ohne Halluzinationen",
-                    "Latenz: Schnell (~380 ms via Vulkan/NEON)"
+                    "Latenz: Schnell (~380 ms)"
                 ),
-                compatibilityLevel = calculateCompatibility(4.5f, hw),
-                isHardwareRecommended = (hw.totalRamGb >= 4.0f && hw.totalRamGb < 6.0f),
+                compatibilityLevel = calculateCompatibility(4.8f, hw),
+                isHardwareRecommended = false,
                 hardwareRecommendationReason = "Exzellente Spezialisierung für deutsche Rechnungen und DMS-Workflows.",
                 downloadUrl = "https://huggingface.co/aman2024/NuExtract-2-2B-GGUF/resolve/main/NuExtract-2-2B-Q4_K_M.gguf",
                 fileName = "NuExtract-2-2B-Q4_K_M.gguf",
@@ -582,33 +663,92 @@ class LlmService(private val context: Context) {
                 modelCategory = "DMS & Rechnungsextraktion"
             ),
             HuggingFaceModelInfo(
-                id = "distil-qwen-0.8b-invoice-triage-gguf",
-                name = "Distil-Qwen 0.8B Invoice Triage",
-                author = "distil-labs",
+                id = "gemma-2-2b-it",
+                name = "Gemma 2 2B Instruct (Google)",
+                author = "Google / Bartowski",
                 quantFormat = "Q4_K_M (GGUF)",
-                downloadSizeMb = 580,
-                parameterSize = "800 Mio",
-                recommendedRamGb = 2.5f,
-                ramBadge = "2.5 – 4 GB RAM",
-                descriptionDe = "Ultraschlankes, feingetuntes Spezialmodell zur automatischen Beleg- und Rechnungstriage. Klassifiziert Posteingänge präzise in Rechnung, Quittung, Mahnung oder Vertrag.",
+                downloadSizeMb = 1650,
+                parameterSize = "2.6 Mrd",
+                recommendedRamGb = 5.0f,
+                ramBadge = "5 – 7 GB RAM",
+                descriptionDe = "Googles extrem performantes Leichtgewicht-Modell. Bietet phänomenales deutsches Sprachgefühl und exzellentes Textverständnis.",
                 criteria = listOf(
-                    "Fokus: Blitzschnelle Posteingangs-Klassifikation",
-                    "Ressourcen: Extrem geringer Speicher- & Akkubedarf",
-                    "Latenz: Ultraschnell (< 180 ms)"
+                    "Sprachqualität: Hervorragend im Deutschen",
+                    "Genauigkeit: Sehr treffsichere Freitext-Extraktion",
+                    "Latenz: Moderat (~450 ms)"
                 ),
-                compatibilityLevel = calculateCompatibility(2.5f, hw),
+                compatibilityLevel = calculateCompatibility(5.0f, hw),
                 isHardwareRecommended = false,
-                hardwareRecommendationReason = "Geringer RAM-Bedarf, ideal für Posteingangs-Triage.",
-                downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-                fileName = "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-                isDownloaded = isModelPhysicallyOnDisk("qwen2.5-0.5b-instruct-q4_k_m.gguf"),
-                localFileSizeBytes = getModelDiskSize("qwen2.5-0.5b-instruct-q4_k_m.gguf"),
+                hardwareRecommendationReason = "Starkes deutsches Sprachmodell für Mittelklassegeräte.",
+                downloadUrl = "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf",
+                fileName = "gemma-2-2b-it-Q4_K_M.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("gemma-2-2b-it-Q4_K_M.gguf"),
+                localFileSizeBytes = getModelDiskSize("gemma-2-2b-it-Q4_K_M.gguf"),
                 isSelected = false,
                 isCuratedApproved = true,
-                approvalStatus = "Verifiziert für Triage & Sortierung",
+                isNewRelease = true,
+                releaseDate = "2026.01",
+                modelCategory = "Google Gemma Modelle"
+            ),
+
+            // --- CATEGORY 3: NOT RECOMMENDED (> 6.2 GB recommended RAM) ---
+            HuggingFaceModelInfo(
+                id = "phi-3.5-mini-instruct",
+                name = "Phi-3.5 Mini Instruct",
+                author = "Microsoft Research",
+                quantFormat = "Q4_K_M (GGUF)",
+                downloadSizeMb = 2393,
+                parameterSize = "3.8 Mrd",
+                recommendedRamGb = 6.5f,
+                ramBadge = "6.5 – 8.5 GB RAM",
+                descriptionDe = "Überragende logische Textanalyse für mehrseitige Verträge, Kündigungsbedingungen, AGBs und juristische Klauseln.",
+                criteria = listOf(
+                    "Logik: Höchste Sprachlogik bei Verträgen",
+                    "Kontext: Mehrseitige Klauseln & AGBs",
+                    "Latenz: ~750 ms"
+                ),
+                compatibilityLevel = calculateCompatibility(6.5f, hw),
+                isHardwareRecommended = false,
+                hardwareRecommendationReason = "Ideal für anspruchsvolle Vertragsprüfungen.",
+                downloadUrl = "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
+                fileName = "Phi-3.5-mini-instruct-Q4_K_M.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("Phi-3.5-mini-instruct-Q4_K_M.gguf"),
+                localFileSizeBytes = getModelDiskSize("Phi-3.5-mini-instruct-Q4_K_M.gguf"),
+                isSelected = false,
+                isCuratedApproved = true,
+                approvalStatus = "Freigegeben von mr.locke84",
+                isNewRelease = true,
+                releaseDate = "2026.01",
+                modelCategory = "Verträge & Jura"
+            ),
+            HuggingFaceModelInfo(
+                id = "ministral-3b-instruct",
+                name = "Ministral 3B Instruct",
+                author = "Mistral AI",
+                quantFormat = "Q4_K_M (GGUF)",
+                downloadSizeMb = 1950,
+                parameterSize = "3.0 Mrd",
+                recommendedRamGb = 6.5f,
+                ramBadge = "6.5 – 8.5 GB RAM",
+                descriptionDe = "Europäisches Spitzenmodell mit exzellenter nativer Mehrsprachigkeit (DE, EN, FR, ES, IT). Perfekt für internationale Rechnungen & Hotelbelege.",
+                criteria = listOf(
+                    "Sprachen: Nativ mehrsprachig (DE/EN/FR/ES)",
+                    "Präzision: Strukturierte Extraktion",
+                    "Latenz: Flott (~600 ms)"
+                ),
+                compatibilityLevel = calculateCompatibility(6.5f, hw),
+                isHardwareRecommended = false,
+                hardwareRecommendationReason = "Optimal bei mehrsprachigen und internationalen Dokumenten.",
+                downloadUrl = "https://huggingface.co/mradermacher/Ministral-3b-instruct-GGUF/resolve/main/Ministral-3b-instruct.Q4_K_M.gguf",
+                fileName = "Ministral-3b-instruct.Q4_K_M.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("Ministral-3b-instruct.Q4_K_M.gguf"),
+                localFileSizeBytes = getModelDiskSize("Ministral-3b-instruct.Q4_K_M.gguf"),
+                isSelected = false,
+                isCuratedApproved = true,
+                approvalStatus = "Freigegeben von mr.locke84",
                 isNewRelease = true,
                 releaseDate = "2026.03",
-                modelCategory = "DMS & Rechnungsextraktion"
+                modelCategory = "Mehrsprachig"
             ),
             HuggingFaceModelInfo(
                 id = "lift-4b-structured-gguf",
@@ -617,16 +757,16 @@ class LlmService(private val context: Context) {
                 quantFormat = "Q4_K_M (GGUF)",
                 downloadSizeMb = 2393,
                 parameterSize = "3.8 Mrd",
-                recommendedRamGb = 6.0f,
-                ramBadge = "6 – 8 GB RAM",
+                recommendedRamGb = 6.8f,
+                ramBadge = "6.8 – 9 GB RAM",
                 descriptionDe = "Spezialisiert auf JSON-Schema-Extraktion aus PDFs und Dokumenten. Extrahiert Tabellen, Einzelpositionen und steuerliche Metadaten fehlerfrei.",
                 criteria = listOf(
                     "Tabellen: Komplexe mehrzeilige Rechnungspositionen",
                     "Genauigkeit: Höchste Detailtreue bei PDF-Berichten",
                     "Latenz: Gründlich (~550 ms)"
                 ),
-                compatibilityLevel = calculateCompatibility(6.0f, hw),
-                isHardwareRecommended = (hw.totalRamGb >= 6.0f),
+                compatibilityLevel = calculateCompatibility(6.8f, hw),
+                isHardwareRecommended = false,
                 hardwareRecommendationReason = "Empfohlen für High-End-Smartphones mit komplexen Tabellendokumenten.",
                 downloadUrl = "https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf",
                 fileName = "Phi-3.5-mini-instruct-Q4_K_M.gguf",
@@ -638,6 +778,114 @@ class LlmService(private val context: Context) {
                 isNewRelease = true,
                 releaseDate = "2026.03",
                 modelCategory = "Tabellen & PDF Extraktion"
+            ),
+            HuggingFaceModelInfo(
+                id = "llama-3-8b-instruct",
+                name = "Llama 3 8B Instruct",
+                author = "Meta AI",
+                quantFormat = "Q4_K_M (GGUF)",
+                downloadSizeMb = 4700,
+                parameterSize = "8.03 Mrd",
+                recommendedRamGb = 8.0f,
+                ramBadge = "8 – 12 GB RAM",
+                descriptionDe = "Sehr mächtiges, logisch hochentwickeltes Modell. Ideal für die komplexe Analyse unstrukturierter und unformatierter Briefe.",
+                criteria = listOf(
+                    "Logik: Exzellente inhaltliche Erfassung",
+                    "Kapazität: Großer Kontextbereich",
+                    "Latenz: Gründlich (~900 ms)"
+                ),
+                compatibilityLevel = calculateCompatibility(8.0f, hw),
+                isHardwareRecommended = false,
+                hardwareRecommendationReason = "Extrem logisch, benötigt jedoch viel RAM.",
+                downloadUrl = "https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+                fileName = "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"),
+                localFileSizeBytes = getModelDiskSize("Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"),
+                isSelected = false,
+                isCuratedApproved = true,
+                modelCategory = "Allgemeiner Chat"
+            ),
+            HuggingFaceModelInfo(
+                id = "qwen2.5-7b-instruct",
+                name = "Qwen 2.5 7B Instruct",
+                author = "Alibaba Cloud / Qwen",
+                quantFormat = "Q4_K_M (GGUF)",
+                downloadSizeMb = 4500,
+                parameterSize = "7.61 Mrd",
+                recommendedRamGb = 8.5f,
+                ramBadge = "8.5 – 12 GB RAM",
+                descriptionDe = "Brillantes deutsches Verständnis bei komplexen Dokumenten-Analysen. Extrahiert selbst verschachtelte Klauseln fehlerfrei.",
+                criteria = listOf(
+                    "Sprache: Sensationelles deutsches Verständnis",
+                    "Qualität: Perfektes JSON-Extraktionsschema",
+                    "Latenz: Gründlich (~950 ms)"
+                ),
+                compatibilityLevel = calculateCompatibility(8.5f, hw),
+                isHardwareRecommended = false,
+                hardwareRecommendationReason = "Ausgezeichnet für komplexe DMS-Extraktionen auf High-End-Hardware.",
+                downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf",
+                fileName = "qwen2.5-7b-instruct-q4_k_m.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("qwen2.5-7b-instruct-q4_k_m.gguf"),
+                localFileSizeBytes = getModelDiskSize("qwen2.5-7b-instruct-q4_k_m.gguf"),
+                isSelected = false,
+                isCuratedApproved = true,
+                modelCategory = "Allgemeiner Chat"
+            ),
+            HuggingFaceModelInfo(
+                id = "deepseek-r1-distill-llama-8b",
+                name = "DeepSeek-R1 Distill Llama 8B",
+                author = "DeepSeek-AI",
+                quantFormat = "Q4_K_M (GGUF)",
+                downloadSizeMb = 4800,
+                parameterSize = "8.0 Mrd",
+                recommendedRamGb = 9.0f,
+                ramBadge = "9 – 12 GB RAM",
+                descriptionDe = "Hochwertiges Reasoning-Modell mit CoT-Denkprozessen. Meistert anspruchsvollste logische Dokumentabgleiche fehlerfrei.",
+                criteria = listOf(
+                    "Logik: Tiefgehendes Kettendenken (CoT)",
+                    "Präzision: Minimierte Halluzinationsrate",
+                    "Latenz: Intensiv (~1200 ms)"
+                ),
+                compatibilityLevel = calculateCompatibility(9.0f, hw),
+                isHardwareRecommended = false,
+                hardwareRecommendationReason = "Herausragendes logisches Denken für extrem anspruchsvolle Prüfungsaufgaben.",
+                downloadUrl = "https://huggingface.co/bartowski/DeepSeek-R1-Distill-Llama-8B-GGUF/resolve/main/DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf",
+                fileName = "DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf"),
+                localFileSizeBytes = getModelDiskSize("DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf"),
+                isSelected = false,
+                isCuratedApproved = true,
+                isNewRelease = true,
+                releaseDate = "2026.02",
+                modelCategory = "Reasoning & Logik"
+            ),
+            HuggingFaceModelInfo(
+                id = "gemma-2-9b-it",
+                name = "Gemma 2 9B Instruct (Google)",
+                author = "Google / Bartowski",
+                quantFormat = "Q4_K_M (GGUF)",
+                downloadSizeMb = 5400,
+                parameterSize = "9.2 Mrd",
+                recommendedRamGb = 10.0f,
+                ramBadge = "10 – 14 GB RAM",
+                descriptionDe = "Google Flaggschiff-Modell für absolute High-End-Inferenz. Liefert atemberaubende logische Begründungen und deutsche Textqualität.",
+                criteria = listOf(
+                    "Spitzenklasse: Branchenführende On-Device Performance",
+                    "Qualität: Makelloser logischer Satzbau und Metadatenkontrolle",
+                    "Latenz: Gründlich (~1100 ms)"
+                ),
+                compatibilityLevel = calculateCompatibility(10.0f, hw),
+                isHardwareRecommended = false,
+                hardwareRecommendationReason = "Absolute Höchstleistung für Geräte der Flaggschiff-Klasse.",
+                downloadUrl = "https://huggingface.co/bartowski/gemma-2-9b-it-GGUF/resolve/main/gemma-2-9b-it-Q4_K_M.gguf",
+                fileName = "gemma-2-9b-it-Q4_K_M.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("gemma-2-9b-it-Q4_K_M.gguf"),
+                localFileSizeBytes = getModelDiskSize("gemma-2-9b-it-Q4_K_M.gguf"),
+                isSelected = false,
+                isCuratedApproved = true,
+                isNewRelease = true,
+                releaseDate = "2026.01",
+                modelCategory = "Google Gemma Modelle"
             )
         )
         return baseList

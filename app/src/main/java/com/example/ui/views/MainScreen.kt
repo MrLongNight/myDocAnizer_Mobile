@@ -344,7 +344,7 @@ fun MainScreen(
                                         viewModel.openAiChatDrawer()
                                     },
                                     containerColor = MaterialTheme.colorScheme.secondary,
-                                    contentColor = Color.Black,
+                                    contentColor = MaterialTheme.colorScheme.onSecondary,
                                     shape = CircleShape,
                                     elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
                                     modifier = Modifier
@@ -352,8 +352,8 @@ fun MainScreen(
                                         .testTag("main_chatbot_fab")
                                 ) {
                                     com.example.ui.components.LocalAiAgentIcon(
-                                        modifier = Modifier.size(52.dp),
-                                        tint = Color.Black
+                                        modifier = Modifier.size(46.dp),
+                                        tint = MaterialTheme.colorScheme.onSecondary
                                     )
                                 }
                             }

@@ -8,40 +8,45 @@ Dieses Dokument enthält den aktuellen Status der Modularisierung, die Analyse d
 
 | Datei | Zeilen | Aktueller Status / Empfohlene Maßnahme |
 | :--- | :--- | :--- |
-| `DocAnizerViewModel.kt` | ~2.868 | **Teilweise refaktoriert**: `DmsManager`, `FinanceManager`, `SyncManager` ausgelagert. |
-| `LlmService.kt` | 1.947 | **Erledigt**: Prompts in `LlmPrompts.kt` (208 Z.) & Tools in `LlmToolExecutor.kt` (600 Z.) ausgelagert. |
+| `DmsExplorerView.kt` | 3.342 | **Offen**: Hauptansicht für Dokumenten-Tresor; Teilkomponenten in `dms/` vorhanden, Delegierung ausstehend. |
+| `DocAnizerViewModel.kt` | 2.868 | **Teilweise refaktoriert**: `DmsManager`, `FinanceManager`, `SyncManager` ausgelagert. |
+| `LlmService.kt` | 2.195 | **Teilweise refaktoriert**: Prompts in `LlmPrompts.kt` (208 Z.) & Tools in `LlmToolExecutor.kt` (600 Z.) ausgelagert. |
 | `DashboardView.kt` | 1.791 | **Teilweise refaktoriert**: Standard-Widgets nach `dashboard/` ausgelagert (Finance, RecentDocs, Shortcuts, Sync). |
-| `RulesAndAiSettingsView.kt` | ~1.633 | **Offen**: Aufteilung in Regel-Editor und KI-Provider-Settings. |
-| `DashboardCustomWidgetsUi.kt` | ~1.537 | **Offen**: Zerlegung in einzelne Widget-Definitionsdateien & Editor. |
-| `ScannerView.kt` | ~1.456 | **Offen**: Extraktion von Kamera-Preview, Edge-Detection-Overlay und Manuell-Zuschnitt. |
-| `SettingsRepository.kt` | ~1.416 | **Stabil**: Daten-Repository für App-Einstellungen. |
-| `Models.kt` | ~1.345 | **Stabil**: Domänenmodelle und Enums. |
-| `P2pSyncServer.kt` | ~1.310 | **Stabil**: P2P HTTP/TLS Server-Implementierung. |
-| `MainScreen.kt` | ~1.205 | **Offen**: Modularisierung von Drawer, Navigation und Screen-Routing. |
-| `CloudStep.kt` | ~1.195 | **Offen**: Modularisierung von WebDAV- & Google Drive Sub-Komponenten. |
-| `UserPersonaFactory.kt` | ~1.150 | **Stabil**: Persona-Vorlagen und Template-Definitionen. |
-| `IconAndLogoCatalog.kt` | ~1.091 | **Stabil**: Icon- und Logokatalog. |
-| `P2pSyncTab.kt` | ~1.010 | **Offen**: Aufteilung in Device-Pairing, QR-Scanner & Transfer-Monitor. |
-| `AiDocumentChatDrawer.kt` | ~996 | **Offen**: Chat-Message-List, Input-Bar & Context-Chips auslagern. |
-| `PcCompanionWizardDialog.kt` | ~979 | **Offen**: Pairing-, Verbindungs- & Sync-Schritte extrahieren. |
-| `ReconciliationDialog.kt` | ~898 | **Offen**: Bankabgleich-Filter & Match-Karten auslagern. |
-| `DocumentDetailModal.kt` | ~898 | **Offen**: Metadaten-Formular, OCR-Vorschau, Versionierung. |
-| `ImportView.kt` | ~884 | **Offen**: Datei-Picker, Batch-Queue & Preview. |
-| `DmsExplorerView.kt` | 176 | **Erledigt**: Auf 176 Zeilen geschrumpft (Sub-Composables in `dms/` ausgelagert). |
+| `SettingsRepository.kt` | 1.416 | **Stabil**: Daten-Repository für App-Einstellungen. |
+| `Models.kt` | 1.345 | **Stabil**: Domänenmodelle und Enums. |
+| `P2pSyncServer.kt` | 1.310 | **Stabil**: P2P HTTP/TLS Server-Implementierung. |
+| `CloudStep.kt` | 1.195 | **Offen**: Modularisierung von WebDAV- & Google Drive Sub-Komponenten. |
+| `MainScreen.kt` | 1.194 | **Offen**: Modularisierung von Drawer, Navigation und Screen-Routing. |
+| `UserPersonaFactory.kt` | 1.150 | **Stabil**: Persona-Vorlagen und Template-Definitionen. |
+| `IconAndLogoCatalog.kt` | 1.091 | **Stabil**: Icon- und Logokatalog. |
+| `P2pSyncTab.kt` | 1.010 | **Offen**: Aufteilung in Device-Pairing, QR-Scanner & Transfer-Monitor. |
+| `AiDocumentChatDrawer.kt` | 994 | **Offen**: Chat-Message-List, Input-Bar & Context-Chips auslagern. |
+| `PcCompanionWizardDialog.kt` | 979 | **Offen**: Pairing-, Verbindungs- & Sync-Schritte extrahieren. |
+| `CustomWidgetEditorDialog.kt` | 931 | **Erledigt**: Aus `DashboardCustomWidgetsUi.kt` nach `dashboard/custom/` ausgelagert. |
+| `ReconciliationDialog.kt` | 898 | **Offen**: Bankabgleich-Filter & Match-Karten auslagern. |
+| `DocumentDetailModal.kt` | 896 | **Offen**: Metadaten-Formular, OCR-Vorschau, Versionierung. |
+| `ImportView.kt` | 884 | **Offen**: Datei-Picker, Batch-Queue & Preview. |
+| `AiProviderConfigPane.kt` | 829 | **Erledigt**: Aus `RulesAndAiSettingsView.kt` nach `rules/` ausgelagert. |
+| `ScannerView.kt` | 593 | **Erledigt**: Aufgeteilt in `scanner/` (`ScannerCameraPreviewPane`, `ScannerCropOverlayPane`, `ScannerPageReviewPane`). |
+| `RulesAndAiSettingsView.kt` | 434 | **Erledigt**: Aufgeteilt in `rules/` (`RuleListAndEditorPane`, `AiProviderConfigPane`, `RuleTestingDialog`). |
 | `SetupWizardDialog.kt` | 320 | **Erledigt**: Auf 320 Zeilen geschrumpft (Step-Composables in `wizard/` ausgelagert). |
-| `SettingsView.kt` | 81 | **Erledigt**: Auf 81 Zeilen geschrumpft (Sub-Tabs in `settings/` ausgelagert). |
+| `DashboardCustomWidgetsUi.kt` | 155 | **Erledigt**: Auf 155 Zeilen geschrumpft (`dashboard/custom/`). |
+| `SettingsView.kt` | 81 | **Erledigt**: Auf 81 Zeilen geschrumpft (`settings/`). |
 
 ---
 
-## ✅ Erledigte Refactoring-Pakete (Kurzübersicht)
+## ✅ Status der Refactoring-Pakete (Kurzübersicht)
 
-- **Paket 1 (`SettingsView.kt`)**: 81 Zeilen (`ui/views/settings/`).
-- **Paket 2 (`DocAnizerViewModel.kt`)**: Fassaden-Pattern (`DmsManager.kt`, `FinanceManager.kt`, `SyncManager.kt`).
-- **Paket 3 (`SetupWizardDialog.kt`)**: 320 Zeilen (`ui/views/wizard/`).
-- **Paket 4 (`LlmService.kt`)**: 1.947 Zeilen (`LlmPrompts.kt` 208 Z., `LlmToolExecutor.kt` 600 Z.).
-- **Paket 5 (Audit-Logger & Diagnose)**: `AppAuditLogger.kt` mit Log-Leveln und Settings-Integration.
-- **Paket 6 (`DmsExplorerView.kt`)**: 176 Zeilen (`ui/views/dms/`: `DmsFolderNavPane`, `DmsDocumentListView`, `DmsFilterBar`, `DmsBatchActionToolbar`).
-- **Paket 7 (`DashboardView.kt` Widgets)**: 1.791 Zeilen (`ui/views/dashboard/`: `DashboardActionShortcutsWidget`, `DashboardFinanceOverviewWidget`, `DashboardRecentDocsWidget`, `DashboardSyncStatusWidget`, `DashboardReconciliationWidget`).
+- **Paket 1 (`SettingsView.kt`)**: ✅ **Erledigt** – Auf 81 Zeilen reduziert (`ui/views/settings/`).
+- **Paket 2 (`DocAnizerViewModel.kt`)**: 🟡 **Teilweise refaktoriert** – 2.868 Zeilen; Fassaden-Pattern (`DmsManager.kt`, `FinanceManager.kt`, `SyncManager.kt`).
+- **Paket 3 (`SetupWizardDialog.kt`)**: ✅ **Erledigt** – Auf 320 Zeilen reduziert (`ui/views/wizard/`).
+- **Paket 4 (`LlmService.kt`)**: 🟡 **Teilweise refaktoriert** – 2.195 Zeilen; `LlmPrompts.kt` (208 Z.) & `LlmToolExecutor.kt` (600 Z.) ausgelagert.
+- **Paket 5 (Audit-Logger & Diagnose)**: ✅ **Erledigt** – `AppAuditLogger.kt` mit Log-Leveln und Settings-Integration.
+- **Paket 6 (`DmsExplorerView.kt`)**: 🟡 **Offen / Nacharbeit** – 3.342 Zeilen; Teilkomponenten in `ui/views/dms/` angelegt (`DmsFolderNavPane`, `DmsDocumentListView`, `DmsFilterBar`, `DmsBatchActionToolbar`), vollständige Entflechtung der Hauptansicht ausstehend.
+- **Paket 7 (`DashboardView.kt` Widgets)**: 🟡 **Teilweise refaktoriert** – 1.791 Zeilen; Standard-Widgets ausgelagert (`ui/views/dashboard/`).
+- **Paket 8 (`DashboardCustomWidgetsUi.kt`)**: ✅ **Erledigt** – Auf 155 Zeilen reduziert (`ui/views/dashboard/custom/`: `CustomWidgetRenderer`, `CustomWidgetEditorDialog`, `CustomWidgetTypesUi`).
+- **Paket 9 (`RulesAndAiSettingsView.kt`)**: ✅ **Erledigt** – Auf 434 Zeilen reduziert (`ui/views/rules/`: `RuleListAndEditorPane`, `AiProviderConfigPane`, `RuleTestingDialog`).
+- **Paket 10 (`ScannerView.kt`)**: ✅ **Erledigt** – Auf 593 Zeilen reduziert (`ui/views/scanner/`: `ScannerCameraPreviewPane`, `ScannerCropOverlayPane`, `ScannerPageReviewPane`).
 
 ---
 

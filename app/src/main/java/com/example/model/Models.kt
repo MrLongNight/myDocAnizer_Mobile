@@ -1271,8 +1271,8 @@ data class DeviceHardwareInfo(
 
     fun getCompatibility(recommendedRamGb: Float): ModelCompatibilityLevel {
         return when {
-            totalRamGb >= recommendedRamGb + 1.0f -> ModelCompatibilityLevel.OPTIMAL
-            totalRamGb >= recommendedRamGb - 0.2f -> ModelCompatibilityLevel.LIMITED
+            recommendedRamGb <= 3.2f || (totalRamGb >= 6.0f && recommendedRamGb <= 4.5f) -> ModelCompatibilityLevel.OPTIMAL
+            recommendedRamGb <= 5.2f || (totalRamGb >= 8.0f && recommendedRamGb <= 7.0f) -> ModelCompatibilityLevel.LIMITED
             else -> ModelCompatibilityLevel.NOT_RECOMMENDED
         }
     }
