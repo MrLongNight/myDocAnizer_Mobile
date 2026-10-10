@@ -58,7 +58,9 @@ class DocRuleRepository(private val context: Context) {
                         isEnabled = obj.optBoolean("isEnabled", true),
                         confidenceScore = obj.optDouble("confidenceScore", 1.0).toFloat(),
                         isAiGenerated = obj.optBoolean("isAiGenerated", false),
-                        targetCustomFields = customFieldsMap
+                        targetCustomFields = customFieldsMap,
+                        targetIcon = obj.optString("targetIcon", ""),
+                        targetLogo = obj.optString("targetLogo", "")
                     )
                 )
             }
@@ -89,6 +91,8 @@ class DocRuleRepository(private val context: Context) {
                     val cfObj = JSONObject()
                     r.targetCustomFields.forEach { (k, v) -> cfObj.put(k, v) }
                     put("targetCustomFields", cfObj)
+                    put("targetIcon", r.targetIcon)
+                    put("targetLogo", r.targetLogo)
                 }
                 arr.put(obj)
             }

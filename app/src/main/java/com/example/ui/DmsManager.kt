@@ -12,6 +12,7 @@ import com.example.service.DocumentStorageService
 import com.example.service.LlmService
 import com.example.service.OcrService
 import com.example.service.SettingsRepository
+import com.example.service.llm.CustomFieldHarmonizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -406,11 +407,41 @@ class DmsManager(
         }
     }
 
-    // Rules
+    // Rules mit automatischer Zusatzfeld-Harmonisierung & Registrierung im Tresor
     val docRules: StateFlow<List<DocRule>> = ruleRepo.rules
-    fun addDocRule(rule: DocRule) = ruleRepo.addRule(rule)
-    fun addDocRules(rules: List<DocRule>) = ruleRepo.addRules(rules)
-    fun updateDocRule(rule: DocRule) = ruleRepo.updateRule(rule)
+
+    fun addDocRule(rule: DocRule) {
+        scope.launch(Dispatchers.IO) {
+            val existingFields = customFieldDao.getAllCustomFieldsList()
+            val harmonization = CustomFieldHarmonizer.harmonizeFields(rule.targetCustomFields, existingFields)
+            CustomFieldHarmonizer.ensureFieldsRegisteredInDatabase(harmonization, customFieldDao)
+            val finalRule = rule.copy(targetCustomFields = harmonization.harmonizedFields)
+            ruleRepo.addRule(finalRule)
+        }
+    }
+
+    fun addDocRules(rules: List<DocRule>) {
+        scope.launch(Dispatchers.IO) {
+            val existingFields = customFieldDao.getAllCustomFieldsList()
+            val finalRules = rules.map { r ->
+                val harmonization = CustomFieldHarmonizer.harmonizeFields(r.targetCustomFields, existingFields)
+                CustomFieldHarmonizer.ensureFieldsRegisteredInDatabase(harmonization, customFieldDao)
+                r.copy(targetCustomFields = harmonization.harmonizedFields)
+            }
+            ruleRepo.addRules(finalRules)
+        }
+    }
+
+    fun updateDocRule(rule: DocRule) {
+        scope.launch(Dispatchers.IO) {
+            val existingFields = customFieldDao.getAllCustomFieldsList()
+            val harmonization = CustomFieldHarmonizer.harmonizeFields(rule.targetCustomFields, existingFields)
+            CustomFieldHarmonizer.ensureFieldsRegisteredInDatabase(harmonization, customFieldDao)
+            val finalRule = rule.copy(targetCustomFields = harmonization.harmonizedFields)
+            ruleRepo.updateRule(finalRule)
+        }
+    }
+
     fun deleteDocRule(ruleId: String) = ruleRepo.deleteRule(ruleId)
     fun toggleDocRule(ruleId: String, enabled: Boolean) = ruleRepo.toggleRule(ruleId, enabled)
 }

@@ -42,6 +42,7 @@ import com.example.model.CashTransactionEntity
 import com.example.model.CashTransactionType
 import com.example.model.DocumentEntity
 import com.example.ui.DocAnizerViewModel
+import com.example.ui.views.reconciliation.*
 import java.io.File
 import java.io.FileOutputStream
 import java.text.NumberFormat
@@ -196,49 +197,11 @@ fun ReconciliationDialog(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     // MONATS-AUSWAHL
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Prüfungszeitraum:",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = "Monatliche Selbstkontrolle",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                monthOptions.take(3).forEach { (key, label) ->
-                                    val isSelected = selectedMonthKey == key
-                                    FilterChip(
-                                        selected = isSelected,
-                                        onClick = { selectedMonthKey = key },
-                                        label = { Text(label.take(12), fontSize = 11.sp) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    ReconciliationFilterBarPane(
+                        selectedMonthKey = selectedMonthKey,
+                        monthOptions = monthOptions,
+                        onMonthSelected = { selectedMonthKey = it }
+                    )
 
                     // DIFFERENZ- & STATUS-BANNER
                     if (isPerfectMatch && totalWithdrawals > 0) {
@@ -380,126 +343,18 @@ fun ReconciliationDialog(
                     }
 
                     // SOLL / IST GEGENÜBERSTELLUNG
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // 1. SPALTE: KONTOAUSZUG ABHEBUNGEN
-                        Card(
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("🏦 Abhebungen", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                    Text(currencyFormat.format(totalWithdrawals), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                                }
-
-                                HorizontalDivider()
-
-                                if (monthBankWithdrawals.isEmpty()) {
-                                    Text("Keine Einträge", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                } else {
-                                    val df = SimpleDateFormat("dd.MM.", Locale.GERMANY)
-                                    monthBankWithdrawals.forEach { w ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text("${df.format(Date(w.date))} ${w.bookingText.take(10)}", style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                                            Text(currencyFormat.format(abs(w.amount)), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-                                        }
-                                    }
-                                }
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    OutlinedButton(
-                                        onClick = { showAddBankEntryDialog = true },
-                                        modifier = Modifier.weight(1f),
-                                        contentPadding = PaddingValues(vertical = 4.dp, horizontal = 2.dp)
-                                    ) {
-                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(13.dp))
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Text("Manuell", fontSize = 10.sp)
-                                    }
-
-                                    FilledTonalButton(
-                                        onClick = { showImportDialog = true },
-                                        modifier = Modifier.weight(1.3f),
-                                        contentPadding = PaddingValues(vertical = 4.dp, horizontal = 2.dp)
-                                    ) {
-                                        Icon(Icons.Default.FileOpen, contentDescription = null, modifier = Modifier.size(13.dp))
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Text("Import (CSV)", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
-
-                        // 2. SPALTE: BELEGE & BAR-AUSGABEN
-                        Card(
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("🧾 Bar-Belege", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                    Text(currencyFormat.format(totalReceiptsAndExpenses + totalPrivateWithdrawals), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
-                                }
-
-                                HorizontalDivider()
-
-                                if (monthReceiptDocs.isEmpty() && monthCashTx.isEmpty()) {
-                                    Text("Keine Belege", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                } else {
-                                    val df = SimpleDateFormat("dd.MM.", Locale.GERMANY)
-                                    monthReceiptDocs.take(3).forEach { doc ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text("${df.format(Date(doc.createdAt))} ${doc.title.take(10)}", style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                                            Text(currencyFormat.format(doc.amount ?: 0.0), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-                                        }
-                                    }
-                                    monthCashTx.take(3).forEach { tx ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Text("${df.format(Date(tx.date))} ${tx.title.take(10)}", style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                                            Text(currencyFormat.format(tx.amount), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
-                                        }
-                                    }
-                                }
-
-                                OutlinedButton(
-                                    onClick = { showAddCashDialog = true },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentPadding = PaddingValues(vertical = 4.dp)
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Bar-Ausgabe +", fontSize = 11.sp)
-                                }
-                            }
-                        }
-                    }
+                    ReconciliationMatchCardPane(
+                        monthBankWithdrawals = monthBankWithdrawals,
+                        monthReceiptDocs = monthReceiptDocs,
+                        monthCashTx = monthCashTx,
+                        totalWithdrawals = totalWithdrawals,
+                        totalReceiptsAndExpenses = totalReceiptsAndExpenses,
+                        totalPrivateWithdrawals = totalPrivateWithdrawals,
+                        currencyFormat = currencyFormat,
+                        onAddBankEntryClick = { showAddBankEntryDialog = true },
+                        onImportClick = { showImportDialog = true },
+                        onAddCashEntryClick = { showAddCashDialog = true }
+                    )
 
                     // ERKLÄRUNG ZUR SELBSTKONTROLLE
                     Card(
@@ -577,185 +432,6 @@ fun ReconciliationDialog(
             }
         )
     }
-}
-
-@Composable
-fun AddCashTransactionDialog(
-    defaultMonthKey: String,
-    initialAmount: Double = 0.0,
-    onDismiss: () -> Unit,
-    onSave: (CashTransactionEntity) -> Unit
-) {
-    var title by remember { mutableStateOf(if (initialAmount > 0) "Bar-Ausgabe" else "") }
-    var amountStr by remember { mutableStateOf(if (initialAmount > 0) String.format(Locale.GERMANY, "%.2f", initialAmount) else "") }
-    var category by remember { mutableStateOf("Tagesausgaben") }
-    var note by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Bar-Ausgabe / Quittung erfassen", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Bezeichnung / Zweck (z.B. Tanken, Porto)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = amountStr,
-                    onValueChange = { amountStr = it.replace(',', '.') },
-                    label = { Text("Betrag in € (z.B. 45.50)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = category,
-                    onValueChange = { category = it },
-                    label = { Text("Kategorie") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Notiz / Quittungsnummer (Optional)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val amt = amountStr.toDoubleOrNull() ?: 0.0
-                    if (title.isNotBlank() && amt > 0.0) {
-                        onSave(
-                            CashTransactionEntity(
-                                title = title,
-                                amount = amt,
-                                type = CashTransactionType.EXPENSE,
-                                category = category,
-                                note = note,
-                                matchReconciliationMonth = defaultMonthKey
-                            )
-                        )
-                    }
-                }
-            ) {
-                Text("Speichern")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Abbrechen") }
-        }
-    )
-}
-
-@Composable
-private fun AddBankWithdrawalDialog(
-    defaultMonthKey: String,
-    onDismiss: () -> Unit,
-    onSave: (BankStatementEntryEntity) -> Unit
-) {
-    var text by remember { mutableStateOf("Geldautomat Barabhebung") }
-    var amountStr by remember { mutableStateOf("200.00") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Kontoauszug-Abhebung eintragen", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    label = { Text("Buchungstext (z.B. Geldautomat Sparkasse)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = amountStr,
-                    onValueChange = { amountStr = it.replace(',', '.') },
-                    label = { Text("Abgehobener Betrag in € (z.B. 200.00)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val amt = amountStr.toDoubleOrNull() ?: 0.0
-                    if (amt > 0.0) {
-                        onSave(
-                            BankStatementEntryEntity(
-                                date = System.currentTimeMillis(),
-                                bookingText = text,
-                                purpose = "Bargeldauszahlung",
-                                amount = -amt,
-                                isCashWithdrawal = true,
-                                monthYear = defaultMonthKey
-                            )
-                        )
-                    }
-                }
-            ) {
-                Text("Eintragen")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Abbrechen") }
-        }
-    )
-}
-
-@Composable
-private fun AddPrivateWithdrawalDialog(
-    amount: Double,
-    monthKey: String,
-    onDismiss: () -> Unit,
-    onConfirm: (CashTransactionEntity) -> Unit
-) {
-    var note by remember { mutableStateOf("Privatentnahme Haushalt / Lebenshaltung") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Als Barausgabe eintragen", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "Möchtest du den Betrag von ${String.format(Locale.GERMANY, "%.2f €", amount)} als Barausgabe (z. B. für Einkäufe ohne Quittung, Restaurant oder Taschengeld) verbuchen?",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Zweck / Notiz (optional)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    onConfirm(
-                        CashTransactionEntity(
-                            title = if (note.isNotBlank()) note else "Barausgabe / Eigenbedarf",
-                            amount = amount,
-                            type = CashTransactionType.EXPENSE,
-                            category = "Bargeld",
-                            note = note,
-                            matchReconciliationMonth = monthKey
-                        )
-                    )
-                }
-            ) {
-                Text("Jetzt eintragen")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Abbrechen") }
-        }
-    )
 }
 
 private fun generateAndShareReconciliationReport(

@@ -809,7 +809,7 @@ class P2pSyncServer(
         output: OutputStream
     ) {
         val destDir = File(context.filesDir, "Documents").apply { mkdirs() }
-        val safeFileName = File(fileName).name
+        val safeFileName = File(fileName).name.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
         val destFile = File(destDir, safeFileName)
 
         if (!destFile.canonicalPath.startsWith(destDir.canonicalPath)) {

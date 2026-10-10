@@ -57,28 +57,40 @@ fun ModuleSettingsTab(
 
 @Composable
 fun FinanceModuleContent(viewModel: DocAnizerViewModel) {
-    // Current logic from ModuleSettingsTab for Finance
     val enableTracking by viewModel.enableIncomeExpenseTracking.collectAsState()
     val enableCashTracker by viewModel.enableCashTracker.collectAsState()
     val enableReceiptExpenses by viewModel.enableReceiptExpenses.collectAsState()
     val enableBankStatementImport by viewModel.enableBankStatementImport.collectAsState()
+    var isFinanceExpanded by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Finanz- & Belegmanagement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("Kassenbons, Barzahlungen und Bankauszüge", style = MaterialTheme.typography.bodySmall)
+        com.example.ui.components.CollapsibleSettingsCard(
+            title = "Finanz- & Belegmanagement",
+            subtitle = if (enableTracking) "Aktiv (Kassenbons, Barzahlungen & Bankauszüge)" else "Deaktiviert",
+            icon = Icons.Default.AccountBalanceWallet,
+            isExpanded = isFinanceExpanded,
+            onToggle = { isFinanceExpanded = !isFinanceExpanded }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Finanz-Tracking aktivieren", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text("Aktiviert Einnahmen- und Ausgabenverwaltung im Dashboard", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = enableTracking, onCheckedChange = { viewModel.setEnableIncomeExpenseTracking(it) })
                 }
-                Switch(checked = enableTracking, onCheckedChange = { viewModel.setEnableIncomeExpenseTracking(it) })
+
+                if (enableTracking) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    FinanceToggleItem("Bargeld Tracker", enableCashTracker) { viewModel.setEnableCashTracker(it) }
+                    FinanceToggleItem("Beleg Erfassung", enableReceiptExpenses) { viewModel.setEnableReceiptExpenses(it) }
+                    FinanceToggleItem("Bankauszüge", enableBankStatementImport) { viewModel.setEnableBankStatementImport(it) }
+                }
             }
-        }
-        
-        if (enableTracking) {
-             // Individual Toggles
-             FinanceToggleItem("Bargeld Tracker", enableCashTracker) { viewModel.setEnableCashTracker(it) }
-             FinanceToggleItem("Beleg Erfassung", enableReceiptExpenses) { viewModel.setEnableReceiptExpenses(it) }
-             FinanceToggleItem("Bankauszüge", enableBankStatementImport) { viewModel.setEnableBankStatementImport(it) }
         }
     }
 }

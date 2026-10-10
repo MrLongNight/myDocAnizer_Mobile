@@ -473,8 +473,10 @@ fun ScannerView(
         hasCameraPermission = isGranted
     }
 
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
+    val showFirstStepsTour by viewModel.showFirstStepsTour.collectAsStateWithLifecycle()
+
+    LaunchedEffect(hasCameraPermission, showFirstStepsTour) {
+        if (!hasCameraPermission && !showFirstStepsTour) {
             permissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }

@@ -96,6 +96,16 @@ class LlamaCppInferenceEngine(private val context: Context) {
         private const val TAG = "LlamaCppEngine"
         private var isNativeLibLoaded = false
 
+        private fun safeLogI(tag: String, msg: String) {
+            try { Log.i(tag, msg) } catch (_: Throwable) { println("[$tag] $msg") }
+        }
+        private fun safeLogW(tag: String, msg: String) {
+            try { Log.w(tag, msg) } catch (_: Throwable) { println("[$tag] $msg") }
+        }
+        private fun safeLogE(tag: String, msg: String, tr: Throwable? = null) {
+            try { Log.e(tag, msg, tr) } catch (_: Throwable) { println("[$tag] $msg ${tr?.message ?: ""}") }
+        }
+
         init {
             try {
                 // Nur laden, wenn die native Bibliothek im Dateisystem tatsächlich vorhanden ist
@@ -107,14 +117,14 @@ class LlamaCppInferenceEngine(private val context: Context) {
                 if (exists) {
                     System.loadLibrary("llama_android")
                     isNativeLibLoaded = true
-                    Log.i(TAG, "Native llama.cpp JNI-Bibliothek erfolgreich geladen.")
+                    safeLogI(TAG, "Native llama.cpp JNI-Bibliothek erfolgreich geladen.")
                 } else {
                     isNativeLibLoaded = false
-                    Log.i(TAG, "Verwende optimierte On-Device Kotlin/JNI Fallback-Pipeline (100% lokal).")
+                    safeLogI(TAG, "Verwende optimierte On-Device Kotlin/JNI Fallback-Pipeline (100% lokal).")
                 }
             } catch (e: Throwable) {
                 isNativeLibLoaded = false
-                Log.i(TAG, "Fallback-Pipeline aktiv: ${e.message}")
+                safeLogI(TAG, "Fallback-Pipeline aktiv: ${e.message}")
             }
         }
 
@@ -170,6 +180,42 @@ string_array ::= "[" ws (string ("," ws string)*)? ws "]"
 string ::= "\"" ([^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4}))* "\""
 ws ::= [ \t\n\r]*
 """
+
+        /**
+         * Hochgradig optimierter, schlanker System-Prompt speziell für kleine Vor-Ort-Modelle (0.5B - 3B),
+         * wie Qwen 2.5 0.5B/1.5B/3B, Llama 3.2 1B/3B, SmolLM2 und Phi-3.5.
+         * Minimiert Attention-Drift und Token-Overhead, erzwingt standardisierte Feldnamen für smarte Dashboard-Widgets.
+         */
+        fun buildSmallModelOptimizedPrompt(whitelistedCustomFields: List<String> = emptyList()): String {
+            val availableFields = if (whitelistedCustomFields.isNotEmpty()) {
+                whitelistedCustomFields.take(15).joinToString(", ")
+            } else {
+                "Betrag, Fälligkeit, Rechnungsnummer, Kundennummer, Vertragsnummer, Zählernummer, Datum, Steuernummer, Kennzeichen, IBAN"
+            }
+
+            return """DMS-Assistent für mobile On-Device Extraktion.
+Analysiere den OCR-Text und extrahiere Schlüsseldaten strikt als kompaktes JSON.
+
+REGELN FÜR KLEINE MODELLE:
+1. '_reasoning': Maximal 1 kurzer Satz zur Begründung.
+2. 'globale_zusatzfelder': Nutze AUSSCHLIESSLICH passende Schlüssel aus dieser Liste:
+   [ $availableFields ]
+3. Formate: Beträge mit Währung (z.B. "49,90 €"), Datumsangaben als "DD.MM.YYYY".
+4. Erfinde keine Daten; wenn ein Wert nicht im Text steht, lasse das Feld weg.
+
+SCHEMA:
+{
+  "_reasoning": "Rechnung von Vodafone mit Monatsbetrag.",
+  "absender": "Firmenname oder Aussteller",
+  "dokumententyp": "Rechnung, Vertrag, Brief, Beleg oder Gehaltsabrechnung",
+  "match_keywords": ["keyword1", "keyword2"],
+  "kategorie_vorschlag": "Finanzen, Verträge, Steuern oder Post & Dokumente",
+  "globale_zusatzfelder": {
+    "Betrag": "49,90 €",
+    "Fälligkeit": "15.11.2026"
+  }
+}"""
+        }
 
         /**
          * Baut den spezialisierten Fachabteilungs-System-Prompt für den Second Run (Team 2).
@@ -268,6 +314,97 @@ pair ::= string ":" ws string
 string ::= "\"" ([^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4}))* "\""
 ws ::= [ \t\n\r]*
 """
+
+        fun createHeuristicFallbackResponse(
+            ocrText: String,
+            folderStrategy: FolderStrategy = FolderStrategy.BY_CATEGORY
+        ): DmsExtractionResponse {
+            val lower = ocrText.lowercase()
+            val detectedSender = when {
+                lower.contains("congstar") -> "congstar"
+                lower.contains("deutsche post") || lower.contains("postbank") -> "Deutsche Post"
+                lower.contains("dhl") -> "DHL Paket"
+                lower.contains("vodafone") -> "Vodafone GmbH"
+                lower.contains("telekom") || lower.contains("magenta") -> "Deutsche Telekom"
+                lower.contains("o2") || lower.contains("telefonica") -> "Telefónica O2"
+                lower.contains("1&1") -> "1&1 Telecom"
+                lower.contains("allianz") -> "Allianz"
+                lower.contains("ergo") -> "ERGO Versicherung"
+                lower.contains("huk") -> "HUK-COBURG"
+                lower.contains("finanzamt") -> "Finanzamt"
+                lower.contains("stadtwerke") -> "Stadtwerke"
+                lower.contains("e.on") || lower.contains("eon") -> "E.ON Energie"
+                lower.contains("vattenfall") -> "Vattenfall"
+                lower.contains("barmer") -> "BARMER"
+                lower.contains("techniker") || lower.contains("tk ") -> "Techniker Krankenkasse"
+                lower.contains("aok") -> "AOK"
+                lower.contains("sparkasse") -> "Sparkasse"
+                lower.contains("volksbank") || lower.contains("raiffeisenbank") -> "Volksbank Raiffeisenbank"
+                lower.contains("ing-diba") || lower.contains("ing diba") -> "ING"
+                lower.contains("dkb") -> "DKB"
+                lower.contains("commerzbank") -> "Commerzbank"
+                lower.contains("deutsche bank") -> "Deutsche Bank"
+                lower.contains("adac") -> "ADAC"
+                lower.contains("amazon") -> "Amazon"
+                lower.contains("paypal") -> "PayPal"
+                lower.contains("klarna") -> "Klarna"
+                else -> null
+            }
+            val detectedType = when {
+                lower.contains("rechnung") || lower.contains("rechnungsbetrag") || lower.contains("invoice") -> "Rechnung"
+                lower.contains("vertrag") || lower.contains("versicherungsschein") || lower.contains("police") -> "Vertrag"
+                lower.contains("bescheid") || lower.contains("steuerbescheid") -> "Bescheid"
+                lower.contains("gehalt") || lower.contains("entgelt") || lower.contains("lohnabrechnung") -> "Gehaltsabrechnung"
+                lower.contains("quittung") || lower.contains("kassenbon") || lower.contains("beleg") -> "Kassenbeleg"
+                lower.contains("brief") || lower.contains("schreiben") || lower.contains("mitteilung") || lower.contains("deutsche post") -> "Brief"
+                else -> "Dokument"
+            }
+
+            val keywords = listOfNotNull(detectedSender?.lowercase()?.split(" ")?.firstOrNull(), detectedType.lowercase())
+
+            val catSuggestion = when (detectedType) {
+                "Rechnung", "Gehaltsabrechnung", "Kassenbeleg" -> "Finanzen"
+                "Vertrag", "Bescheid" -> "Verträge"
+                else -> "Post & Dokumente"
+            }
+
+            val suggestedPath = when (folderStrategy) {
+                FolderStrategy.BY_SENDER -> "${detectedSender ?: "Dokumente"}/$detectedType"
+                FolderStrategy.BY_CATEGORY -> "$catSuggestion/$detectedType"
+                FolderStrategy.CHRONOLOGICAL -> "2026/$detectedType"
+                FolderStrategy.FLAT -> "Dokumente"
+            }
+
+            val fallbackFields = mutableMapOf<String, String>()
+            val amt = com.example.service.llm.LlmPrompts.extractAmountFromText(ocrText)
+            if (amt.isNotBlank()) fallbackFields["Betrag"] = amt
+            val due = com.example.service.llm.LlmPrompts.extractDueDateFromText(ocrText)
+            if (due.isNotBlank()) fallbackFields["Fälligkeit"] = due
+            val docDate = com.example.service.llm.LlmPrompts.extractDocumentDateFromText(ocrText)
+            if (docDate.isNotBlank()) fallbackFields["Datum"] = docDate
+            val custNo = com.example.service.llm.LlmPrompts.extractCustomerNumber(ocrText)
+            if (custNo.isNotBlank()) fallbackFields["Kundennummer"] = custNo
+            val invNo = com.example.service.llm.LlmPrompts.extractInvoiceNumber(ocrText)
+            if (invNo.isNotBlank()) fallbackFields["Rechnungsnummer"] = invNo
+            val polNo = com.example.service.llm.LlmPrompts.extractPolicyNumber(ocrText)
+            if (polNo.isNotBlank()) fallbackFields["Policennummer"] = polNo
+            val meterNo = com.example.service.llm.LlmPrompts.extractMeterNumber(ocrText)
+            if (meterNo.isNotBlank()) fallbackFields["Zählernummer"] = meterNo
+            val plate = com.example.service.llm.LlmPrompts.extractLicensePlate(ocrText)
+            if (plate.isNotBlank()) fallbackFields["Kennzeichen"] = plate
+            val taxId = com.example.service.llm.LlmPrompts.extractTaxId(ocrText)
+            if (taxId.isNotBlank()) fallbackFields["Steuernummer"] = taxId
+
+            return DmsExtractionResponse(
+                reasoning = "Strukturierte On-Device Erkennung: ${detectedSender ?: "Allgemeines Dokument"} ($detectedType).",
+                absender = detectedSender,
+                dokumententyp = detectedType,
+                matchKeywords = keywords,
+                kategorieVorschlag = catSuggestion,
+                vorgeschlagenerPfad = suggestedPath,
+                globaleZusatzfelder = fallbackFields
+            )
+        }
     }
 
     data class InferenceParams(
@@ -295,18 +432,21 @@ ws ::= [ \t\n\r]*
 
     /**
      * Führt den schnellen First Run (Team 1: Poststelle & Eingangstriage) aus.
-     * Übergibt nur den per OCR-Vorfilter-Matrix zugeschnittenen Kopfbereich (schnell, ca. 400 Tokens).
+     * Übergibt den per OCR-Vorfilter-Matrix zugeschnittenen Kopfbereich und injiziert vorhandene Zusatzfelder,
+     * optimiert für schlanke lokale LLMs.
      */
     suspend fun executeFirstRunExtraction(
         modelFile: File,
         ocrText: String,
-        params: InferenceParams = InferenceParams(maxTokens = 256, grammar = TRIAGE_JSON_GBNF)
+        whitelistedCustomFields: List<String> = emptyList(),
+        params: InferenceParams = InferenceParams(maxTokens = 350, grammar = DMS_JSON_GBNF)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
         val filteredSlice = OcrPreFilterMatrix.extractFirstRunSlice(ocrText)
+        val systemPrompt = buildSmallModelOptimizedPrompt(whitelistedCustomFields)
         val rawOutput = executeInference(
             modelFile = modelFile,
             prompt = "OCR-KOPFZEILEN (TRIAGE):\n$filteredSlice",
-            systemPrompt = TRIAGE_SYSTEM_PROMPT,
+            systemPrompt = systemPrompt,
             params = params
         )
         parseDmsJson(rawOutput, filteredSlice)
@@ -513,7 +653,7 @@ ws ::= [ \t\n\r]*
                 rawJson = jsonStr
             )
         } catch (e: Exception) {
-            Log.w(TAG, "JSON-Parsing fehlgeschlagen: ${e.message}, erzeuge Heuristik-Antwort")
+            safeLogW(TAG, "JSON-Parsing fehlgeschlagen: ${e.message}, erzeuge Heuristik-Antwort")
             return createHeuristicFallbackResponse(fallbackOcrText, folderStrategy)
         }
     }
@@ -578,6 +718,26 @@ ws ::= [ \t\n\r]*
             FolderStrategy.FLAT -> "Dokumente"
         }
 
+        val fallbackFields = mutableMapOf<String, String>()
+        val amt = com.example.service.llm.LlmPrompts.extractAmountFromText(ocrText)
+        if (amt.isNotBlank()) fallbackFields["Betrag"] = amt
+        val due = com.example.service.llm.LlmPrompts.extractDueDateFromText(ocrText)
+        if (due.isNotBlank()) fallbackFields["Fälligkeit"] = due
+        val docDate = com.example.service.llm.LlmPrompts.extractDocumentDateFromText(ocrText)
+        if (docDate.isNotBlank()) fallbackFields["Datum"] = docDate
+        val custNo = com.example.service.llm.LlmPrompts.extractCustomerNumber(ocrText)
+        if (custNo.isNotBlank()) fallbackFields["Kundennummer"] = custNo
+        val invNo = com.example.service.llm.LlmPrompts.extractInvoiceNumber(ocrText)
+        if (invNo.isNotBlank()) fallbackFields["Rechnungsnummer"] = invNo
+        val polNo = com.example.service.llm.LlmPrompts.extractPolicyNumber(ocrText)
+        if (polNo.isNotBlank()) fallbackFields["Policennummer"] = polNo
+        val meterNo = com.example.service.llm.LlmPrompts.extractMeterNumber(ocrText)
+        if (meterNo.isNotBlank()) fallbackFields["Zählernummer"] = meterNo
+        val plate = com.example.service.llm.LlmPrompts.extractLicensePlate(ocrText)
+        if (plate.isNotBlank()) fallbackFields["Kennzeichen"] = plate
+        val taxId = com.example.service.llm.LlmPrompts.extractTaxId(ocrText)
+        if (taxId.isNotBlank()) fallbackFields["Steuernummer"] = taxId
+
         return DmsExtractionResponse(
             reasoning = "Strukturierte On-Device Erkennung: ${detectedSender ?: "Allgemeines Dokument"} ($detectedType).",
             absender = detectedSender,
@@ -585,7 +745,7 @@ ws ::= [ \t\n\r]*
             matchKeywords = keywords,
             kategorieVorschlag = catSuggestion,
             vorgeschlagenerPfad = suggestedPath,
-            globaleZusatzfelder = emptyMap()
+            globaleZusatzfelder = fallbackFields
         )
     }
 

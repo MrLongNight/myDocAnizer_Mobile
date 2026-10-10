@@ -21,7 +21,7 @@ import com.example.ui.components.CollapsibleSettingsCard
 fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
     val scannerSettings by viewModel.scannerSettings.collectAsState()
 
-    var isModeExpanded by remember { mutableStateOf(true) }
+    var isModeExpanded by remember { mutableStateOf(false) }
     var isTripodExpanded by remember { mutableStateOf(false) }
     var isTriggerExpanded by remember { mutableStateOf(false) }
     var isHardwareExpanded by remember { mutableStateOf(false) }

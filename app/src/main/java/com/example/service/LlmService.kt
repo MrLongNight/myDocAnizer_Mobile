@@ -13,6 +13,8 @@ import com.example.model.ModelCompatibilityLevel
 import com.example.model.SYSTEM_PROMPT_FOCUS_OPTIONS
 import com.example.service.llm.LlmPrompts
 import com.example.service.llm.LlmToolExecutor
+import com.example.service.llm.CustomFieldHarmonizer
+import com.example.data.AppDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,6 +45,8 @@ class LlmService(private val context: Context) {
 
     private val _deviceHardware = MutableStateFlow(detectDeviceHardware())
     val deviceHardware: StateFlow<DeviceHardwareInfo> = _deviceHardware.asStateFlow()
+
+    private val database by lazy { AppDatabase.getDatabase(context) }
 
     fun detectDeviceHardware(): DeviceHardwareInfo {
         return try {
@@ -1112,29 +1116,38 @@ class LlmService(private val context: Context) {
 
     suspend fun classifyDocumentText(
         ocrText: String,
+        whitelistedCustomFields: List<String> = emptyList(),
         config: LlmInferenceConfig = LlmInferenceConfig()
     ): LlmClassificationResult {
-        return classifyDocumentFirstRun(ocrText, config)
+        return classifyDocumentFirstRun(ocrText, whitelistedCustomFields, config)
     }
 
     /**
      * Team 1: Poststelle & Eingangstriage (First Run).
      * Schnelle Ersterfassung für Absender, Dokumententyp, Kategorie und Such-Keywords
-     * unter Verwendung der OCR-Vorfilter-Matrix.
+     * unter Verwendung der OCR-Vorfilter-Matrix und automatischer Zusatzfeld-Harmonisierung.
      */
     suspend fun classifyDocumentFirstRun(
         ocrText: String,
+        whitelistedCustomFields: List<String> = emptyList(),
         config: LlmInferenceConfig = LlmInferenceConfig()
     ): LlmClassificationResult = withContext(Dispatchers.Default) {
         _isGenerating.value = true
         val startTime = System.currentTimeMillis()
         val activeModel = getSelectedModel()
 
+        val existingDbFields = runCatching { database.customFieldDao().getAllCustomFieldsList() }.getOrDefault(emptyList())
+        val effectiveWhitelistedFields = if (whitelistedCustomFields.isNotEmpty()) {
+            whitelistedCustomFields
+        } else {
+            existingDbFields.map { it.name }
+        }
+
         AppAuditLogger.log(
             category = LogCategory.AI_INFERENCE,
             tag = "FirstRunTriage",
             message = "Starte Team 1 Poststellen-Triage mit '${activeModel.name}' (${activeModel.quantFormat})",
-            details = "Modell-ID: ${activeModel.id} | Kategorie: ${activeModel.modelCategory} | Fokus: ${config.systemPromptFocus} | Text: ${ocrText.length} Zeichen"
+            details = "Modell-ID: ${activeModel.id} | Kategorie: ${activeModel.modelCategory} | Fokus: ${config.systemPromptFocus} | Zusatzfelder im System: ${effectiveWhitelistedFields.size} | Text: ${ocrText.length} Zeichen"
         )
 
         try {
@@ -1169,19 +1182,24 @@ class LlmService(private val context: Context) {
                 val dmsExtraction = llamaCppEngine.executeFirstRunExtraction(
                     modelFile = modelFile,
                     ocrText = ocrText,
+                    whitelistedCustomFields = effectiveWhitelistedFields,
                     params = LlamaCppInferenceEngine.InferenceParams(
                         temperature = config.temperature,
                         threads = config.threadCount,
-                        grammar = LlamaCppInferenceEngine.TRIAGE_JSON_GBNF
+                        grammar = LlamaCppInferenceEngine.DMS_JSON_GBNF
                     )
                 )
 
                 val sender = dmsExtraction.absender ?: detectedSender ?: "Deutsche Post"
                 val docType = dmsExtraction.dokumententyp ?: if (lower.contains("rechnung")) "Rechnung" else if (lower.contains("brief") || lower.contains("post")) "Brief" else "Dokument"
                 val ruleName = dmsExtraction.computeRuleName()
-                val finalCustomFields = mutableMapOf<String, String>()
-                finalCustomFields.putAll(customFields)
-                finalCustomFields.putAll(dmsExtraction.globaleZusatzfelder)
+                val rawCustomFields = mutableMapOf<String, String>()
+                rawCustomFields.putAll(customFields)
+                rawCustomFields.putAll(dmsExtraction.globaleZusatzfelder)
+
+                // Smarte Harmonisierung gegen existierende Zusatzfelder im Tresor
+                val harmonization = CustomFieldHarmonizer.harmonizeFields(rawCustomFields, existingDbFields)
+                val finalCustomFields = harmonization.harmonizedFields
 
                 val mainCat = when {
                     dmsExtraction.kategorieVorschlag != null -> dmsExtraction.kategorieVorschlag!!
@@ -1540,6 +1558,9 @@ class LlmService(private val context: Context) {
                 }
             }
 
+            val harmonization = CustomFieldHarmonizer.harmonizeFields(result.customFields, existingDbFields)
+            val finalResult = result.copy(customFields = harmonization.harmonizedFields)
+
             val latency = System.currentTimeMillis() - startTime
             val rt = Runtime.getRuntime()
             val usedMemMb = ((rt.totalMemory() - rt.freeMemory()) / (1024f * 1024f)).coerceAtLeast(0.5f)
@@ -1547,17 +1568,17 @@ class LlmService(private val context: Context) {
 
             AppAuditLogger.logAiInference(
                 modelId = activeModel.id,
-                docType = result.docType,
-                sender = result.sender,
-                confidence = result.confidence,
+                docType = finalResult.docType,
+                sender = finalResult.sender,
+                confidence = finalResult.confidence,
                 latencyMs = latency,
-                customFieldsCount = result.customFields.size,
-                reasoningSnippet = result.explanation.take(180),
+                customFieldsCount = finalResult.customFields.size,
+                reasoningSnippet = finalResult.explanation.take(180),
                 ramDeltaMb = roundedMemDelta,
-                fullReasoning = result.explanation
+                fullReasoning = finalResult.explanation
             )
 
-            result
+            finalResult
         } finally {
             _isGenerating.value = false
         }
@@ -1875,7 +1896,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
             }
 
             // Fallback auf Heuristik
-            val baseResult = classifyDocumentFirstRun(ocrText, config)
+            val baseResult = classifyDocumentFirstRun(ocrText, config = config)
             val mergedFields = mutableMapOf<String, String>()
             mergedFields.putAll(baseResult.customFields)
             mergedFields.putAll(customFields)
@@ -2154,7 +2175,13 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                 )
             }
 
-            generatedList
+            val existingDbFields = runCatching { database.customFieldDao().getAllCustomFieldsList() }.getOrDefault(emptyList())
+            val harmonizedList = generatedList.map { rule ->
+                val harmonization = CustomFieldHarmonizer.harmonizeFields(rule.targetCustomFields, existingDbFields)
+                rule.copy(targetCustomFields = harmonization.harmonizedFields)
+            }
+
+            harmonizedList
         } finally {
             _isGenerating.value = false
         }

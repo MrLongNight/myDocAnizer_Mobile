@@ -30,6 +30,9 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.model.DocRule
 import com.example.model.PendingRuleSuggestion
 import com.example.ui.DocAnizerViewModel
+import com.example.service.llm.CustomFieldHarmonizer
+import com.example.service.llm.HarmonizationStatus
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 
 @Composable
@@ -73,6 +76,17 @@ fun PendingRuleSuggestionDialog(
             sender = sender,
             docType = docType,
             customFields = customFieldsMap
+        )
+    }
+
+    val existingFields = viewModel?.customFields?.collectAsStateWithLifecycle()?.value ?: emptyList()
+    val auditReport = remember(ruleName, docType, sender, customFieldsMap, existingFields) {
+        CustomFieldHarmonizer.auditRuleFields(
+            ruleName = ruleName,
+            docType = docType,
+            sender = sender,
+            currentCustomFields = customFieldsMap,
+            existingFields = existingFields
         )
     }
 
@@ -683,6 +697,70 @@ fun PendingRuleSuggestionDialog(
                                                     Icon(Icons.Default.Delete, contentDescription = "Löschen", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+
+                                if (auditReport.supportedDashboardWidgets.isNotEmpty()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(
+                                                text = "💡 Unterstützt folgende Dashboard-Funktionen:",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            auditReport.supportedDashboardWidgets.forEach { widgetBenefit ->
+                                                Text(
+                                                    text = "• $widgetBenefit",
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (auditReport.missingRecommendedFields.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Empfohlene Felder für smarte Widgets:",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Row(
+                                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        auditReport.missingRecommendedFields.forEach { recItem ->
+                                            val isExisting = recItem.status == HarmonizationStatus.MATCHED_EXISTING
+                                            AssistChip(
+                                                onClick = {
+                                                    val updated = customFieldsMap.toMutableMap()
+                                                    updated[recItem.fieldName] = recItem.valueHint.ifBlank { "Standard" }
+                                                    customFieldsMap = updated
+                                                },
+                                                label = {
+                                                    Text(
+                                                        text = "+ ${recItem.fieldName}${if (isExisting) " (Tresor)" else " (Neu)"}",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        imageVector = if (isExisting) Icons.Default.CheckCircle else Icons.Default.Add,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(14.dp),
+                                                        tint = if (isExisting) Color(0xFF047857) else MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+                                            )
                                         }
                                     }
                                 }

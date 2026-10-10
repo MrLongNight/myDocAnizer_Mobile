@@ -24,6 +24,7 @@ import androidx.compose.ui.res.painterResource
 import com.example.R
 import com.example.model.DocTypeItem
 import com.example.model.DocumentEntity
+import com.example.ui.views.detail.*
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -154,55 +155,15 @@ fun DocumentDetailModal(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Metadaten-Karten
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    DetailRow("Format", if (isImage) "Original Bilddatei (JPG)" else "Archiv-PDF (A4)")
-                    val prefixE1 = if (document.mainCategoryId.isNotBlank()) "${document.mainCategoryId}_" else ""
-                    val prefixE2 = if (document.subCategoryId.isNotBlank()) "${document.subCategoryId}-" else ""
-                    DetailRow("Ablageort", "$prefixE1${document.mainCategory} ➔ $prefixE2${document.subCategory}")
-                    DetailRow("Seitenanzahl", if (isImage) "1 Bild" else "${document.pageCount} Seite(n)")
-                    DetailRow("Farbmodus", if (document.colorMode == "COLOR") "Farbe" else "Schwarz/Weiß (S/W)")
-                    DetailRow("Dateigröße", document.fileSizeFormatted)
-                    DetailRow("Erstellt am", formatDate(document.createdAt))
-                }
-            }
+            DocumentMetadataEditorPane(
+                document = document,
+                isImage = isImage
+            )
 
             // OCR-Text anzeigen falls vorhanden
             if (document.ocrText.isNotBlank()) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(Icons.Default.DocumentScanner, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                            Text(
-                                text = "Indexierter OCR-Volltext (${document.ocrText.length} Zeichen)",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = document.ocrText.take(280) + if (document.ocrText.length > 280) "..." else "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                DocumentOcrPreviewPane(ocrText = document.ocrText)
             }
 
             // 🛡️ Team 4: Deterministischer Quality Gatekeeper Prüfhinweis (AP-3)
@@ -879,18 +840,4 @@ fun DocumentDetailModal(
     }
 }
 
-@Composable
-private fun DetailRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(text = label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(text = value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-    }
-}
 
-private fun formatDate(timestamp: Long): String {
-    val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.GERMAN)
-    return sdf.format(Date(timestamp))
-}

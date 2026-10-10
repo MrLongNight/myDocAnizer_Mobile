@@ -428,6 +428,12 @@ fun AppStartSplashAnimation(
         }
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            safeFinish()
+        }
+    }
+
     val progress = progressAnim.value
     val percentInt = (progress * 100).toInt().coerceIn(0, 100)
 

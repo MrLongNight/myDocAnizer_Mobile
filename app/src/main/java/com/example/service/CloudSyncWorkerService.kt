@@ -86,28 +86,41 @@ object CloudSyncWorkerService {
                     try {
                         DocumentStorageService.encryptFile(originalPdf, encryptedBlob, userPasswordKey)
 
+                        var anyUploadSuccessful = false
+
                         // Reale WebDAV-Übertragung wenn aktiviert
                         if (config.enableWebDavNas && config.webDavUrl.isNotBlank()) {
                             _syncState.value = SyncState.Syncing("Übertrage ${encryptedBlob.name} an WebDAV/NAS...")
-                            WebDavClient.uploadFile(
+                            val webDavRes = WebDavClient.uploadFile(
                                 url = config.webDavUrl,
                                 user = config.webDavUsername,
                                 pass = config.webDavPassword,
                                 remoteFileName = encryptedBlob.name,
                                 localFile = encryptedBlob
                             )
+                            if (webDavRes.isSuccess) {
+                                anyUploadSuccessful = true
+                            }
                         }
 
                         // Reale Google Drive Übertragung wenn Token vorhanden
-                        if (config.enableGoogleDrive && config.googleDriveConnected) {
+                        if (config.enableGoogleDrive && config.googleDriveConnected && config.googleDriveAccessToken.isNotBlank()) {
                             _syncState.value = SyncState.Syncing("Übertrage ${encryptedBlob.name} an Google Drive...")
-                            // Wenn OAuth Token vorhanden ist
-                            // GoogleDriveClient.uploadEncryptedFile(...)
+                            val driveRes = GoogleDriveClient.uploadEncryptedFile(
+                                accessToken = config.googleDriveAccessToken,
+                                file = encryptedBlob,
+                                remoteName = encryptedBlob.name
+                            )
+                            if (driveRes.isSuccess) {
+                                anyUploadSuccessful = true
+                            }
                         }
 
-                        // Mark synced in database
-                        documentDao.markSynced(doc.id)
-                        uploadedCount++
+                        // Mark synced in database only if upload was successful or offline test mode
+                        if (anyUploadSuccessful || (!config.enableWebDavNas && !config.enableGoogleDrive)) {
+                            documentDao.markSynced(doc.id)
+                            uploadedCount++
+                        }
                     } finally {
                         if (encryptedBlob.exists()) {
                             encryptedBlob.delete()
@@ -132,6 +145,15 @@ object CloudSyncWorkerService {
                             pass = config.webDavPassword,
                             remoteFileName = "doc_index.enc",
                             localFile = encryptedIndex
+                        )
+                    }
+
+                    if (config.enableGoogleDrive && config.googleDriveConnected && config.googleDriveAccessToken.isNotBlank()) {
+                        _syncState.value = SyncState.Syncing("Übertrage doc_index.enc an Google Drive...")
+                        GoogleDriveClient.uploadEncryptedFile(
+                            accessToken = config.googleDriveAccessToken,
+                            file = encryptedIndex,
+                            remoteName = "doc_index.enc"
                         )
                     }
                 }

@@ -66,7 +66,7 @@ fun StepWelcome(
         val text1 = remember(titleColor, bodyColor) {
             buildAnnotatedString {
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = titleColor, fontSize = 12.5.sp)) {
-                    append("Sicher & geschützt: ")
+                    append("Sicher & geschützt:\n")
                 }
                 withStyle(SpanStyle(color = bodyColor, fontSize = 11.5.sp)) {
                     append("Deine Dokumente gehören dir. Sie werden sicher verschlüsselt direkt auf deinem Smartphone gespeichert – ohne Schnüffelei oder ungefragte Datenweitergabe.")
@@ -77,8 +77,8 @@ fun StepWelcome(
         FlowingArticleBlock(
             iconRes = R.drawable.icon_datensicherheit,
             iconDescription = "Sicher & geschützt",
-            iconWidth = 80.dp,
-            iconHeight = 80.dp,
+            iconWidth = 100.dp,
+            iconHeight = 100.dp,
             iconAlignment = Alignment.Start,
             text = text1
         )
@@ -86,7 +86,7 @@ fun StepWelcome(
         val text2 = remember(titleColor, bodyColor) {
             buildAnnotatedString {
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = titleColor, fontSize = 12.5.sp)) {
-                    append("Automatische Belegerkennung: ")
+                    append("Automatische Belegerkennung:\n")
                 }
                 withStyle(SpanStyle(color = bodyColor, fontSize = 11.5.sp)) {
                     append("Die smarte Erkennung liest Rechnungen und Briefe direkt auf dem Handy. Wichtige Daten wie Beträge, Absender und Fristen werden sofort gefunden, ohne dass etwas ins Internet geschickt wird.")
@@ -97,8 +97,8 @@ fun StepWelcome(
         FlowingArticleBlock(
             iconRes = R.drawable.icon_ondevice_ai_agent_hq,
             iconDescription = "Automatische Belegerkennung",
-            iconWidth = 76.dp,
-            iconHeight = 76.dp,
+            iconWidth = 96.dp,
+            iconHeight = 96.dp,
             iconAlignment = Alignment.End,
             text = text2
         )
@@ -106,7 +106,7 @@ fun StepWelcome(
         val text3 = remember(titleColor, bodyColor) {
             buildAnnotatedString {
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = titleColor, fontSize = 12.5.sp)) {
-                    append("Übersichtliche Ordner: ")
+                    append("Übersichtliche Ordner:\n")
                 }
                 withStyle(SpanStyle(color = bodyColor, fontSize = 11.5.sp)) {
                     append("Sortiere alles so, wie du es brauchst: mit praktischen Ordnern, eigenen Notizfeldern und einer schnellen Suche nach jedem Stichwort.")
@@ -117,8 +117,8 @@ fun StepWelcome(
         FlowingArticleBlock(
             iconRes = R.drawable.icon_ordnerstruktur,
             iconDescription = "Übersichtliche Ordner",
-            iconWidth = 90.dp,
-            iconHeight = 90.dp,
+            iconWidth = 110.dp,
+            iconHeight = 110.dp,
             iconAlignment = Alignment.Start,
             text = text3
         )
@@ -126,7 +126,7 @@ fun StepWelcome(
         val text4 = remember(titleColor, bodyColor) {
             buildAnnotatedString {
                 withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = titleColor, fontSize = 12.5.sp)) {
-                    append("Automatische Sicherung: ")
+                    append("Automatische Sicherung:\n")
                 }
                 withStyle(SpanStyle(color = bodyColor, fontSize = 11.5.sp)) {
                     append("Schütze dich vor Datenverlust: Gleiche deine Dokumente kabellos mit deinem Computer oder Tablet ab und erstelle verschlüsselte Sicherheitskopien (z. B. auf Google Drive oder auf USB-Sticks).")
@@ -137,8 +137,8 @@ fun StepWelcome(
         FlowingArticleBlock(
             iconRes = R.drawable.icon_app_connect,
             iconDescription = "Automatische Sicherung",
-            iconWidth = 124.dp,
-            iconHeight = 84.dp,
+            iconWidth = 144.dp,
+            iconHeight = 98.dp,
             iconAlignment = Alignment.End,
             text = text4
         )

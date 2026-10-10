@@ -17,7 +17,61 @@ import com.example.model.AppViewLevel
 import com.example.ui.DocAnizerViewModel
 import com.example.ui.views.settings.*
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 data class SettingsTabItem(val title: String, val icon: ImageVector)
+
+@Composable
+fun CustomFieldsSettingsTab(
+    viewModel: DocAnizerViewModel,
+    modifier: Modifier = Modifier
+) {
+    val customFields by viewModel.customFields.collectAsStateWithLifecycle()
+    val allCustomFieldValues by viewModel.allDocumentCustomFieldValues.collectAsStateWithLifecycle()
+    val allDocuments by viewModel.allDocuments.collectAsStateWithLifecycle()
+    val templates by viewModel.templates.collectAsStateWithLifecycle()
+    val availableMainCategories = remember(allDocuments, templates) {
+        (allDocuments.map { it.mainCategory } + templates.map { it.mainCategory }).filter { it.isNotBlank() }.distinct().sorted()
+    }
+
+    var showCreateCustomFieldDialog by remember { mutableStateOf(false) }
+    var editingFieldForDialog by remember { mutableStateOf<com.example.model.CustomFieldEntity?>(null) }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        com.example.ui.views.dms.DmsCustomFieldsPane(
+            customFields = customFields,
+            customFieldValues = allCustomFieldValues,
+            documents = allDocuments,
+            availableMainCategories = availableMainCategories,
+            onAddFieldClick = {
+                editingFieldForDialog = null
+                showCreateCustomFieldDialog = true
+            },
+            onEditField = { field ->
+                editingFieldForDialog = field
+                showCreateCustomFieldDialog = true
+            },
+            onDeleteField = { fieldId -> viewModel.deleteCustomField(fieldId) },
+            onSelectDocument = { _ -> }
+        )
+
+        if (showCreateCustomFieldDialog) {
+            com.example.ui.views.dms.CreateOrEditCustomFieldDialog(
+                existingField = editingFieldForDialog,
+                availableMainCategories = availableMainCategories,
+                onDismiss = { showCreateCustomFieldDialog = false },
+                onConfirm = { field ->
+                    if (editingFieldForDialog != null) {
+                        viewModel.updateCustomField(field)
+                    } else {
+                        viewModel.addCustomField(field)
+                    }
+                    showCreateCustomFieldDialog = false
+                }
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,11 +92,14 @@ fun SettingsView(
 
     val tabs = listOf(
         SettingsTabItem("Dokumenten-Regeln", Icons.Default.Rule),
+        SettingsTabItem("Zusatzfelder", Icons.Default.Category),
         SettingsTabItem("Lokaler KI Agent", Icons.Default.Psychology),
         SettingsTabItem("Module & Scan", Icons.Default.Extension),
         SettingsTabItem("Sicherheit", Icons.Default.Security),
-        SettingsTabItem("Cloud & Sync", Icons.Default.CloudSync),
+        SettingsTabItem("WLAN & Dual-Sync", Icons.Default.Devices),
+        SettingsTabItem("Cloud & Backup", Icons.Default.CloudSync),
         SettingsTabItem("Design", Icons.Default.Palette),
+        SettingsTabItem("Gesten & Barrierefreiheit", Icons.Default.AccessibilityNew),
         SettingsTabItem("Entwickler & Hilfe", Icons.Default.BugReport)
     )
 
@@ -72,12 +129,15 @@ fun SettingsView(
         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
             when (selectedSettingsTab) {
                 0 -> com.example.ui.views.rules.DocumentRulesSettingsTab(viewModel)
-                1 -> com.example.ui.views.rules.OnDeviceAiAgentSettingsTab(viewModel)
-                2 -> ModuleSettingsTab(viewModel)
-                3 -> SecuritySettingsTab(viewModel)
-                4 -> CloudSyncSettingsTab(viewModel)
-                5 -> AppearanceSettingsTab(viewModel)
-                6 -> DeveloperSettingsTab(viewModel)
+                1 -> CustomFieldsSettingsTab(viewModel)
+                2 -> com.example.ui.views.rules.OnDeviceAiAgentSettingsTab(viewModel)
+                3 -> ModuleSettingsTab(viewModel)
+                4 -> SecuritySettingsTab(viewModel)
+                5 -> P2pSyncTab(viewModel)
+                6 -> CloudSyncSettingsTab(viewModel)
+                7 -> AppearanceSettingsTab(viewModel)
+                8 -> AccessibilityAndGesturesSettingsTab(viewModel)
+                9 -> DeveloperSettingsTab(viewModel)
                 else -> ModuleSettingsTab(viewModel)
             }
         }

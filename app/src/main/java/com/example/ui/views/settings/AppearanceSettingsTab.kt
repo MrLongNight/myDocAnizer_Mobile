@@ -29,9 +29,6 @@ fun AppearanceSettingsTab(
 ) {
     val themeMode by viewModel.themeMode.collectAsState()
     val colorSkin by viewModel.colorSkin.collectAsState()
-    val highContrastMode by viewModel.highContrastMode.collectAsState()
-    val largeTouchTargets by viewModel.largeTouchTargets.collectAsState()
-    val isGestureModeEnabled by viewModel.isGestureModeEnabled.collectAsState()
 
     Column(
         modifier = modifier
@@ -119,192 +116,58 @@ fun AppearanceSettingsTab(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                // 1. Auswahl-Punkt (RadioButton) - Exakte Flucht links
+                                Box(
+                                    modifier = Modifier.width(32.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = { viewModel.setColorSkin(skin.id) }
+                                    )
+                                }
+
+                                // 2. Vorschau-Farbpunkte - Exakte Flucht in festem Container
+                                Box(
+                                    modifier = Modifier.width(46.dp),
+                                    contentAlignment = Alignment.CenterStart
                                 ) {
                                     Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) {
                                         Box(
                                             modifier = Modifier
-                                                .size(26.dp)
+                                                .size(24.dp)
                                                 .clip(CircleShape)
                                                 .background(Color(skin.primaryHex))
                                         )
                                         Box(
                                             modifier = Modifier
-                                                .size(26.dp)
+                                                .size(24.dp)
                                                 .clip(CircleShape)
                                                 .background(Color(skin.secondaryHex))
                                         )
                                     }
-
-                                    Column {
-                                        Text(
-                                            text = skin.name,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
-                                        )
-                                        Text(
-                                            text = skin.description,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
                                 }
 
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = { viewModel.setColorSkin(skin.id) }
-                                )
+                                // 3. Theme Name & Beschreibung - Exakter Start
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = skin.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = skin.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
-                }
-            }
-        }
-
-        // Barrierefreiheit & Anzeige-Ergonomie
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.AccessibilityNew,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Column {
-                        Text(
-                            text = "Barrierefreiheit & Anzeige-Ergonomie",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Unterstützung für Sehbehinderungen, maximale Lesbarkeit & große Touchflächen",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Default.Contrast, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                            Text(
-                                text = "Hoher Kontrast-Modus (WCAG AAA)",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        Text(
-                            text = "Aktiviert tiefschwarze Hintergründe, reinweiße Texte und leuchtende Signal-Akzente.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = highContrastMode,
-                        onCheckedChange = { viewModel.setHighContrastMode(it) }
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Icon(Icons.Default.TouchApp, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
-                            Text(
-                                text = "Große Touch-Bedienflächen (min. 48-56dp)",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        Text(
-                            text = "Vergrößert Schaltflächen und Interaktionselemente gemäß Barrierefreiheitsstandards.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = largeTouchTargets,
-                        onCheckedChange = { viewModel.setLargeTouchTargets(it) }
-                    )
-                }
-            }
-        }
-
-        // Bedienung & Wischgesten-Modus
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            modifier = Modifier.fillMaxWidth().testTag("card_app_gesture_settings")
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Fullscreen,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Column {
-                        Text(
-                            text = "Bedienung & Wischgesten-Modus",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Standard-Modus mit Buttons oder 100% Vollbild mit Wischgesten",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                        Text(
-                            text = "Reiner Gesten-Modus (Vollbild ohne Buttons)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Blendet die untere Menüleiste und beide FABs vollständig aus für maximalen Platz.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = isGestureModeEnabled,
-                        onCheckedChange = { viewModel.setGestureModeEnabled(it) },
-                        modifier = Modifier.testTag("switch_app_gesture_mode")
-                    )
                 }
             }
         }

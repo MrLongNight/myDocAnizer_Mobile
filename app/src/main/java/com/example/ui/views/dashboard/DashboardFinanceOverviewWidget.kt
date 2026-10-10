@@ -16,9 +16,8 @@ import androidx.compose.ui.unit.dp
 import com.example.model.DocumentEntity
 import com.example.model.ElementPeriodScope
 import com.example.ui.DocAnizerViewModel
-import com.example.ui.views.ElementPeriodScopeChip
-import com.example.ui.views.ExpenseBarChart
-import com.example.ui.views.WidgetEditModeHeader
+import com.example.ui.views.dashboard.custom.DashboardElementEditBar
+import com.example.ui.views.dashboard.custom.ElementPeriodScopeChip
 import java.text.NumberFormat
 import java.util.*
 
@@ -44,7 +43,7 @@ fun DashboardFinanceOverviewWidget(
     ) {
         Column {
             if (isEditMode) {
-                WidgetEditModeHeader(
+                DashboardElementEditBar(
                     title = "Finanz- & Ausgaben-Verlauf",
                     onMoveUp = { viewModel.moveDashboardWidgetUp("STANDARD_FINANCE_CHART") },
                     onMoveDown = { viewModel.moveDashboardWidgetDown("STANDARD_FINANCE_CHART") },

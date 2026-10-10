@@ -85,7 +85,7 @@ fun HelpAndWizardsTab(viewModel: DocAnizerViewModel) {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = "PC- & Desktop-Kopplung", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text(text = "QR-Code Scanner für kabellosen P2P-Sync", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = "QR-Code Scanner für kabellosen Dual-Sync", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 OutlinedButton(onClick = { viewModel.launchPcCompanionWizard() }) {
                     Text("Koppeln", fontSize = 12.sp, fontWeight = FontWeight.Bold)

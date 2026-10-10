@@ -58,6 +58,7 @@ fun CameraPreview(
     val imageCapture = remember {
         ImageCapture.Builder()
             .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+            .setJpegQuality(98)
             .build()
     }
 
@@ -88,6 +89,7 @@ fun CameraPreview(
 
     val analysisExecutor = remember { java.util.concurrent.Executors.newSingleThreadExecutor() }
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    val previousSamplesRef = remember { arrayOfNulls<ByteArray>(1) }
 
     DisposableEffect(lifecycleOwner) {
         onDispose {
@@ -101,15 +103,28 @@ fun CameraPreview(
         }
     }
 
-    // Vorheriges Frame-Muster für Bewegungserkennung (als Referenz ohne unnötige UI-Recomposition)
-    val previousSamplesRef = remember { arrayOfNulls<ByteArray>(1) }
-
     Box(modifier = modifier) {
         AndroidView(
             factory = { ctx ->
                 val previewView = PreviewView(ctx).apply {
-                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                    implementationMode = PreviewView.ImplementationMode.PERFORMANCE
                     scaleType = PreviewView.ScaleType.FILL_CENTER
+                    setOnTouchListener { view, event ->
+                        if (event.action == android.view.MotionEvent.ACTION_UP) {
+                            try {
+                                val factory = meteringPointFactory
+                                val point = factory.createPoint(event.x, event.y)
+                                val action = androidx.camera.core.FocusMeteringAction.Builder(point, androidx.camera.core.FocusMeteringAction.FLAG_AF or androidx.camera.core.FocusMeteringAction.FLAG_AE)
+                                    .setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS)
+                                    .build()
+                                cameraControl?.startFocusAndMetering(action)
+                                view.performClick()
+                            } catch (e: Exception) {
+                                Log.e("CameraPreview", "Tap to focus error: ${e.message}")
+                            }
+                        }
+                        true
+                    }
                 }
 
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
@@ -295,10 +310,9 @@ fun CameraPreview(
 /**
  * Wandelt ImageProxy sicher in ein korrekt ausgerichtetes Bitmap um.
  * Nutzt primär die native CameraX image.toBitmap() Implementierung (unterstützt YUV, RGBA, JPEG).
- * Skaliert übergroße Hardware-Kamerabilder (z. B. 48MP/108MP) auf maximal 2400px herunter,
- * um OutOfMemory-Crashes auf echten Smartphones zuverlässig zu verhindern.
+ * Behält maximale 4K UHD Schärfe (bis 3840px) für gestochen scharfe Dokumentenlesbarkeit bei.
  */
-fun imageProxyToBitmap(image: ImageProxy, maxDimension: Int = 2400): Bitmap? {
+fun imageProxyToBitmap(image: ImageProxy, maxDimension: Int = 3840): Bitmap? {
     return try {
         val originalBitmap = image.toBitmap()
         val rotationDegrees = image.imageInfo.rotationDegrees

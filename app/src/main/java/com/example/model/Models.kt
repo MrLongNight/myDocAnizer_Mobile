@@ -742,6 +742,7 @@ data class CloudSyncConfig(
     val googleDriveAccount: String = "mr.locke84@gmail.com",
     val googleDriveFolder: String = "myDocAnizer_Vault",
     val googleDriveConnected: Boolean = false,
+    val googleDriveAccessToken: String = "",
     val nasProtocol: String = "SMB", // "SMB" oder "WEBDAV"
     val nasShareName: String = "myDocAnizer_Backup",
     val nasConnected: Boolean = false,
@@ -1140,7 +1141,7 @@ data class ColorSkinItem(
 )
 
 val PRESET_COLOR_SKINS = listOf(
-    ColorSkinItem("MYDOCANIZER", "myDocAnizer Logo (Standard)", 0xFF00E5FF, 0xFFFF007F, 0xFFE0F7FA, "Offizielles Logo-Design: Electric Cyan, Cyber Magenta & Deep Violet"),
+    ColorSkinItem("MYDOCANIZER", "myDocAnizer Logo", 0xFF00E5FF, 0xFFFF007F, 0xFFE0F7FA, "Offizielles Logo-Design: Electric Cyan, Cyber Magenta & Deep Violet"),
     ColorSkinItem("BLUE", "Oceanic Blau", 0xFF2563EB, 0xFF0284C7, 0xFFDBEAFE, "Klassisches DMS-Businessblau"),
     ColorSkinItem("EMERALD", "Smaragd Grün", 0xFF059669, 0xFF0D9488, 0xFFD1FAE5, "Frisches, klares Produktivitäts-Grün"),
     ColorSkinItem("SLATE", "Nordic Slate", 0xFF475569, 0xFF334155, 0xFFE2E8F0, "Modernes minimalistisches Anthrazit"),

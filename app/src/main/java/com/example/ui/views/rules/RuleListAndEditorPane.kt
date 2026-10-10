@@ -1,17 +1,23 @@
 package com.example.ui.views.rules
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -19,7 +25,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
+import com.example.model.CustomFieldEntity
 import com.example.model.DocRule
+import com.example.service.llm.CustomFieldHarmonizer
+import com.example.service.llm.HarmonizationStatus
+import com.example.service.llm.RuleFieldAuditReport
 import com.example.ui.DocAnizerViewModel
 import kotlinx.coroutines.launch
 
@@ -49,7 +59,7 @@ fun DocumentRulesSettingsTab(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Regeln (${docRules.size})",
+                text = "Ablage- & Erkennungsregeln (${docRules.size})",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f, fill = false)
@@ -137,6 +147,7 @@ fun DocumentRulesSettingsTab(
                 targetTags = emptyList()
             ),
             isNew = true,
+            viewModel = viewModel,
             onDismiss = { showCreateRuleDialog = false },
             onSave = { newRule ->
                 viewModel.addDocRule(newRule)
@@ -149,6 +160,7 @@ fun DocumentRulesSettingsTab(
         EditRuleDialog(
             rule = rule,
             isNew = false,
+            viewModel = viewModel,
             onDismiss = { editingRule = null },
             onSave = { updated ->
                 viewModel.updateDocRule(updated)
@@ -349,6 +361,7 @@ fun AiRuleGeneratorDialog(
     var userPrompt by remember { mutableStateOf("") }
     var generatedDrafts by remember { mutableStateOf<List<DocRule>>(emptyList()) }
     val coroutineScope = rememberCoroutineScope()
+    val existingFields by viewModel.customFields.collectAsStateWithLifecycle()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -367,7 +380,7 @@ fun AiRuleGeneratorDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Beschreibe, welche Unterlagen du hast (z.B. 'Ich habe Versicherungspolicen von Allianz und Stromrechnungen von Stadtwerke München'). Die lokale KI erstellt daraus feste Regeln, die du vor Aktivierung siehst.",
+                    text = "Beschreibe, welche Unterlagen du hast (z.B. 'Ich habe Versicherungspolicen von Allianz und Stromrechnungen von Stadtwerke München'). Die lokale KI erstellt daraus feste Regeln inklusive passender Zusatzfelder für deine Dashboard-Widgets.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -399,15 +412,102 @@ fun AiRuleGeneratorDialog(
                     )
 
                     generatedDrafts.forEachIndexed { index, draft ->
+                        val auditReport = remember(draft, existingFields) {
+                            CustomFieldHarmonizer.auditRuleFields(
+                                ruleName = draft.name,
+                                docType = draft.targetDocType,
+                                sender = draft.detectedSender,
+                                currentCustomFields = draft.targetCustomFields,
+                                existingFields = existingFields
+                            )
+                        }
+
                         Surface(
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                         ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text(draft.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(draft.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer
+                                    ) {
+                                        Text(
+                                            text = draft.targetDocType,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+
                                 Text("Schlagwörter: ${draft.matchKeywords.joinToString(", ")}", fontSize = 11.sp)
-                                Text("Zielordner: ${draft.targetMainCategoryId}_${draft.targetSubCategoryId} (${draft.detectedSender})", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+                                Text("Ziel: ${draft.targetMainCategoryId}_${draft.targetSubCategoryId} (${draft.detectedSender})", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+
+                                // Smarte Zusatzfeld-Zuordnung
+                                if (draft.targetCustomFields.isNotEmpty()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+                                            .padding(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Zusatzfelder (${auditReport.assignedFields.size}):",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Row(
+                                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            auditReport.assignedFields.forEach { fieldItem ->
+                                                val isExisting = fieldItem.status == HarmonizationStatus.MATCHED_EXISTING
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = if (isExisting) Color(0xFF10B981).copy(alpha = 0.2f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = if (isExisting) Icons.Default.CheckCircle else Icons.Default.AddCircle,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(10.dp),
+                                                            tint = if (isExisting) Color(0xFF047857) else MaterialTheme.colorScheme.onSecondaryContainer
+                                                        )
+                                                        Text(
+                                                            text = "${fieldItem.fieldName}${if (isExisting) " (Tresor)" else " (Neu)"}",
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = if (isExisting) Color(0xFF047857) else MaterialTheme.colorScheme.onSecondaryContainer
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        if (auditReport.supportedDashboardWidgets.isNotEmpty()) {
+                                            Text(
+                                                text = "Aktiviert: ${auditReport.supportedDashboardWidgets.first()}",
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -445,6 +545,7 @@ fun AiRuleGeneratorDialog(
 fun EditRuleDialog(
     rule: DocRule,
     isNew: Boolean = false,
+    viewModel: DocAnizerViewModel? = null,
     onDismiss: () -> Unit,
     onSave: (DocRule) -> Unit
 ) {
@@ -456,6 +557,23 @@ fun EditRuleDialog(
     var mainCat by remember { mutableStateOf(rule.targetMainCategoryId) }
     var subCat by remember { mutableStateOf(rule.targetSubCategoryId) }
     var tagsStr by remember { mutableStateOf(rule.targetTags.joinToString(", ")) }
+
+    var customFieldsMap by remember { mutableStateOf(rule.targetCustomFields) }
+    var showAddCustomField by remember { mutableStateOf(false) }
+    var newFieldKey by remember { mutableStateOf("") }
+    var newFieldValue by remember { mutableStateOf("") }
+
+    val existingFields = viewModel?.customFields?.collectAsStateWithLifecycle()?.value ?: emptyList()
+
+    val auditReport = remember(name, docType, sender, customFieldsMap, existingFields) {
+        CustomFieldHarmonizer.auditRuleFields(
+            ruleName = name,
+            docType = docType,
+            sender = sender,
+            currentCustomFields = customFieldsMap,
+            existingFields = existingFields
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -527,6 +645,268 @@ fun EditRuleDialog(
                     placeholder = { Text("Telekom, Monatsabrechnung") },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // -------------------------------------------------------------
+                // ZENTRALER BEREICH: SMARTE ZUSATZFELDER & DASHBOARD-ZUORDNUNG
+                // -------------------------------------------------------------
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Category,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Zusatzfelder & Dashboard (${customFieldsMap.size})",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            FilledTonalButton(
+                                onClick = { showAddCustomField = !showAddCustomField },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp).testTag("btn_rule_add_custom_field")
+                            ) {
+                                Icon(if (showAddCustomField) Icons.Default.Close else Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (showAddCustomField) "Schließen" else "Feld+", fontSize = 11.sp)
+                            }
+                        }
+
+                        // Dashboard-Nutzen Banner
+                        if (auditReport.supportedDashboardWidgets.isNotEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = "💡 Smarte App-Funktionen aktiv:",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    auditReport.supportedDashboardWidgets.forEach { widgetBenefit ->
+                                        Text(
+                                            text = "• $widgetBenefit",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Formular zum manuellen Hinzufügen eines Felds
+                        if (showAddCustomField) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    OutlinedTextField(
+                                        value = newFieldKey,
+                                        onValueChange = { newFieldKey = it },
+                                        label = { Text("Feldname (z.B. Zählernummer, Betrag)") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    OutlinedTextField(
+                                        value = newFieldValue,
+                                        onValueChange = { newFieldValue = it },
+                                        label = { Text("Standardwert oder Muster (optional)") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        Button(
+                                            onClick = {
+                                                if (newFieldKey.isNotBlank()) {
+                                                    val updated = customFieldsMap.toMutableMap()
+                                                    updated[newFieldKey.trim()] = newFieldValue.trim().ifBlank { "Standard" }
+                                                    customFieldsMap = updated
+                                                    newFieldKey = ""
+                                                    newFieldValue = ""
+                                                    showAddCustomField = false
+                                                }
+                                            },
+                                            enabled = newFieldKey.isNotBlank(),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                            modifier = Modifier.height(32.dp)
+                                        ) {
+                                            Text("Zuordnen", fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Liste der aktuell zugewiesenen Felder
+                        if (auditReport.assignedFields.isEmpty()) {
+                            Text(
+                                text = "Noch keine Zusatzfelder zugewiesen. Wähle unten empfohlene Felder für smarte Widgets aus:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 11.sp
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                auditReport.assignedFields.forEach { assignedItem ->
+                                    val isExisting = assignedItem.status == HarmonizationStatus.MATCHED_EXISTING
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isExisting) Color(0xFF10B981).copy(alpha = 0.5f)
+                                            else MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Text(
+                                                        text = assignedItem.fieldName,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Surface(
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        color = if (isExisting) Color(0xFF10B981).copy(alpha = 0.15f) else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                                                    ) {
+                                                        Text(
+                                                            text = if (isExisting) "Im Tresor vorhanden" else "Wird neu angelegt",
+                                                            fontSize = 9.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = if (isExisting) Color(0xFF047857) else MaterialTheme.colorScheme.onSecondaryContainer,
+                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        )
+                                                    }
+                                                }
+                                                if (assignedItem.dashboardBenefit.isNotBlank()) {
+                                                    Text(
+                                                        text = assignedItem.dashboardBenefit,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontSize = 10.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+
+                                            IconButton(
+                                                onClick = {
+                                                    val updated = customFieldsMap.toMutableMap()
+                                                    updated.remove(assignedItem.fieldName)
+                                                    customFieldsMap = updated
+                                                },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(Icons.Default.Close, contentDescription = "Entfernen", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Empfehlungen für smarte Dashboard-Widgets (Ein-Klick-Hinzufügen)
+                        if (auditReport.missingRecommendedFields.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Empfehlungen für smarte Dashboard-Funktionen:",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                auditReport.missingRecommendedFields.forEach { recItem ->
+                                    val isExisting = recItem.status == HarmonizationStatus.MATCHED_EXISTING
+                                    AssistChip(
+                                        onClick = {
+                                            val updated = customFieldsMap.toMutableMap()
+                                            updated[recItem.fieldName] = recItem.valueHint.ifBlank { "Standard" }
+                                            customFieldsMap = updated
+                                        },
+                                        label = {
+                                            Text(
+                                                text = "+ ${recItem.fieldName}${if (isExisting) " (Tresor)" else " (Neu)"}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = if (isExisting) Icons.Default.CheckCircle else Icons.Default.Add,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp),
+                                                tint = if (isExisting) Color(0xFF047857) else MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Schnellauswahl aus weiteren existierenden Feldern im System
+                        val remainingExisting = existingFields.filter { ext ->
+                            customFieldsMap.keys.none { it.equals(ext.name, ignoreCase = true) } &&
+                            auditReport.missingRecommendedFields.none { it.fieldName.equals(ext.name, ignoreCase = true) }
+                        }
+                        if (remainingExisting.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Weitere vorhandene Felder im Tresor:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                remainingExisting.take(6).forEach { fieldEntity ->
+                                    FilterChip(
+                                        selected = false,
+                                        onClick = {
+                                            val updated = customFieldsMap.toMutableMap()
+                                            updated[fieldEntity.name] = "Standard"
+                                            customFieldsMap = updated
+                                        },
+                                        label = { Text(fieldEntity.name, fontSize = 10.sp) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -544,7 +924,8 @@ fun EditRuleDialog(
                             targetDocType = docType.ifBlank { "Rechnung" },
                             targetMainCategoryId = mainCat.ifBlank { "A01" },
                             targetSubCategoryId = subCat.ifBlank { "B1.01" },
-                            targetTags = tags
+                            targetTags = tags,
+                            targetCustomFields = customFieldsMap
                         )
                     )
                 },

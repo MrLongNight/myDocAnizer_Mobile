@@ -6,11 +6,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -24,8 +20,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -34,11 +28,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.DocumentEntity
 import com.example.model.ImportTemplateItem
-import com.example.model.TemplateItem
 import com.example.ui.DocAnizerViewModel
-import com.example.ui.components.DocumentDetailModal
+import com.example.ui.views.import.ImportFilePickerPane
+import com.example.ui.views.import.ImportMetadataFormPane
+import com.example.ui.views.import.ImportOcrAndFormatPane
 import kotlinx.coroutines.launch
-import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -55,7 +49,6 @@ fun ImportView(
     val templates by viewModel.templates.collectAsState()
     val docTypes by viewModel.docTypes.collectAsState()
 
-    // Statusvariablen für den aktuellen Import
     var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var selectedPdfBytes by remember { mutableStateOf<ByteArray?>(null) }
     var selectedPdfName by remember { mutableStateOf<String?>(null) }
@@ -66,29 +59,21 @@ fun ImportView(
     var selectedDocType by remember { mutableStateOf("laufender Vertrag") }
     var tagsInput by remember { mutableStateOf("Mobilfunk, Vertrag") }
 
-    // Format: "PDF" oder "IMAGE"
     var targetFormat by remember { mutableStateOf("PDF") }
     var isColorMode by remember { mutableStateOf(true) }
 
-    // OCR Optionen
     var runOcr by remember { mutableStateOf(true) }
     var isOcrRunning by remember { mutableStateOf(false) }
     var recognizedOcrText by remember { mutableStateOf("") }
     var isOcrExpanded by remember { mutableStateOf(false) }
 
-    // Ausgewähltes Template für wiederkehrenden Import
     var activeTemplateId by remember { mutableStateOf<String?>(importTemplates.firstOrNull()?.id) }
 
-    // Dialoge & Benachrichtigung
     var showCreateTemplateDialog by remember { mutableStateOf(false) }
     var archivedDocResult by remember { mutableStateOf<DocumentEntity?>(null) }
-    var showSuccessSnackbar by remember { mutableStateOf(false) }
 
-    // Dropdowns
     var showFolderPicker by remember { mutableStateOf(false) }
-    var showDocTypePicker by remember { mutableStateOf(false) }
 
-    // Initialisierung aus erstem Import-Template falls verfügbar
     LaunchedEffect(importTemplates) {
         if (title.isBlank()) {
             importTemplates.firstOrNull()?.let { first ->
@@ -102,7 +87,6 @@ fun ImportView(
         }
     }
 
-    // Photo Picker für Bilddateien (JPG/PNG)
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
@@ -118,7 +102,6 @@ fun ImportView(
                     val sdf = SimpleDateFormat("yyyy-MM-dd_HHmm", Locale.GERMANY)
                     title = "Import_${sdf.format(Date())}"
                 }
-                // Bei Bildauswahl automatisches OCR anbieten falls aktiviert
                 if (runOcr && bmp != null && recognizedOcrText.isBlank()) {
                     coroutineScope.launch {
                         isOcrRunning = true
@@ -134,7 +117,6 @@ fun ImportView(
         }
     }
 
-    // PDF Picker für native PDF-Dokumente
     val pdfPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -174,7 +156,7 @@ fun ImportView(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. ÜBERSCHRIFT & EINFÜHRUNG
+        // 1. HEADER
         Card(
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
@@ -215,7 +197,7 @@ fun ImportView(
             }
         }
 
-        // 2. WIEDERKEHRENDE IMPORT-TEMPLATES
+        // 2. TEMPLATES
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -319,362 +301,59 @@ fun ImportView(
             }
         }
 
-        // 3. DATEI-AUSWAHLBEREICH (BILD vs PDF)
-        Card(
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Datei auswählen",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
+        // 3. FILE PICKER PANE
+        ImportFilePickerPane(
+            selectedBitmap = selectedBitmap,
+            selectedPdfBytes = selectedPdfBytes,
+            selectedPdfName = selectedPdfName,
+            photoPickerLauncher = photoPickerLauncher,
+            pdfPickerLauncher = pdfPickerLauncher
+        )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    FilledTonalButton(
-                        onClick = {
-                            photoPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Bild / Foto")
-                    }
-
-                    OutlinedButton(
-                        onClick = { pdfPickerLauncher.launch("application/pdf") },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("PDF Datei")
+        // 4. FORMAT & OCR PANE
+        ImportOcrAndFormatPane(
+            targetFormat = targetFormat,
+            onTargetFormatChange = { targetFormat = it },
+            isColorMode = isColorMode,
+            onColorModeChange = { isColorMode = it },
+            runOcr = runOcr,
+            onRunOcrChange = { runOcr = it },
+            isOcrRunning = isOcrRunning,
+            recognizedOcrText = recognizedOcrText,
+            onOcrTextChanged = { recognizedOcrText = it },
+            isOcrExpanded = isOcrExpanded,
+            onToggleOcrExpanded = { isOcrExpanded = !isOcrExpanded },
+            onStartOcr = {
+                val bmp = selectedBitmap
+                if (bmp != null) {
+                    coroutineScope.launch {
+                        isOcrRunning = true
+                        val text = viewModel.performOcrAnalysis(bmp, "", title)
+                        recognizedOcrText = text
+                        isOcrRunning = false
+                        isOcrExpanded = true
                     }
                 }
+            },
+            showImageFormatOptions = selectedBitmap != null,
+            canRunOcr = selectedBitmap != null
+        )
 
-                // Vorschau des ausgewählten Bildes
-                selectedBitmap?.let { bmp ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            bitmap = bmp.asImageBitmap(),
-                            contentDescription = "Vorschau",
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(8.dp)
-                        ) {
-                            Text(
-                                text = "Bild geladen (${bmp.width}x${bmp.height} px)",
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                }
+        // 5. METADATA & FOLDER PANE
+        ImportMetadataFormPane(
+            title = title,
+            onTitleChange = { title = it },
+            selectedMainCategory = selectedMainCategory,
+            selectedSubCategory = selectedSubCategory,
+            onOpenFolderPicker = { showFolderPicker = true },
+            docTypes = docTypes,
+            selectedDocType = selectedDocType,
+            onDocTypeSelected = { selectedDocType = it },
+            tagsInput = tagsInput,
+            onTagsChange = { tagsInput = it }
+        )
 
-                // Vorschau ausgewählte PDF
-                selectedPdfBytes?.let { pdfBytes ->
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PictureAsPdf,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(32.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = selectedPdfName ?: "Dokument.pdf",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${pdfBytes.size / 1024} KB • PDF-Dokument",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 4. FORMAT-AUSWAHL: BILD NICHT NUR IN PDF, SONDERN AUCH ALS BILD!
-        if (selectedBitmap != null) {
-            Card(
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Zielformat für Bilddatei",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        FilterChip(
-                            selected = targetFormat == "PDF",
-                            onClick = { targetFormat = "PDF" },
-                            label = { Text("Als PDF archivieren") },
-                            leadingIcon = {
-                                if (targetFormat == "PDF") Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        FilterChip(
-                            selected = targetFormat == "IMAGE",
-                            onClick = { targetFormat = "IMAGE" },
-                            label = { Text("Als Bilddatei (JPG)") },
-                            leadingIcon = {
-                                if (targetFormat == "IMAGE") Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (isColorMode) "Farbmodus: Original-Farbe" else "Farbmodus: S/W Optimiert",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Switch(
-                            checked = isColorMode,
-                            onCheckedChange = { isColorMode = it }
-                        )
-                    }
-                }
-            }
-        }
-
-        // 5. ON-DEMAND OCR-ANALYSE
-        Card(
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.DocumentScanner,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "OCR-Textanalyse (bei Bedarf)",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Switch(
-                        checked = runOcr,
-                        onCheckedChange = { runOcr = it }
-                    )
-                }
-
-                Text(
-                    text = "Liest Volltext aus dem Bild aus, um es im DocAnizer vollständig durchsuchbar zu machen.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                if (runOcr && selectedBitmap != null) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        FilledTonalButton(
-                            onClick = {
-                                val bmp = selectedBitmap
-                                if (bmp != null) {
-                                    coroutineScope.launch {
-                                        isOcrRunning = true
-                                        val text = viewModel.performOcrAnalysis(bmp, "", title)
-                                        recognizedOcrText = text
-                                        isOcrRunning = false
-                                        isOcrExpanded = true
-                                    }
-                                }
-                            },
-                            enabled = !isOcrRunning && selectedBitmap != null
-                        ) {
-                            if (isOcrRunning) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Analysiere Text...")
-                            } else {
-                                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (recognizedOcrText.isBlank()) "OCR jetzt starten" else "OCR neu analysieren")
-                            }
-                        }
-
-                        if (recognizedOcrText.isNotBlank()) {
-                            TextButton(onClick = { isOcrExpanded = !isOcrExpanded }) {
-                                Text(if (isOcrExpanded) "Text einklappen" else "Text anzeigen (${recognizedOcrText.length} Z.)")
-                            }
-                        }
-                    }
-
-                    AnimatedVisibility(visible = isOcrExpanded && recognizedOcrText.isNotBlank()) {
-                        OutlinedTextField(
-                            value = recognizedOcrText,
-                            onValueChange = { recognizedOcrText = it },
-                            label = { Text("Erkannter OCR-Text (editierbar)") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 100.dp, max = 220.dp),
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
-        }
-
-        // 6. METADATEN & ZIELORDNER
-        Card(
-            shape = RoundedCornerShape(14.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "Ablage & Metadaten",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-
-                // Titel
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Titel / Dateiname *") },
-                    placeholder = { Text("z.B. Mobilfunk_Vodafone_03-2026") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Zielordner (Ebene 1 & Ebene 2)
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Zielordner (DMS):",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    OutlinedCard(
-                        onClick = { showFolderPicker = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = "$selectedMainCategory ➔ $selectedSubCategory",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                        }
-                    }
-                }
-
-                // Doc-Typ Auswahl
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Dokument-Typ (Doc-Typ):",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(docTypes) { dt ->
-                            val isSelected = selectedDocType == dt.name
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { selectedDocType = dt.name },
-                                label = { Text(dt.name) }
-                            )
-                        }
-                    }
-                }
-
-                // Tags
-                OutlinedTextField(
-                    value = tagsInput,
-                    onValueChange = { tagsInput = it },
-                    label = { Text("Tags / Schlagwörter (kommagetrennt)") },
-                    placeholder = { Text("z.B. Rechnung, Mobilfunk, 2026") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        // 7. IMPORT-AKTIONEN
+        // 6. ACTIONS
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
@@ -694,7 +373,6 @@ fun ImportView(
                         isColor = isColorMode
                     ) { createdDoc ->
                         archivedDocResult = createdDoc
-                        showSuccessSnackbar = true
                         viewModel.triggerUsbSyncReminderIfNeeded()
                         selectedBitmap = null
                         selectedPdfBytes = null
@@ -728,7 +406,6 @@ fun ImportView(
         }
     }
 
-    // Modal für Ordnerauswahl
     if (showFolderPicker) {
         AlertDialog(
             onDismissRequest = { showFolderPicker = false },
@@ -774,7 +451,6 @@ fun ImportView(
         )
     }
 
-    // Dialog zum Erstellen eines neuen wiederkehrenden Templates
     if (showCreateTemplateDialog) {
         var newTmplName by remember { mutableStateOf("") }
         var newTmplDesc by remember { mutableStateOf("") }
@@ -841,7 +517,6 @@ fun ImportView(
         )
     }
 
-    // Erfolgs-Dialog nach Import
     archivedDocResult?.let { doc ->
         AlertDialog(
             onDismissRequest = { archivedDocResult = null },

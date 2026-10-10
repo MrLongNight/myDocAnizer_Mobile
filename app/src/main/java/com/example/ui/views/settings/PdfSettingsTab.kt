@@ -33,7 +33,7 @@ fun PdfSettingsTab(viewModel: DocAnizerViewModel) {
     val scannerSettings by viewModel.scannerSettings.collectAsState()
     val templates by viewModel.templates.collectAsState()
 
-    var isOptimizationExpanded by remember { mutableStateOf(true) }
+    var isOptimizationExpanded by remember { mutableStateOf(false) }
     var isQualityExpanded by remember { mutableStateOf(false) }
     var isNamingExpanded by remember { mutableStateOf(false) }
     var isStorageExpanded by remember { mutableStateOf(false) }
