@@ -18,7 +18,7 @@ import com.example.R
 @Composable
 fun LocalAiAgentIcon(
     modifier: Modifier = Modifier.size(44.dp),
-    tint: Color = MaterialTheme.colorScheme.onSecondary
+    tint: Color = Color.Black
 ) {
     Icon(
         painter = painterResource(id = R.drawable.ic_local_ai_agent),

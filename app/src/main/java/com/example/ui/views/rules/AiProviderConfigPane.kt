@@ -762,10 +762,21 @@ fun ModelCardHorizontal(
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp
                         )
+                        IconButton(
+                            onClick = { viewModel.cancelDownload(model.id) },
+                            modifier = Modifier.size(20.dp).testTag("btn_cancel_download_${model.id}")
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Download pausieren",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
                     }
                 } else if (!model.isDownloaded) {
                     FilledTonalButton(
-                        onClick = { viewModel.downloadModel(model.id) },
+                        onClick = { viewModel.startBackgroundDownload(model.id) },
                         shape = RoundedCornerShape(4.dp),
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                         modifier = Modifier.height(24.dp).testTag("btn_download_${model.id}")

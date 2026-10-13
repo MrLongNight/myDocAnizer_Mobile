@@ -76,6 +76,7 @@ fun ScannerView(
     onDocumentScanned: (DocumentEntity) -> Unit,
     onNavigateToBatchInbox: () -> Unit = {},
     onNavigateBack: () -> Unit = {},
+    onReportElementBounds: ((step: Int, bounds: com.example.ui.components.TourElementBounds) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -277,16 +278,24 @@ fun ScannerView(
         }
     }
 
+    val showFirstStepsTour by viewModel.showFirstStepsTour.collectAsStateWithLifecycle()
+    val currentTourStep by viewModel.tourStep.collectAsStateWithLifecycle()
+
     // Trigger-Logik (berücksichtigt Countdown / Sofort & setzt Blattstatus zurück)
     val startCaptureProcess: () -> Unit = {
         if (!isProcessing && !isCountdownRunning) {
             hasCapturedCurrentDocument = false
             motionDetectedAfterCapture = false
-            if (scannerSettings.triggerMode == "COUNTDOWN") {
-                isCountdownRunning = true
-                countdownValue = scannerSettings.countdownSeconds
+            if (showFirstStepsTour && currentTourStep == 4) {
+                viewModel.triggerSampleScanForTour()
+                viewModel.setTourStep(5)
             } else {
-                executeCapture()
+                if (scannerSettings.triggerMode == "COUNTDOWN") {
+                    isCountdownRunning = true
+                    countdownValue = scannerSettings.countdownSeconds
+                } else {
+                    executeCapture()
+                }
             }
         }
     }
@@ -473,12 +482,38 @@ fun ScannerView(
         hasCameraPermission = isGranted
     }
 
-    val showFirstStepsTour by viewModel.showFirstStepsTour.collectAsStateWithLifecycle()
+    var showCameraPermissionExplanation by remember { mutableStateOf(!hasCameraPermission) }
 
-    LaunchedEffect(hasCameraPermission, showFirstStepsTour) {
-        if (!hasCameraPermission && !showFirstStepsTour) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
+    LaunchedEffect(hasCameraPermission) {
+        if (hasCameraPermission) {
+            showCameraPermissionExplanation = false
+            if (showFirstStepsTour && currentTourStep == 3) {
+                viewModel.setTourStep(4)
+            }
         }
+    }
+
+    if (showCameraPermissionExplanation || (showFirstStepsTour && currentTourStep == 3)) {
+        com.example.ui.components.CameraPermissionExplanationDialog(
+            isAlreadyGranted = hasCameraPermission,
+            isTourStep = showFirstStepsTour && currentTourStep == 3,
+            onGrantPermissionRequest = {
+                if (!hasCameraPermission) {
+                    permissionLauncher.launch(Manifest.permission.CAMERA)
+                } else {
+                    showCameraPermissionExplanation = false
+                    if (showFirstStepsTour && currentTourStep == 3) {
+                        viewModel.setTourStep(4)
+                    }
+                }
+            },
+            onDismiss = {
+                showCameraPermissionExplanation = false
+                if (showFirstStepsTour && currentTourStep == 3) {
+                    viewModel.setTourStep(4)
+                }
+            }
+        )
     }
 
     // Animierter Scan-Laser
@@ -500,7 +535,13 @@ fun ScannerView(
         onFrameAnalysis = { analysis -> frameAnalysis = analysis },
         onImageCaptureCreated = { capture -> imageCaptureInstance = capture },
         onCameraAvailableChanged = { available -> isCameraHardwareAvailable = available },
-        onPermissionRequest = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+        onPermissionRequest = {
+            if (!hasCameraPermission) {
+                showCameraPermissionExplanation = true
+            } else {
+                permissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        },
         onNavigateBack = onNavigateBack,
         laserProgress = laserProgress,
         isPhoneInWaage = isPhoneInWaage,
@@ -533,7 +574,8 @@ fun ScannerView(
             viewModel.finishAndSaveMultiPageScan { createdDoc ->
                 onDocumentScanned(createdDoc)
             }
-        }
+        },
+        onReportElementBounds = onReportElementBounds
     )
         // Auto-Dismiss für Bulk-Erfolgsanzeige nach 2.5 Sekunden
     LaunchedEffect(lastBulkSavedDoc) {

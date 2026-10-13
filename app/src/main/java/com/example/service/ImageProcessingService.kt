@@ -387,8 +387,9 @@ object ImageProcessingService {
         }
 
         val lines = listOf(
-            "Rechnungsnummer / Aktenzeichen: INV-${(10000..99999).random()}",
-            "Datum des Schreibens: ${java.time.LocalDate.now()}",
+            "Rechnungsnummer: INV-${(10000..99999).random()}",
+            "Kundennummer: KD-${(1000..9999).random()}",
+            "Rechnungsdatum: ${java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"))}",
             "",
             "Sehr geehrte Damen und Herren,",
             "vielen Dank für Ihr Vertrauen in unsere Dienstleistungen.",
@@ -397,9 +398,11 @@ object ImageProcessingService {
             "- Arbeitspreis Abrechnung: 78,40 EUR",
             "- Umsatzsteuer (19%): 19,63 EUR",
             "--------------------------------------------------",
-            "Gesamtbetrag fällig: 122,93 EUR",
+            "Rechnungsbetrag: 122,93 EUR",
+            "Fälligkeit: ${java.time.LocalDate.now().plusDays(14).format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"))}",
             "",
             "Zahlungsziel: Innerhalb von 14 Tagen ohne Abzug.",
+            "IBAN: DE89 3704 0044 0532 0130 00",
             "Für Rückfragen steht Ihnen unser Serviceteam gerne zur Verfügung.",
             "Mit freundlichen Grüßen,",
             "$sender Service & Abrechnungszentrum"

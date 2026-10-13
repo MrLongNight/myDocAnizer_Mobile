@@ -38,6 +38,10 @@ import com.example.model.TemplateItem
 import com.example.ui.components.CameraFrameAnalysis
 import com.example.ui.components.CameraPreview
 import com.example.ui.components.FlashOption
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.example.ui.components.TourElementBounds
+import com.example.ui.components.TourShapeType
 
 @Composable
 fun ScannerCameraPreviewPane(
@@ -73,7 +77,8 @@ fun ScannerCameraPreviewPane(
     startCaptureProcess: () -> Unit,
     onClearPages: () -> Unit,
     onRemovePage: (Int) -> Unit,
-    onFinishScan: () -> Unit
+    onFinishScan: () -> Unit,
+    onReportElementBounds: ((step: Int, bounds: TourElementBounds) -> Unit)? = null
 ) {
     val context = LocalContext.current
     Box(
@@ -575,6 +580,19 @@ fun ScannerCameraPreviewPane(
                         modifier = Modifier
                             .fillMaxWidth(0.85f)
                             .height(44.dp)
+                            .onGloballyPositioned { coords ->
+                                val bounds = coords.boundsInRoot()
+                                onReportElementBounds?.invoke(
+                                    4,
+                                    TourElementBounds(
+                                        centerX = bounds.center.x,
+                                        centerY = bounds.center.y,
+                                        widthPx = bounds.width,
+                                        heightPx = bounds.height,
+                                        shapeType = TourShapeType.ROUNDED_RECT
+                                    )
+                                )
+                            }
                             .testTag("btn_capture_page")
                     ) {
                         Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(20.dp))

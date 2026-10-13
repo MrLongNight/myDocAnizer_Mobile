@@ -2,6 +2,20 @@
 
 All notable changes to **myDocAnizer-Mobile** are documented here.
 
+## [2.6.0] - 2026-10-12 (Interaktive Erste-Schritte Tour & AI-Agent Alignment)
+
+### 🚀 Interaktive 11-Schritte Erste-Schritte Tour & Skip-Option
+- **Explizite "Tour überspringen" Optionen:**
+  - Neuer dauerhafter "Tour überspringen" Button am oberen rechten Bildschirmrand (`testTag("btn_screen_skip_tour")`).
+  - Überarbeiteter Tour-Karten-Header mit "Überspringen" Text und Schließen-Icon (`testTag("btn_close_tour")`).
+  - Sauberes Zurücksetzen aller temporären UI-Zustände (geöffnete Speed-Dial-FABs, AI-Chat-Drawer, Pending Rule Dialoge) beim Überspringen.
+- **Perfekte Tooltip-Positionierung für den AI-Agenten (Schritt 8):**
+  - Fokussierte Ziel-Bounds im oberen Konversationsbereich des `AiDocumentChatDrawer.kt`, damit die Erklärungskarte 100% vollständig im sichtbaren Bildschirmbereich gerendert wird.
+  - Dynamische min/max Y-Grenzen (`64.dp` Sicherheitsabstand) unterhalb von Statusleisten und Notches.
+- **Vollständige Prozess-Führung & Wizard-Abschluss-Info:**
+  - Chronologische Führung von FAB (+) über Speed-Dial, Kamera-Berechtigung, Scanner, KI-Regelvorschlag, InBox, Dokumenten Tresor, KI-Agent, Fragen & Befehle bis zum Dashboard.
+  - Neues Info-Banner auf der Zusammenfassungs-Seite am Ende des Einrichtungswizards (`SummaryStep.kt`) mit Vorab-Erklärung zum Tourstart und der direkten Option „Tour überspringen“ in den Wizard-Aktionsschaltflächen.
+
 ## [2.5.0] - 2026-10-03 (4-Team On-Device KI-Pipeline & Quality Gatekeeper Release)
 
 ### 🤖 4-Team On-Device KI-Pipeline (100% Offline & Datenschutzkonform)

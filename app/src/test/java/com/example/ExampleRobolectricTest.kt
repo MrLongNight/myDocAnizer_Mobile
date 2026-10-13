@@ -1162,5 +1162,210 @@ class ExampleRobolectricTest {
     val logs = com.example.service.AppAuditLogger.logs.value
     assertTrue(logs.any { it.tag == "QualityGatekeeper" && it.message.contains("Team 4 Revision") })
   }
+
+  @Test
+  fun `verify FirstStepsTour step progression and completion`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    viewModel.startFirstStepsTour()
+    assertTrue(viewModel.showFirstStepsTour.first())
+    assertEquals(1, viewModel.tourStep.first())
+
+    viewModel.setTourStep(2)
+    assertEquals(2, viewModel.tourStep.first())
+
+    viewModel.setTourStep(4)
+    assertEquals(4, viewModel.tourStep.first())
+
+    viewModel.setTourStep(5)
+    assertEquals(5, viewModel.tourStep.first())
+
+    // Step 7: KI-Agent
+    viewModel.setTourStep(7)
+    assertEquals(7, viewModel.tourStep.first())
+
+    // Step 8: Zwischenschritt 1 (KI-Chat Konversation)
+    viewModel.setTourStep(8)
+    assertEquals(8, viewModel.tourStep.first())
+
+    // Step 9: Zwischenschritt 2 (KI-Chat Eingabe)
+    viewModel.setTourStep(9)
+    assertEquals(9, viewModel.tourStep.first())
+
+    // Step 10: Dashboard & Fristen
+    viewModel.setTourStep(10)
+    assertEquals(10, viewModel.tourStep.first())
+
+    // Step 11: Tour-Abschluss Dialog
+    viewModel.setTourStep(11)
+    assertEquals(11, viewModel.tourStep.first())
+
+    viewModel.dismissFirstStepsTour(markCompleted = true)
+    assertFalse(viewModel.showFirstStepsTour.first())
+    assertTrue(viewModel.isFirstStepsTourCompleted.first())
+  }
+
+  @Test
+  fun `verify Tour test document scan offers additional custom fields from OCR`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+
+    viewModel.startFirstStepsTour()
+    viewModel.setTourStep(4)
+    viewModel.triggerSampleScanForTour()
+
+    val pending = viewModel.pendingRuleSuggestion.first()
+    assertNotNull(pending)
+    val rule = pending!!.suggestedRule
+    assertNotNull(rule)
+
+    // Core fields are assigned
+    assertTrue(rule.targetCustomFields.containsKey("Rechnungsnummer"))
+    assertTrue(rule.targetCustomFields.containsKey("Rechnungsbetrag"))
+
+    // Audit report offers additional fields detected from OCR text
+    val auditReport = com.example.service.llm.CustomFieldHarmonizer.auditRuleFields(
+      ruleName = rule.name,
+      docType = rule.targetDocType,
+      sender = rule.detectedSender,
+      currentCustomFields = rule.targetCustomFields,
+      existingFields = emptyList(),
+      ocrText = pending.ocrText
+    )
+
+    assertTrue("Zusätzliche Beleg-Felder müssen angeboten werden", auditReport.missingRecommendedFields.isNotEmpty())
+    val offeredFieldNames = auditReport.missingRecommendedFields.map { it.fieldName }
+    assertTrue("Fälligkeit muss als zusätzliches Feld angeboten werden", offeredFieldNames.contains("Fälligkeit"))
+    assertTrue("Kundennummer muss als zusätzliches Feld angeboten werden", offeredFieldNames.contains("Kundennummer"))
+
+    val dueItem = auditReport.missingRecommendedFields.first { it.fieldName == "Fälligkeit" }
+    assertEquals("26.10.2026", dueItem.valueHint)
+  }
+
+  @Test
+  fun `verify VaultSecurityManager Argon2id derivation and AES-GCM roundtrip`() {
+    val context = ApplicationProvider.getApplicationContext<Application>()
+    val secManager = com.example.service.VaultSecurityManager.getInstance(context)
+
+    val dek = secManager.generateRandomDek()
+    assertEquals(32, dek.size)
+
+    val salt = ByteArray(16) { it.toByte() }
+    val kek = secManager.deriveKekArgon2id("TestPass123!", salt, iterations = 1, memoryKb = 128)
+    assertEquals(32, kek.size)
+
+    val (ciphertext, iv) = secManager.encryptAesGcm(dek, kek)
+    assertFalse(ciphertext.contentEquals(dek))
+
+    val decrypted = secManager.decryptAesGcm(ciphertext, iv, kek)
+    assertTrue(decrypted.contentEquals(dek))
+  }
+
+  @Test
+  fun `verify BIP-39 12 words generation validation and recovery`() {
+    val context = ApplicationProvider.getApplicationContext<Application>()
+    val secManager = com.example.service.VaultSecurityManager.getInstance(context)
+
+    val words = secManager.generateBip39Mnemonic()
+    assertEquals(12, words.size)
+    assertTrue(secManager.validateBip39Mnemonic(words))
+
+    val invalidWords = words.toMutableList()
+    invalidWords[0] = "invalidwordxyz"
+    assertFalse(secManager.validateBip39Mnemonic(invalidWords))
+
+    val setupRes = secManager.initializeVault(
+      masterPassword = "MasterPassword2026!",
+      enableBiometrics = false,
+      recoveryMethod = com.example.service.VaultRecoveryMethod.BIP39_WORDS,
+      bip39Words = words
+    )
+    assertNotNull(setupRes)
+    val recoveredDek = secManager.recoverDekWithBip39(words)
+    assertNotNull(recoveredDek)
+    assertTrue(recoveredDek!!.contentEquals(setupRes.dek))
+  }
+
+  @Test
+  fun `verify Shamir Secret Sharing 2 of 3 math and reconstruction`() {
+    val context = ApplicationProvider.getApplicationContext<Application>()
+    val secManager = com.example.service.VaultSecurityManager.getInstance(context)
+
+    val dek = secManager.generateRandomDek()
+    val shares = secManager.splitSecretShamir2of3(dek)
+    assertEquals(3, shares.size)
+
+    // Test combinations: (1, 2), (1, 3), (2, 3)
+    val rec12 = secManager.recoverDekWithShamir(shares[0].token, shares[1].token)
+    assertNotNull(rec12)
+    assertTrue(rec12!!.contentEquals(dek))
+
+    val rec13 = secManager.recoverDekWithShamir(shares[0].token, shares[2].token)
+    assertNotNull(rec13)
+    assertTrue(rec13!!.contentEquals(dek))
+
+    val rec23 = secManager.recoverDekWithShamir(shares[1].token, shares[2].token)
+    assertNotNull(rec23)
+    assertTrue(rec23!!.contentEquals(dek))
+
+    // Same share repeated must fail
+    val recSame = secManager.recoverDekWithShamir(shares[0].token, shares[0].token)
+    org.junit.Assert.assertNull(recSame)
+  }
+
+  @Test
+  fun `verify Emergency Kit PDF generation and recovery`() {
+    val context = ApplicationProvider.getApplicationContext<Application>()
+    val secManager = com.example.service.VaultSecurityManager.getInstance(context)
+
+    val setupRes = secManager.initializeVault(
+      masterPassword = "MasterPassword2026!",
+      enableBiometrics = false,
+      recoveryMethod = com.example.service.VaultRecoveryMethod.EMERGENCY_PDF,
+      emergencyPin = "987654"
+    )
+
+    val pdfFile = java.io.File(context.cacheDir, "test_emergency_kit.pdf")
+    val generated = secManager.generateEmergencyPdf(pdfFile, "987654")
+    assertNotNull(generated)
+    assertTrue(generated!!.exists())
+    assertTrue(generated.length() > 100)
+
+    val base64Key = android.util.Base64.encodeToString(setupRes.dek, android.util.Base64.NO_WRAP)
+    val directRecovery = secManager.recoverDekFromEmergencyKit(base64Key)
+    assertNotNull(directRecovery)
+    assertTrue(directRecovery!!.contentEquals(setupRes.dek))
+  }
+
+  @Test
+  fun `verify Master Password change re-encrypts DEK`() {
+    val context = ApplicationProvider.getApplicationContext<Application>()
+    val secManager = com.example.service.VaultSecurityManager.getInstance(context)
+
+    secManager.initializeVault(
+      masterPassword = "InitialPassword123!",
+      enableBiometrics = false,
+      recoveryMethod = com.example.service.VaultRecoveryMethod.NONE
+    )
+    val originalDek = secManager.getActiveDek()!!.copyOf()
+    assertNotNull(originalDek)
+
+    val changed = secManager.changeMasterPassword("InitialPassword123!", "NewSecretPassword456!")
+    assertTrue(changed)
+
+    secManager.lockVault()
+    assertFalse(secManager.isUnlocked())
+
+    // Old password must fail
+    assertFalse(secManager.unlockWithPassword("InitialPassword123!"))
+    assertFalse(secManager.isUnlocked())
+
+    // New password succeeds and restores identical DEK
+    assertTrue(secManager.unlockWithPassword("NewSecretPassword456!"))
+    assertTrue(secManager.isUnlocked())
+    assertTrue(secManager.getActiveDek()!!.contentEquals(originalDek!!))
+  }
 }
+
 

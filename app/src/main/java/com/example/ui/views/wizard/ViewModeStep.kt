@@ -119,16 +119,16 @@ fun StepViewModeAndRestore(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Standard-Ansicht (Empfohlen)", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         Surface(shape = RoundedCornerShape(4.dp), color = Color(0xFF16A34A).copy(alpha = 0.15f)) {
-                            Text("9 Schritte", style = MaterialTheme.typography.labelSmall, color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                            Text("4 Schritte (Schnellstart)", style = MaterialTheme.typography.labelSmall, color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
                         }
                     }
                     Text(
-                        text = "Fokussiert & einsteigerfreundlich: Speicherort, Kamera, automatische Farboptimierung, lokaler KI Agent & 3-2-1 Backup.",
+                        text = "Fokussiert & schnell: Nur Tresor-Passwort & Sicherheit wählen. Alle anderen Einstellungen nutzen sichere Standardwerte.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "✓ 1-Klick Scanner  ✓ Feste Kategorien  ✓ Lokaler Tresor",
+                        text = "✓ 1-Klick Einrichtung  ✓ Auto-Optimierung  ✓ Lokaler Tresor",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
@@ -162,16 +162,16 @@ fun StepViewModeAndRestore(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Erweiterte Ansicht", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         Surface(shape = RoundedCornerShape(4.dp), color = Color(0xFFD97706).copy(alpha = 0.15f)) {
-                            Text("10 Schritte", style = MaterialTheme.typography.labelSmall, color = Color(0xFFD97706), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                            Text("8 Schritte", style = MaterialTheme.typography.labelSmall, color = Color(0xFFD97706), fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
                         }
                     }
                     Text(
-                        text = "Mehr Flexibilität: Aufgaben-Fokus (Finanzen/Verträge), Vorlagen & strukturierte Backup-Zeitpläne.",
+                        text = "Mehr Flexibilität: Speicherort, Scanner-Auslöser, KI-Modelle, Sicherheit & Backup-Profile selbst anpassen.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "✓ Flexible Workflows  ✓ Vorlagen & Regeln  ✓ Cloud & NAS Sync",
+                        text = "✓ Flexible Workflows  ✓ Modellauswahl  ✓ Cloud & NAS Sync",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary,
                         fontWeight = FontWeight.Medium
@@ -205,11 +205,11 @@ fun StepViewModeAndRestore(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Experten-Ansicht", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)) {
-                            Text("11 Schritte", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                            Text("12 Schritte", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
                         }
                     }
                     Text(
-                        text = "Volle Kontrolle: Feineinstellung von CPU-Threads, Temperatur, SQLite WAL-Wartung, FTS5 & Timeouts.",
+                        text = "Volle Kontrolle: Feineinstellung von CPU-Threads, Temperatur, SQLite WAL-Wartung, FTS5, Finanzen & Timeouts.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

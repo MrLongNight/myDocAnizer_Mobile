@@ -16,6 +16,12 @@ import com.example.service.llm.LlmToolExecutor
 import com.example.service.llm.CustomFieldHarmonizer
 import com.example.data.AppDatabase
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +31,7 @@ import java.io.File
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
@@ -35,6 +42,9 @@ import okhttp3.Request
  * 100% offline & datenschutzkonform auf dem Telefon ausführbar.
  */
 class LlmService(private val context: Context) {
+
+    private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val activeDownloadJobs = ConcurrentHashMap<String, Job>()
 
     companion object {
         private val STOP_WORDS = setOf("wie", "viele", "habe", "ich", "was", "und", "der", "die", "das", "ein", "eine", "den", "dem", "des", "zu", "von", "im", "in", "mit", "für")
@@ -991,48 +1001,148 @@ class LlmService(private val context: Context) {
         return deleted
     }
 
+    /**
+     * Startet den Modell-Download in einem anwendungsweiten Scope.
+     * Bleibt auch beim Verlassen von Screens, Wechseln von Tabs oder Schließen des Wizards aktiv.
+     */
+    fun startBackgroundDownload(modelId: String, onProgress: (Float) -> Unit = {}): Job? {
+        val existingJob = activeDownloadJobs[modelId]
+        if (existingJob != null && existingJob.isActive) {
+            return existingJob
+        }
+        val job = downloadScope.launch {
+            executeDownload(modelId, onProgress)
+        }
+        activeDownloadJobs[modelId] = job
+        return job
+    }
+
+    /**
+     * Bricht einen laufenden Download ab. Teildateien (.part) bleiben standardmäßig für Wiederaufnahme erhalten.
+     */
+    fun cancelDownload(modelId: String, deletePartial: Boolean = false) {
+        val job = activeDownloadJobs.remove(modelId)
+        job?.cancel()
+
+        val targetModel = _availableModels.value.find { it.id == modelId }
+        val safeDir = context.getExternalFilesDir("models") ?: File(context.filesDir, "models")
+        val fileName = targetModel?.fileName?.ifBlank { "${modelId}.gguf" } ?: "${modelId}.gguf"
+        val tempFile = File(safeDir, "${fileName}.part")
+
+        if (deletePartial && tempFile.exists()) {
+            try { tempFile.delete() } catch (_: Throwable) {}
+        }
+
+        _availableModels.value = _availableModels.value.map {
+            if (it.id == modelId) it.copy(
+                isDownloading = false,
+                downloadProgress = if (deletePartial) 0f else it.downloadProgress
+            ) else it
+        }
+
+        AppAuditLogger.log(
+            category = LogCategory.AI_INFERENCE,
+            tag = "ModelManager",
+            message = "Download für '$modelId' abgebrochen/pausiert",
+            details = "Teildatei gelöscht: $deletePartial"
+        )
+    }
+
+    /**
+     * Suspend-Funktion für direkte Aufrufe – nutzt die gleiche robuste Ausführungs-Engine.
+     */
     suspend fun downloadModel(modelId: String, onProgress: (Float) -> Unit = {}) = withContext(Dispatchers.IO) {
+        executeDownload(modelId, onProgress)
+    }
+
+    private suspend fun executeDownload(modelId: String, onProgress: (Float) -> Unit = {}) = withContext(Dispatchers.IO) {
         val targetModel = _availableModels.value.find { it.id == modelId } ?: return@withContext
         val safeDir = context.getExternalFilesDir("models") ?: File(context.filesDir, "models")
         if (!safeDir.exists()) safeDir.mkdirs()
-        
+
         val fileName = targetModel.fileName.ifBlank { "${targetModel.id}.gguf" }
         val destFile = File(safeDir, fileName)
         val tempFile = File(safeDir, "${fileName}.part")
 
+        val existingBytes = if (tempFile.exists()) tempFile.length() else 0L
+
         _availableModels.value = _availableModels.value.map {
-            if (it.id == modelId) it.copy(isDownloading = true, downloadProgress = 0f, downloadedBytes = 0L) else it
+            if (it.id == modelId) it.copy(
+                isDownloading = true,
+                downloadProgress = if (targetModel.downloadSizeMb > 0 && existingBytes > 0) {
+                    (existingBytes.toFloat() / (targetModel.downloadSizeMb * 1024L * 1024L)).coerceIn(0f, 0.99f)
+                } else 0f,
+                downloadedBytes = existingBytes
+            ) else it
         }
 
         AppAuditLogger.log(
             category = LogCategory.AI_INFERENCE,
             tag = "ModelManager",
             message = "Starte Download von '${targetModel.name}'",
-            details = "URL: ${targetModel.downloadUrl} | Ziel: ${destFile.absolutePath}"
+            details = "URL: ${targetModel.downloadUrl} | Ziel: ${destFile.absolutePath} | Bisher geladen: $existingBytes Bytes"
         )
 
         try {
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url(targetModel.downloadUrl)
                 .header("User-Agent", "myDocAnizer-Mobile/2.0.0 (Android; GGUF Downloader)")
-                .build()
+
+            if (existingBytes > 0) {
+                requestBuilder.header("Range", "bytes=$existingBytes-")
+            }
+
+            val request = requestBuilder.build()
 
             httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
+                if (!response.isSuccessful && response.code != 416) {
                     throw IOException("Server-Antwort: HTTP ${response.code} ${response.message}")
                 }
 
-                val body = response.body ?: throw IOException("Leere Server-Antwort von HuggingFace")
-                val totalBytes = body.contentLength()
-                var bytesRead = 0L
+                // Falls 416 Range Not Satisfiable: Teildatei möglicherweise bereits vollständig
+                if (response.code == 416) {
+                    val expectedMinBytes = (targetModel.downloadSizeMb * 1024L * 1024L * 0.9).toLong()
+                    if (existingBytes >= expectedMinBytes && existingBytes > 1024) {
+                        if (destFile.exists()) destFile.delete()
+                        tempFile.renameTo(destFile)
+                        _availableModels.value = _availableModels.value.map {
+                            if (it.id == modelId) it.copy(
+                                isDownloading = false,
+                                isDownloaded = true,
+                                downloadProgress = 1.0f,
+                                localFileSizeBytes = destFile.length()
+                            ) else it
+                        }
+                        return@withContext
+                    } else {
+                        try { tempFile.delete() } catch (_: Throwable) {}
+                        throw IOException("HTTP 416: Ungültiger Download-Bereich, Teildatei zurückgesetzt")
+                    }
+                }
 
-                tempFile.outputStream().use { output ->
+                val body = response.body ?: throw IOException("Leere Server-Antwort von HuggingFace")
+                val isPartial = response.code == 206
+                val contentLength = body.contentLength()
+                val totalBytes = if (isPartial && contentLength > 0) {
+                    existingBytes + contentLength
+                } else if (contentLength > 0) {
+                    contentLength
+                } else {
+                    targetModel.downloadSizeMb * 1024L * 1024L
+                }
+
+                var bytesRead = if (isPartial) existingBytes else 0L
+
+                java.io.FileOutputStream(tempFile, isPartial).use { output ->
                     body.byteStream().use { input ->
                         val buffer = ByteArray(64 * 1024)
                         var read: Int
                         var lastProgressUpdate = 0L
 
                         while (input.read(buffer).also { read = it } != -1) {
+                            if (!kotlinx.coroutines.currentCoroutineContext().isActive) {
+                                throw CancellationException("Download abgebrochen oder pausiert")
+                            }
                             output.write(buffer, 0, read)
                             bytesRead += read
 
@@ -1054,7 +1164,7 @@ class LlmService(private val context: Context) {
                     }
                 }
 
-                // Verify file header: GGUF magic bytes (0x47, 0x47, 0x55, 0x46)
+                // GGUF-Signatur verifizieren (Magic Bytes: 'G', 'G', 'U', 'F')
                 if (tempFile.length() >= 4) {
                     val header = ByteArray(4)
                     tempFile.inputStream().use { it.read(header) }
@@ -1099,18 +1209,31 @@ class LlmService(private val context: Context) {
                     details = "Gespeichert auf Gerät: ${destFile.absolutePath} (${destFile.length() / (1024 * 1024)} MB)"
                 )
             }
-        } catch (e: Throwable) {
-            try { tempFile.delete() } catch (_: Throwable) {}
+        } catch (c: CancellationException) {
+            // Teildatei (.part) wird NICHT gelöscht, damit der Download später nahtlos fortgesetzt werden kann
             _availableModels.value = _availableModels.value.map {
-                if (it.id == modelId) it.copy(isDownloading = false, downloadProgress = 0f) else it
+                if (it.id == modelId) it.copy(isDownloading = false) else it
             }
             AppAuditLogger.log(
                 category = LogCategory.AI_INFERENCE,
                 tag = "ModelManager",
-                message = "Fehler beim Modell-Download von '${targetModel.name}': ${e.message}",
+                message = "Download von '${targetModel.name}' pausiert oder abgebrochen (Fortschritt beibehalten)",
+                details = "Vorhandene Teildatei: ${tempFile.length()} Bytes"
+            )
+        } catch (e: Throwable) {
+            // Teildatei beibehalten für HTTP-Range Wiederaufnahme
+            _availableModels.value = _availableModels.value.map {
+                if (it.id == modelId) it.copy(isDownloading = false) else it
+            }
+            AppAuditLogger.log(
+                category = LogCategory.AI_INFERENCE,
+                tag = "ModelManager",
+                message = "Netzwerkunterbrechung beim Modell-Download von '${targetModel.name}': ${e.message}",
                 details = e.stackTraceToString().take(300),
                 isError = true
             )
+        } finally {
+            activeDownloadJobs.remove(modelId)
         }
     }
 

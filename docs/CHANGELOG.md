@@ -2,6 +2,40 @@
 
 All notable changes to **myDocAnizer-Mobile** are documented here.
 
+## [2.7.0] - 2026-10-13 (Zero-Knowledge Security & Bottom Navigation Margin Optimization)
+
+### 🔐 Erweitertes Zero-Knowledge Sicherheitskonzept & Recovery-System
+- **Entfernung harter Default-Passwörter:**
+  - Komplette Deaktivierung automatischer Fallback-Masterpasswörter.
+  - Das Master-Passwort muss nun stets bewusst vom Nutzer vergeben oder der unverschlüsselte Modus explizit bestätigt werden.
+- **Wizard-Kopplung & Automatisches Security-Routing:**
+  - Wird der Ersteinrichtungs-Assistent ohne Vergabe eines Master-Passworts übersprungen, navigiert die App automatisch in die Sicherheits-Einstellungen (`SecuritySettingsTab.kt`).
+- **Sicherheits-Warnbanner & Unverschlüsselter Modus:**
+  - Neuer sichtbarer Warnhinweis-Banner (`card_no_password_warning`) in den Tresor-Einstellungen bei ungeschütztem Betrieb.
+  - Direkte Auswahl-Aktionen: *"Passwort vergeben"* oder *"Ohne Schutz nutzen (Unverschlüsselt)"*.
+  - Transparente Statusanzeige für den unverschlüsselten Modus mit jederzeitiger Option zur nachträglichen Verschlüsselung.
+- **Verschiebung der Audit-Log-Funktion:**
+  - Die Karte *"Diagnose- & Inferenz-Logdatei"* (`card_audit_log_developer`) inklusive Log-Export, Teilen und Leeren wurde aus den Sicherheits-Einstellungen in die **Entwickler-Einstellungen** (`DeveloperSettingsTab.kt`) verschoben.
+
+### 📐 Navigation & UI-Layout Optimierung
+- **Garantierter vertikaler Sicherheitsabstand für Bottom-Bar Icons:**
+  - Anpassung der `NavigationBar` Container-Höhe auf `82.dp` und Injektion von oberer Polsterung (`padding(top = 4.dp)`).
+  - Verhindert, dass die Icons der Haupt-Tabs **"Dokumente"**, **"Dashboard"** und **"Scan Eingang" (InBox)** zu nah am oberen Rand des Rahmens / Containers anliegen.
+
+## [2.6.0] - 2026-10-12 (Interaktive Erste-Schritte Tour & AI-Agent Alignment)
+
+### 🚀 Interaktive 11-Schritte Erste-Schritte Tour & Skip-Option
+- **Explizite "Tour überspringen" Optionen:**
+  - Neuer dauerhafter "Tour überspringen" Button am oberen rechten Bildschirmrand (`testTag("btn_screen_skip_tour")`).
+  - Überarbeiteter Tour-Karten-Header mit "Überspringen" Text und Schließen-Icon (`testTag("btn_close_tour")`).
+  - Sauberes Zurücksetzen aller temporären UI-Zustände (geöffnete Speed-Dial-FABs, AI-Chat-Drawer, Pending Rule Dialoge) beim Überspringen.
+- **Perfekte Tooltip-Positionierung für den AI-Agenten (Schritt 8):**
+  - Fokussierte Ziel-Bounds im oberen Konversationsbereich des `AiDocumentChatDrawer.kt`, damit die Erklärungskarte 100% vollständig im sichtbaren Bildschirmbereich gerendert wird.
+  - Dynamische min/max Y-Grenzen (`64.dp` Sicherheitsabstand) unterhalb von Statusleisten und Notches.
+- **Vollständige Prozess-Führung & Wizard-Abschluss-Info:**
+  - Chronologische Führung von FAB (+) über Speed-Dial, Kamera-Berechtigung, Scanner, KI-Regelvorschlag, InBox, Dokumenten Tresor, KI-Agent, Fragen & Befehle bis zum Dashboard.
+  - Neues Info-Banner auf der Zusammenfassungs-Seite am Ende des Einrichtungswizards (`SummaryStep.kt`) mit Vorab-Erklärung zum Tourstart und der direkten Option „Tour überspringen“ in den Wizard-Aktionsschaltflächen.
+
 ## [2.5.0] - 2026-10-03 (4-Team On-Device KI-Pipeline & Quality Gatekeeper Release)
 
 ### 🤖 4-Team On-Device KI-Pipeline (100% Offline & Datenschutzkonform)

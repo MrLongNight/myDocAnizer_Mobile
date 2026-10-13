@@ -80,13 +80,14 @@ fun PendingRuleSuggestionDialog(
     }
 
     val existingFields = viewModel?.customFields?.collectAsStateWithLifecycle()?.value ?: emptyList()
-    val auditReport = remember(ruleName, docType, sender, customFieldsMap, existingFields) {
+    val auditReport = remember(ruleName, docType, sender, customFieldsMap, existingFields, suggestion.ocrText) {
         CustomFieldHarmonizer.auditRuleFields(
             ruleName = ruleName,
             docType = docType,
             sender = sender,
             currentCustomFields = customFieldsMap,
-            existingFields = existingFields
+            existingFields = existingFields,
+            ocrText = suggestion.ocrText
         )
     }
 
@@ -237,6 +238,112 @@ fun PendingRuleSuggestionDialog(
                                 isFolder = false,
                                 size = 36.dp
                             )
+                        }
+                    }
+                }
+
+                val isTourStep5 = viewModel?.showFirstStepsTour?.collectAsStateWithLifecycle()?.value == true &&
+                    viewModel.tourStep.collectAsStateWithLifecycle().value == 5
+                if (isTourStep5) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "Tour Schritt 5 von 11: Lokaler KI-Regelvorschlag & Zusatzfelder",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "Das On-Device LLM hat Absender und Belegdaten erkannt. Tippe auf zusätzliche Felder (z.B. + Fälligkeit oder + Kundennummer) zum Ergänzen und speichere die Regel dauerhaft.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontSize = 11.5.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Prominente Schnellauswahl oben im Dialog: Erkannte & empfohlene Belegfelder per 1-Klick hinzufügen
+                if (auditReport.missingRecommendedFields.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)),
+                        modifier = Modifier.fillMaxWidth().testTag("card_candidate_fields_top")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "Zusätzliche Beleg-Felder hinzufügen (+):",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                auditReport.missingRecommendedFields.forEach { recItem ->
+                                    val isExisting = recItem.status == HarmonizationStatus.MATCHED_EXISTING
+                                    AssistChip(
+                                        onClick = {
+                                            val updated = customFieldsMap.toMutableMap()
+                                            updated[recItem.fieldName] = recItem.valueHint.ifBlank { "Standard" }
+                                            customFieldsMap = updated
+                                        },
+                                        label = {
+                                            Text(
+                                                text = "+ ${recItem.fieldName}: ${recItem.valueHint.take(20)}",
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = if (isExisting) Icons.Default.CheckCircle else Icons.Default.Add,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(15.dp),
+                                                tint = if (isExisting) Color(0xFF047857) else MaterialTheme.colorScheme.primary
+                                            )
+                                        },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = MaterialTheme.colorScheme.surface,
+                                            labelColor = MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -604,6 +711,74 @@ fun PendingRuleSuggestionDialog(
                                     }
                                 }
 
+                                // Prominente Schnellauswahl: Erkannte & empfohlene Belegfelder per 1-Klick hinzufügen
+                                if (auditReport.missingRecommendedFields.isNotEmpty()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.AutoAwesome,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Text(
+                                                    text = "Zusätzliche Beleg-Felder hinzufügen (+):",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                            Row(
+                                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                auditReport.missingRecommendedFields.forEach { recItem ->
+                                                    val isExisting = recItem.status == HarmonizationStatus.MATCHED_EXISTING
+                                                    AssistChip(
+                                                        onClick = {
+                                                            val updated = customFieldsMap.toMutableMap()
+                                                            updated[recItem.fieldName] = recItem.valueHint.ifBlank { "Standard" }
+                                                            customFieldsMap = updated
+                                                        },
+                                                        label = {
+                                                            Text(
+                                                                text = "+ ${recItem.fieldName}: ${recItem.valueHint.take(20)}",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        },
+                                                        leadingIcon = {
+                                                            Icon(
+                                                                imageVector = if (isExisting) Icons.Default.CheckCircle else Icons.Default.Add,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(14.dp),
+                                                                tint = if (isExisting) Color(0xFF047857) else MaterialTheme.colorScheme.primary
+                                                            )
+                                                        },
+                                                        colors = AssistChipDefaults.assistChipColors(
+                                                            containerColor = MaterialTheme.colorScheme.surface,
+                                                            labelColor = MaterialTheme.colorScheme.onSurface
+                                                        ),
+                                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
                                 if (customFieldsMap.isEmpty()) {
                                     Text(
                                         text = "Keine Zusatzfelder zugewiesen. Tippe auf 'Feld+', um Schlüssel-Wert Paare wie Rechnungsbetrag, Zählernummer oder Kennzeichen anzulegen.",
@@ -880,6 +1055,9 @@ fun PendingRuleSuggestionDialog(
                                 targetCustomFields = customFieldsMap
                             )
                             suggestion.onSaveAsPermanentRule(updatedRule)
+                            if (viewModel?.showFirstStepsTour?.value == true) {
+                                viewModel.setTourStep(6)
+                            }
                         },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier

@@ -39,6 +39,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.DocAnizerViewModel
 import com.example.ui.components.AppLogoBanner
 import com.example.ui.components.FirstStepsTourModal
+import com.example.ui.components.TourElementBounds
 
 enum class MainNavigationTab {
     SCANNER,
@@ -72,6 +73,7 @@ fun MainScreen(
     val isWizardCompleted by viewModel.isWizardCompleted.collectAsStateWithLifecycle()
     val showManualWizard by viewModel.showManualConfigWizard.collectAsStateWithLifecycle()
     var sessionDismissedWizard by rememberSaveable { mutableStateOf(false) }
+    val tourTargetBounds = remember { mutableStateMapOf<Int, TourElementBounds>() }
 
     // Reiner Gesten-Modus (Immersive Fullscreen)
     val isGestureModeEnabled by viewModel.isGestureModeEnabled.collectAsStateWithLifecycle()
@@ -93,6 +95,8 @@ fun MainScreen(
 
     val p2pPendingRequests by viewModel.p2pPendingPairingRequests.collectAsStateWithLifecycle()
     val p2pConflicts by viewModel.p2pActiveConflicts.collectAsStateWithLifecycle()
+    val showFirstStepsTour by viewModel.showFirstStepsTour.collectAsStateWithLifecycle()
+    val currentTourStep by viewModel.tourStep.collectAsStateWithLifecycle()
 
     // Animation für das Drehen des Plus-Icons im FAB (0° -> 45° wie ein Schließen-Kreuz)
     val fabRotation by animateFloatAsState(
@@ -150,6 +154,68 @@ fun MainScreen(
                     },
                     onToggleFabExpand = {
                         isFabExpanded = !isFabExpanded
+                    },
+                    activeTourStep = if (showFirstStepsTour) currentTourStep else null,
+                    onTourElementClicked = { step ->
+                        when (step) {
+                            1 -> {
+                                isFabExpanded = true
+                                viewModel.setTourStep(2)
+                            }
+                            2 -> {
+                                isFabExpanded = false
+                                currentTab = MainNavigationTab.SCANNER
+                                viewModel.setTourStep(3)
+                            }
+                            3 -> {
+                                viewModel.setTourStep(4)
+                            }
+                            4 -> {
+                                viewModel.triggerSampleScanForTour()
+                                viewModel.setTourStep(5)
+                            }
+                            5 -> {
+                                viewModel.clearPendingRuleSuggestion()
+                                currentTab = MainNavigationTab.DOCANIZER
+                                viewModel.setTourStep(6)
+                            }
+                            6 -> {
+                                currentTab = MainNavigationTab.DOCANIZER
+                                viewModel.setTourStep(7)
+                            }
+                            7 -> {
+                                viewModel.openAiChatDrawer()
+                                viewModel.setTourStep(8)
+                            }
+                            8 -> {
+                                viewModel.setTourStep(9)
+                            }
+                            9 -> {
+                                viewModel.closeAiChatDrawer()
+                                currentTab = MainNavigationTab.DASHBOARD
+                                viewModel.setTourStep(10)
+                            }
+                            10 -> {
+                                currentTab = MainNavigationTab.DASHBOARD
+                                viewModel.setTourStep(11)
+                            }
+                            11 -> {
+                                viewModel.dismissFirstStepsTour(markCompleted = true)
+                                currentTab = MainNavigationTab.DASHBOARD
+                            }
+                        }
+                    },
+                    onReportElementBounds = { step, bounds ->
+                        val existing = tourTargetBounds[step]
+                        if (existing == null ||
+                            kotlin.math.abs(existing.centerX - bounds.centerX) > 0.5f ||
+                            kotlin.math.abs(existing.centerY - bounds.centerY) > 0.5f ||
+                            kotlin.math.abs(existing.widthPx - bounds.widthPx) > 0.5f ||
+                            kotlin.math.abs(existing.heightPx - bounds.heightPx) > 0.5f ||
+                            existing.shapeType != bounds.shapeType
+                        ) {
+                            tourTargetBounds[step] = bounds
+                        }
                     }
                 )
             }
@@ -300,6 +366,18 @@ fun MainScreen(
                                 },
                                 onNavigateBack = {
                                     currentTab = MainNavigationTab.DOCANIZER
+                                },
+                                onReportElementBounds = { step, bounds ->
+                                    val existing = tourTargetBounds[step]
+                                    if (existing == null ||
+                                        kotlin.math.abs(existing.centerX - bounds.centerX) > 0.5f ||
+                                        kotlin.math.abs(existing.centerY - bounds.centerY) > 0.5f ||
+                                        kotlin.math.abs(existing.widthPx - bounds.widthPx) > 0.5f ||
+                                        kotlin.math.abs(existing.heightPx - bounds.heightPx) > 0.5f ||
+                                        existing.shapeType != bounds.shapeType
+                                    ) {
+                                        tourTargetBounds[step] = bounds
+                                    }
                                 }
                             )
                         }
@@ -372,6 +450,21 @@ fun MainScreen(
             onScanClick = {
                 isFabExpanded = false
                 currentTab = MainNavigationTab.SCANNER
+                if (showFirstStepsTour && currentTourStep == 2) {
+                    viewModel.setTourStep(3)
+                }
+            },
+            onReportElementBounds = { step, bounds ->
+                val existing = tourTargetBounds[step]
+                if (existing == null ||
+                    kotlin.math.abs(existing.centerX - bounds.centerX) > 0.5f ||
+                    kotlin.math.abs(existing.centerY - bounds.centerY) > 0.5f ||
+                    kotlin.math.abs(existing.widthPx - bounds.widthPx) > 0.5f ||
+                    kotlin.math.abs(existing.heightPx - bounds.heightPx) > 0.5f ||
+                    existing.shapeType != bounds.shapeType
+                ) {
+                    tourTargetBounds[step] = bounds
+                }
             }
         )
 
@@ -430,17 +523,6 @@ fun MainScreen(
             )
         }
 
-        // Virtuelle Erste-Schritte Tour (Simpel & effektiv bei manuellem Aufruf oder geführter Tour)
-        val showFirstStepsTour by viewModel.showFirstStepsTour.collectAsStateWithLifecycle()
-        if (showFirstStepsTour) {
-            FirstStepsTourModal(
-                viewModel = viewModel,
-                onDismiss = { viewModel.dismissFirstStepsTour(markCompleted = true) },
-                onNavigateToTab = { targetTab ->
-                    currentTab = targetTab
-                }
-            )
-        }
 
         // Globaler Autorisierungsdialog für eingehende Kopplungsanfragen
         if (p2pPendingRequests.isNotEmpty()) {
@@ -573,7 +655,13 @@ fun MainScreen(
         if (isAiChatDrawerOpen) {
             com.example.ui.components.AiDocumentChatDrawer(
                 isOpen = true,
-                onClose = { viewModel.closeAiChatDrawer() },
+                onClose = {
+                    viewModel.closeAiChatDrawer()
+                    if (showFirstStepsTour && (currentTourStep == 8 || currentTourStep == 9)) {
+                        currentTab = MainNavigationTab.DASHBOARD
+                        viewModel.setTourStep(10)
+                    }
+                },
                 viewModel = viewModel,
                 onExecuteAction = { actionType ->
                     when (actionType) {
@@ -603,6 +691,83 @@ fun MainScreen(
                             currentTab = MainNavigationTab.DOCANIZER
                         }
                     }
+                },
+                onReportElementBounds = { step, bounds ->
+                    val existing = tourTargetBounds[step]
+                    if (existing == null ||
+                        kotlin.math.abs(existing.centerX - bounds.centerX) > 0.5f ||
+                        kotlin.math.abs(existing.centerY - bounds.centerY) > 0.5f
+                    ) {
+                        tourTargetBounds[step] = bounds
+                    }
+                }
+            )
+        }
+
+        // Virtuelle Erste-Schritte Tour (Simpel & effektiv bei manuellem Aufruf oder geführter Tour)
+        // Platziert NACH dem Drawer, damit der Spotlight-Fokus und die Tour-Karten
+        // auch über dem geöffneten KI-Assistenten (Schritte 8 & 9) sauber gerendert werden!
+        if (showFirstStepsTour) {
+            FirstStepsTourModal(
+                viewModel = viewModel,
+                targetBounds = tourTargetBounds,
+                onDismiss = {
+                    viewModel.dismissFirstStepsTour(markCompleted = true)
+                    isFabExpanded = false
+                    viewModel.closeAiChatDrawer()
+                    viewModel.clearPendingRuleSuggestion()
+                },
+                onStepInteracted = { step ->
+                    when (step) {
+                        1 -> {
+                            isFabExpanded = true
+                            viewModel.setTourStep(2)
+                        }
+                        2 -> {
+                            isFabExpanded = false
+                            currentTab = MainNavigationTab.SCANNER
+                            viewModel.setTourStep(3)
+                        }
+                        3 -> {
+                            viewModel.setTourStep(4)
+                        }
+                        4 -> {
+                            viewModel.triggerSampleScanForTour()
+                            viewModel.setTourStep(5)
+                        }
+                        5 -> {
+                            viewModel.clearPendingRuleSuggestion()
+                            currentTab = MainNavigationTab.DOCANIZER
+                            viewModel.setTourStep(6)
+                        }
+                        6 -> {
+                            currentTab = MainNavigationTab.DOCANIZER
+                            viewModel.setTourStep(7)
+                        }
+                        7 -> {
+                            viewModel.openAiChatDrawer()
+                            viewModel.setTourStep(8)
+                        }
+                        8 -> {
+                            viewModel.setTourStep(9)
+                        }
+                        9 -> {
+                            viewModel.closeAiChatDrawer()
+                            currentTab = MainNavigationTab.DASHBOARD
+                            viewModel.setTourStep(10)
+                        }
+                        10 -> {
+                            currentTab = MainNavigationTab.DASHBOARD
+                            viewModel.setTourStep(11)
+                        }
+                        11 -> {
+                            viewModel.dismissFirstStepsTour(markCompleted = true)
+                            currentTab = MainNavigationTab.DASHBOARD
+                        }
+                    }
+                },
+                onNavigateToTab = { targetTab ->
+                    currentTab = targetTab
                 }
             )
         }

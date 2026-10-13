@@ -37,8 +37,8 @@ fun SetupWizardDialog(
 
     val activeSteps = remember(appViewLevel) {
         when (appViewLevel) {
-            AppViewLevel.STANDARD -> listOf(1, 2, 12, 3, 4, 5, 6, 8, 9, 11)
-            AppViewLevel.ADVANCED -> listOf(1, 2, 12, 3, 4, 5, 6, 7, 8, 9, 11)
+            AppViewLevel.STANDARD -> listOf(1, 2, 8, 11)
+            AppViewLevel.ADVANCED -> listOf(1, 2, 3, 4, 6, 8, 9, 11)
             AppViewLevel.EXPERT -> listOf(1, 2, 12, 3, 4, 5, 6, 7, 8, 9, 10, 11)
         }
     }
@@ -51,6 +51,7 @@ fun SetupWizardDialog(
     val isLastStep = safeStepIndex == activeSteps.size - 1
 
     var showSkipDialog by remember { mutableStateOf(false) }
+    var showSecurityRequiredDialog by remember { mutableStateOf(false) }
     var isRestoreMode by rememberSaveable { mutableStateOf(false) }
 
     val pdfSettings by viewModel.pdfSettings.collectAsState()
@@ -60,6 +61,7 @@ fun SetupWizardDialog(
     val availableModels by viewModel.availableModels.collectAsState()
     val cloudSyncConfig by viewModel.cloudSyncConfig.collectAsState()
     val autoCloudSyncEnabled by viewModel.autoCloudSyncEnabled.collectAsState()
+    val isUnencryptedMode by viewModel.isUnencryptedModeConfirmed.collectAsState()
 
     var customPassword by rememberSaveable { mutableStateOf(syncPasswordKey) }
     var biometricEnabled by rememberSaveable { mutableStateOf(biometricAuthEnabled) }
@@ -87,6 +89,9 @@ fun SetupWizardDialog(
                 Button(onClick = {
                     showSkipDialog = false
                     viewModel.setWizardCompleted(true)
+                    if (customPassword.isBlank() && !isUnencryptedMode) {
+                        viewModel.openSecuritySettingsTab()
+                    }
                     onFinish()
                 }) {
                     Text("Dauerhaft ohne Assistent nutzen")
@@ -95,9 +100,31 @@ fun SetupWizardDialog(
             dismissButton = {
                 TextButton(onClick = {
                     showSkipDialog = false
+                    if (customPassword.isBlank() && !isUnencryptedMode) {
+                        viewModel.openSecuritySettingsTab()
+                    }
                     onDismissSession()
                 }) {
                     Text("Nur für jetzt überspringen")
+                }
+            }
+        )
+    }
+
+    if (showSecurityRequiredDialog) {
+        AlertDialog(
+            onDismissRequest = { showSecurityRequiredDialog = false },
+            icon = { Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Master-Passwort erforderlich", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    text = "Die Vergabe eines Master-Passworts ist im Assistenten Pflicht, es sei denn, die Option 'Ohne Master-Passwort nutzen (Unverschlüsselt)' wird aktiv gewählt.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(onClick = { showSecurityRequiredDialog = false }) {
+                    Text("Verstanden")
                 }
             }
         )
@@ -187,7 +214,6 @@ fun SetupWizardDialog(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
                 ) {
                     Crossfade(targetState = currentStepId, label = "wizard_step_crossfade") { stepId ->
                         when (WizardStep.fromId(stepId)) {
@@ -199,7 +225,7 @@ fun SetupWizardDialog(
                             is WizardStep.QualityAndAutoColor -> StepQualityAndAutoColor(viewModel, pdfSettings)
                             is WizardStep.LlmModelSelection -> StepLlmModelSelection(viewModel, availableModels)
                             is WizardStep.LlmInferenceSettings -> StepLlmInferenceSettings(viewModel)
-                            is WizardStep.SecurityAndBiometrics -> StepSecurityAndBiometrics(
+                            is WizardStep.SecurityAndBiometrics -> SecurityWizardStep(
                                 viewModel = viewModel,
                                 biometricEnabled = biometricEnabled,
                                 onBiometricToggle = { biometricEnabled = it },
@@ -254,12 +280,35 @@ fun SetupWizardDialog(
                         TextButton(onClick = {
                             if (isManualReconfig) {
                                 onDismissSession()
+                            } else if (isLastStep) {
+                                viewModel.setSyncPasswordKey(customPassword)
+                                viewModel.setBiometricAuthEnabled(biometricEnabled)
+                                viewModel.setAutoCloudSyncEnabled(autoSyncEnabled)
+                                viewModel.updateCloudSyncConfig(
+                                    cloudSyncConfig.copy(
+                                        enableGoogleDrive = enableDrive,
+                                        enableWebDavNas = enableNas,
+                                        enableLocalVault = true,
+                                        enableManualUsbExport = enableManualUsb,
+                                        webDavUrl = webDavUrl,
+                                        webDavUsername = webDavUser,
+                                        webDavPassword = webDavPass,
+                                        autoMirrorToBackupDir = autoMirror,
+                                        isAirGappedStrict = false,
+                                        syncTrigger = if (autoSyncEnabled) "AUTO_AFTER_SCAN" else "MANUAL",
+                                        syncTarget = if (enableDrive && enableNas) "HYBRID_ALL" else if (enableNas) "WEBDAV_NAS" else if (enableDrive) "GOOGLE_DRIVE" else if (enableManualUsb) "MANUAL_USB" else "OFFLINE_ONLY"
+                                    )
+                                )
+                                viewModel.setWizardCompleted(true)
+                                viewModel.dismissFirstStepsTour(markCompleted = true)
+                                onDismissSession()
                             } else {
                                 showSkipDialog = true
                             }
                         }) {
                             Text(
                                 if (isManualReconfig) "Schließen"
+                                else if (isLastStep) "Tour überspringen"
                                 else if (safeStepIndex == 0) "Standard-Setup"
                                 else "Überspringen"
                             )
@@ -268,12 +317,29 @@ fun SetupWizardDialog(
 
                     Button(
                         onClick = {
+                            val currentStepItem = WizardStep.fromId(currentStepId)
+                            if (currentStepItem is WizardStep.SecurityAndBiometrics) {
+                                if (customPassword.isBlank() && !isUnencryptedMode) {
+                                    showSecurityRequiredDialog = true
+                                    return@Button
+                                }
+                            }
                             if (!isLastStep) {
+                                if (currentStepItem is WizardStep.LlmModelSelection) {
+                                    val selectedModel = availableModels.find { it.isSelected }
+                                    if (selectedModel != null && !selectedModel.isDownloaded && !selectedModel.isDownloading) {
+                                        viewModel.startBackgroundDownload(selectedModel.id)
+                                    }
+                                }
                                 stepIndex = (safeStepIndex + 1).coerceAtMost(activeSteps.size - 1)
                             } else {
+                                if (customPassword.isBlank() && !isUnencryptedMode) {
+                                    showSecurityRequiredDialog = true
+                                    return@Button
+                                }
                                 viewModel.setSyncPasswordKey(customPassword)
                                 viewModel.setBiometricAuthEnabled(biometricEnabled)
-                                viewModel.setAutoCloudSyncEnabled(autoSyncEnabled)
+                                viewModel.setAutoCloudSyncEnabled(autoCloudSyncEnabled)
 
                                 viewModel.updateCloudSyncConfig(
                                     cloudSyncConfig.copy(
@@ -301,7 +367,7 @@ fun SetupWizardDialog(
                     ) {
                         Text(
                             if (isLastStep) {
-                                if (isManualReconfig) "Konfiguration speichern" else "Einrichtung abschließen"
+                                if (isManualReconfig) "Konfiguration speichern" else "Einrichtung abschließen & Tour starten"
                             } else if (safeStepIndex == 0) {
                                 "Einrichtung starten"
                             } else "Weiter"

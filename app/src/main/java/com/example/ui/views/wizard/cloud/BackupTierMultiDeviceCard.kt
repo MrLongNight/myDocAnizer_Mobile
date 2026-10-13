@@ -232,9 +232,9 @@ fun BackupTierMultiDeviceCard(
                                     onClick = onStartPairingDialog,
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Icon(Icons.Default.Devices, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Zusätzliches Gerät jetzt verbinden", fontSize = 12.sp)
+                                    Text("Per QR-Code / PIN mit Zusatzgerät verbinden", fontSize = 12.sp)
                                 }
                             }
                         }
@@ -280,7 +280,7 @@ fun BackupTierMultiDeviceCard(
                                 }
 
                                 Text(
-                                    text = "Verbinde per myDocAnizer-Desktop dein Windows, macOS oder Linux Desktop-PC um Dokumenten Scanner & Drucker zu verwenden oder für Datei Zugriff im Tresor.",
+                                    text = "Verbinde per QR-Code oder myDocAnizer-Desktop dein Windows, macOS oder Linux Desktop-PC um Dokumenten Scanner & Drucker zu verwenden oder für Datei Zugriff im Tresor.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -292,7 +292,7 @@ fun BackupTierMultiDeviceCard(
                                 ) {
                                     Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("PC-Verbindungs-Assistent starten", fontSize = 12.sp)
+                                    Text("Per QR-Code / Assistent mit PC verbindenden", fontSize = 12.sp)
                                 }
                             }
                         }

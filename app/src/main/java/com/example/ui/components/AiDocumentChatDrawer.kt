@@ -47,6 +47,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.model.ChatMessage
 import com.example.model.DocumentEntity
 import com.example.model.SavedChatSession
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.painterResource
 import com.example.R
 import com.example.ui.DocAnizerViewModel
@@ -65,7 +67,8 @@ fun AiDocumentChatDrawer(
     isOpen: Boolean,
     onClose: () -> Unit,
     viewModel: DocAnizerViewModel,
-    onExecuteAction: (String) -> Unit
+    onExecuteAction: (String) -> Unit,
+    onReportElementBounds: ((Int, TourElementBounds) -> Unit)? = null
 ) {
     val cyanColor = Color(0xFF00E5FF)
     val lilaColor = Color(0xFFA855F7)
@@ -88,6 +91,8 @@ fun AiDocumentChatDrawer(
     val currentChatSessionId by viewModel.currentChatSessionId.collectAsStateWithLifecycle()
     val currentChatTitle by viewModel.currentChatTitle.collectAsStateWithLifecycle()
     val lastUndoAction by viewModel.lastUndoAction.collectAsStateWithLifecycle()
+    val showFirstStepsTour by viewModel.showFirstStepsTour.collectAsStateWithLifecycle()
+    val currentTourStep by viewModel.tourStep.collectAsStateWithLifecycle()
 
     var inputText by remember { mutableStateOf("") }
     var showDocSelector by remember { mutableStateOf(false) }
@@ -106,7 +111,7 @@ fun AiDocumentChatDrawer(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 1. Abgedunkelter Hintergrund (Tippen schließt das Panel)
+        // 1. Abgedunkelter Hintergrund (Tippen schließt das Panel - außer während Tour-Schritten 8 & 9)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -114,7 +119,11 @@ fun AiDocumentChatDrawer(
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
-                ) { onClose() }
+                ) {
+                    if (!showFirstStepsTour || (currentTourStep != 8 && currentTourStep != 9)) {
+                        onClose()
+                    }
+                }
         )
 
         // 2. Minimalistisches Seiten-Panel vom linken Bildrand mit Schiebeelement-Griff
@@ -296,39 +305,79 @@ fun AiDocumentChatDrawer(
                         onUndoClick = { viewModel.undoLastLlmAction() }
                     )
 
-                    // CHAT-NACHRICHTEN FEED
-                    com.example.ui.chat.ChatMessageListPane(
-                        chatMessages = chatMessages,
-                        isGenerating = isGenerating,
-                        listState = listState,
-                        onExecuteAction = { actionType ->
-                            onExecuteAction(actionType)
-                            onClose()
-                        },
-                        onCopyText = { text ->
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("myDocAnizer", text))
-                            Toast.makeText(context, "Kopiert", Toast.LENGTH_SHORT).show()
-                        },
-                        onEditUserPrompt = { text ->
-                            inputText = text
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
+                    // CHAT-NACHRICHTEN FEED (Tour Schritt 8: Lokaler KI-Agent Fähigkeiten)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .onGloballyPositioned { coords ->
+                                val bounds = coords.boundsInRoot()
+                                // Fokussierter Bereich für Schritt 8 (oberer Konversations- & Begrüßungsbereich),
+                                // damit die Tour-Erklärungskarte darunter 100% im sichtbaren Bildschirmbereich bleibt
+                                val focusedHeight = minOf(bounds.height * 0.34f, bounds.width * 0.42f)
+                                val focusedCenterY = bounds.top + focusedHeight / 2f + 12f
+                                onReportElementBounds?.invoke(
+                                    8,
+                                    TourElementBounds(
+                                        centerX = bounds.center.x,
+                                        centerY = focusedCenterY,
+                                        widthPx = bounds.width * 0.94f,
+                                        heightPx = focusedHeight,
+                                        shapeType = TourShapeType.ROUNDED_RECT
+                                    )
+                                )
+                            }
+                    ) {
+                        com.example.ui.chat.ChatMessageListPane(
+                            chatMessages = chatMessages,
+                            isGenerating = isGenerating,
+                            listState = listState,
+                            onExecuteAction = { actionType ->
+                                onExecuteAction(actionType)
+                                onClose()
+                            },
+                            onCopyText = { text ->
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("myDocAnizer", text))
+                                Toast.makeText(context, "Kopiert", Toast.LENGTH_SHORT).show()
+                            },
+                            onEditUserPrompt = { text ->
+                                inputText = text
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
 
-                    // UNTERE EINGABE-LEISTE UND FOKUS-DOKUMENT BANNER
-                    com.example.ui.chat.ChatInputBarPane(
-                        inputText = inputText,
-                        onInputTextChange = { inputText = it },
-                        isGenerating = isGenerating,
-                        selectedDoc = selectedDoc,
-                        lastUserPrompt = viewModel.getLastUserPrompt(),
-                        cyanColor = cyanColor,
-                        lilaColor = lilaColor,
-                        onAttachFileClick = { showDocSelector = true },
-                        onClearSelectedDoc = { viewModel.selectChatDocument(null) },
-                        onSendMessage = { text -> viewModel.sendChatMessage(text) }
-                    )
+                    // UNTERE EINGABE-LEISTE UND FOKUS-DOKUMENT BANNER (Tour Schritt 9: Fragen & Befehle)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { coords ->
+                                val bounds = coords.boundsInRoot()
+                                onReportElementBounds?.invoke(
+                                    9,
+                                    TourElementBounds(
+                                        centerX = bounds.center.x,
+                                        centerY = bounds.center.y,
+                                        widthPx = bounds.width,
+                                        heightPx = bounds.height,
+                                        shapeType = TourShapeType.ROUNDED_RECT
+                                    )
+                                )
+                            }
+                    ) {
+                        com.example.ui.chat.ChatInputBarPane(
+                            inputText = inputText,
+                            onInputTextChange = { inputText = it },
+                            isGenerating = isGenerating,
+                            selectedDoc = selectedDoc,
+                            lastUserPrompt = viewModel.getLastUserPrompt(),
+                            cyanColor = cyanColor,
+                            lilaColor = lilaColor,
+                            onAttachFileClick = { showDocSelector = true },
+                            onClearSelectedDoc = { viewModel.selectChatDocument(null) },
+                            onSendMessage = { text -> viewModel.sendChatMessage(text) }
+                        )
+                    }
                 }
             }
         }

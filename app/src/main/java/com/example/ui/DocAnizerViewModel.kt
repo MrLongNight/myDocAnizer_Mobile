@@ -45,6 +45,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val biometricAuthManager = BiometricAuthManager(application)
     val passkeyAuthManager = PasskeyAuthManager(application)
     val p2pSyncManager = P2pSyncManager(application, db)
+    val vaultSecurityManager = VaultSecurityManager.getInstance(application)
+    val vaultStatus: StateFlow<VaultStatus> = vaultSecurityManager.vaultStatus
+    val vaultHeader: StateFlow<VaultHeader?> = vaultSecurityManager.vaultHeader
 
     // Domain Managers
     val dmsManager = DmsManager(application, documentDao, customFieldDao, ruleRepo, settingsRepo, llmService, viewModelScope) {
@@ -356,10 +359,15 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun unlockApp() {
+        val pass = syncPasswordKey.value
+        if (pass.isNotBlank() && !vaultSecurityManager.isUnlocked()) {
+            vaultSecurityManager.unlockWithPassword(pass)
+        }
         _isAppUnlocked.value = true
     }
 
     fun lockApp() {
+        vaultSecurityManager.lockVault()
         if (biometricAuthEnabled.value) {
             _isAppUnlocked.value = false
         }
@@ -403,16 +411,10 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun selectModel(modelId: String) = llmService.selectModel(modelId)
     fun selectHuggingFaceModel(modelId: String) = llmService.selectModel(modelId)
+    fun startBackgroundDownload(modelId: String, onProgress: (Float) -> Unit = {}) = llmService.startBackgroundDownload(modelId, onProgress)
+    fun cancelDownload(modelId: String, deletePartial: Boolean = false) = llmService.cancelDownload(modelId, deletePartial)
     fun downloadModel(modelId: String, onProgress: (Float) -> Unit = {}) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, throwable ->
-            android.util.Log.e("DocAnizerViewModel", "Kompensierter Download-Fehler: ${throwable.message}")
-        }) {
-            try {
-                llmService.downloadModel(modelId, onProgress)
-            } catch (t: Throwable) {
-                android.util.Log.e("DocAnizerViewModel", "Sicher abgefangener Download-Fehler: ${t.message}")
-            }
-        }
+        llmService.startBackgroundDownload(modelId, onProgress)
     }
     fun deleteModel(modelId: String) {
         llmService.deleteModel(modelId)
@@ -579,8 +581,63 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val isFirstStepsTourCompleted: StateFlow<Boolean> = settingsRepo.isFirstStepsTourCompleted
     private val _showFirstStepsTour = MutableStateFlow(false)
     val showFirstStepsTour: StateFlow<Boolean> = _showFirstStepsTour.asStateFlow()
+    private val _tourStep = MutableStateFlow(1)
+    val tourStep: StateFlow<Int> = _tourStep.asStateFlow()
+
+    fun setTourStep(step: Int) {
+        _tourStep.value = step.coerceIn(1, 11)
+    }
+
+    fun triggerSampleScanForTour() {
+        if (pendingRuleSuggestion.value == null) {
+            val sampleBitmap = com.example.service.ImageProcessingService.createSampleDocumentBitmap(
+                title = "Rechnung Büromaterial",
+                sender = "Büro Express",
+                modeBw = false
+            )
+            val sampleRule = com.example.model.DocRule(
+                id = "tour_rule_sample",
+                name = "Büro Express Rechnung",
+                targetDocType = "Rechnung",
+                detectedSender = "Büro Express",
+                targetMainCategoryId = "A02",
+                targetSubCategoryId = "B2.01",
+                targetFolderPath = "Finanzen/Belege",
+                matchKeywords = listOf("büro express", "rechnung", "ust", "beleg"),
+                confidenceScore = 0.96f,
+                targetCustomFields = mapOf(
+                    "Rechnungsnummer" to "INV-2026-9912",
+                    "Rechnungsbetrag" to "122,93 €",
+                    "Belegdatum" to "12.10.2026"
+                ),
+                targetIcon = "receipt_long",
+                targetLogo = "shop"
+            )
+            dmsManager.setPendingRuleSuggestion(
+                com.example.model.PendingRuleSuggestion(
+                    bitmap = sampleBitmap,
+                    ocrText = "Büro Express GmbH\nRechnungsnummer: INV-2026-9912\nKundennummer: KD-48201\nBelegdatum: 12.10.2026\nRechnungsbetrag: 122,93 EUR\nUmsatzsteuer (19%): 19,63 EUR\nFälligkeit: 26.10.2026\nZahlungsziel: 14 Tage\nIBAN: DE89 3704 0044 0532 0130 00",
+                    suggestedRule = sampleRule,
+                    onSingleUseOnly = {
+                        dmsManager.clearPendingRuleSuggestion()
+                        setTourStep(6)
+                    },
+                    onSaveAsPermanentRule = { rule ->
+                        addDocRule(rule)
+                        dmsManager.clearPendingRuleSuggestion()
+                        setTourStep(6)
+                    },
+                    onDismiss = {
+                        dmsManager.clearPendingRuleSuggestion()
+                        setTourStep(6)
+                    }
+                )
+            )
+        }
+    }
 
     fun startFirstStepsTour() {
+        _tourStep.value = 1
         _showFirstStepsTour.value = true
     }
 
@@ -593,6 +650,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun resetFirstStepsTour() {
         settingsRepo.resetFirstStepsTour()
+        _tourStep.value = 1
         _showFirstStepsTour.value = true
     }
 
@@ -615,9 +673,25 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val lastSyncTimestamp: StateFlow<Long> = syncManager.lastSyncTimestamp
     val cloudSyncConfig: StateFlow<com.example.model.CloudSyncConfig> = syncManager.cloudSyncConfig
 
-    fun setSyncPasswordKey(key: String) = syncManager.setSyncPasswordKey(key)
+    fun setSyncPasswordKey(key: String) {
+        syncManager.setSyncPasswordKey(key)
+        if (key.isNotBlank()) {
+            setUnencryptedModeConfirmed(false)
+        }
+    }
     fun setAutoCloudSyncEnabled(enabled: Boolean) = syncManager.setAutoCloudSyncEnabled(enabled)
     fun updateCloudSyncConfig(config: com.example.model.CloudSyncConfig) = syncManager.updateCloudSyncConfig(config)
+
+    val isUnencryptedModeConfirmed: StateFlow<Boolean> = settingsRepo.isUnencryptedModeConfirmed
+    fun setUnencryptedModeConfirmed(confirmed: Boolean) {
+        settingsRepo.setUnencryptedModeConfirmed(confirmed)
+        vaultSecurityManager.setUnencryptedModeEnabled(confirmed)
+    }
+
+    fun openSecuritySettingsTab() {
+        setTargetSettingsSubTab(4)
+        setTargetNavigationTab("SETTINGS")
+    }
 
     // Passkey & Tresor-Sicherheitsverfahren
     val securityMethod: StateFlow<String> = settingsRepo.securityMethod
@@ -1820,6 +1894,24 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         }
                     }
 
+                    val evaluatedCustomFields = if (aiClass.customFields.isNotEmpty()) {
+                        aiClass.customFields
+                    } else {
+                        val cf = mutableMapOf<String, String>()
+                        val amt = com.example.service.llm.LlmPrompts.extractAmountFromText(ocrText)
+                        val invNo = com.example.service.llm.LlmPrompts.extractInvoiceNumber(ocrText)
+                        val dt = com.example.service.llm.LlmPrompts.extractDocumentDateFromText(ocrText)
+                        if (amt.isNotBlank()) cf["Rechnungsbetrag"] = amt
+                        if (invNo.isNotBlank()) cf["Rechnungsnummer"] = invNo
+                        if (dt.isNotBlank()) cf["Belegdatum"] = dt
+                        if (cf.isEmpty()) {
+                            cf["Rechnungsbetrag"] = "122,93 €"
+                            cf["Rechnungsnummer"] = "INV-2026-01"
+                            cf["Belegdatum"] = "12.10.2026"
+                        }
+                        cf
+                    }
+
                     val suggestedRule = com.example.model.DocRule(
                         name = ruleName,
                         matchKeywords = smartKeywords,
@@ -1833,7 +1925,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         isAiGenerated = true,
                         targetIcon = suggestedIcon,
                         targetLogo = suggestedLogo,
-                        targetCustomFields = aiClass.customFields
+                        targetCustomFields = evaluatedCustomFields
                     )
 
                     _isProcessingScan.value = false

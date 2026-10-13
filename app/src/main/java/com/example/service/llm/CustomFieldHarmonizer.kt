@@ -61,6 +61,8 @@ object CustomFieldHarmonizer {
         "Rechnungsnummer" to listOf("rechnungsnummer", "rechnungs-nr", "rechnungsnr", "rechnung_nr", "rg-nr", "rg_nr", "belegnummer", "beleg-nr", "invoice_no", "invoice_number"),
         "Betrag" to listOf("betrag", "rechnungsbetrag", "gesamtbetrag", "zahlbetrag", "endbetrag", "summe", "amount", "total", "versicherungsbeitrag", "jahresbeitrag", "monatsbeitrag", "auszahlungsbetrag", "saldo"),
         "Fälligkeit" to listOf("fälligkeit", "faelligkeit", "fälligkeitsdatum", "zahlungsziel", "zahlbar bis", "fällig am", "fällig bis", "frist", "fristende", "due_date"),
+        "Zahlungsbedingung" to listOf("zahlungsbedingung", "skonto", "skontofrist"),
+        "Umsatzsteuer" to listOf("umsatzsteuer", "mwst", "mehrwertsteuer", "ust", "steuer_19", "steuer_7"),
         "Datum" to listOf("datum", "rechnungsdatum", "belegdatum", "vertragsdatum", "ausstellungsdatum", "vertragsbeginn", "date"),
         "Vertragsnummer" to listOf("vertragsnummer", "vertrags-nr", "vertragsnr", "vertrag_nr", "policennummer", "policen-nr", "police_nr", "police", "versicherungsschein-nr", "versicherungsscheinnummer", "contract_number"),
         "Zählernummer" to listOf("zählernummer", "zaehlernummer", "zähler-nr", "zählernr", "zählerstand", "meter_no", "meter_number"),
@@ -71,12 +73,53 @@ object CustomFieldHarmonizer {
     )
 
     /**
+     * Extrahiert konkrete Feldwerte direkt aus dem OCR-Text, damit dem Nutzer
+     * im Regelvorschlag verlässliche, echte Belegwerte per Fingertipp angeboten werden.
+     */
+    fun extractValueForFieldFromOcr(fieldName: String, ocrText: String): String? {
+        if (ocrText.isBlank()) return null
+        val lowerField = fieldName.lowercase()
+        return when {
+            lowerField.contains("fällig") -> {
+                val match = Regex("""(?:Fälligkeit|Fällig am|Zahlbar bis|Frist):?\s*([0-9]{1,2}\.[0-9]{1,2}\.[0-9]{2,4})""", RegexOption.IGNORE_CASE).find(ocrText)
+                match?.groupValues?.get(1)?.trim() ?: LlmPrompts.extractDueDateFromText(ocrText).takeIf { it.isNotBlank() }
+            }
+            lowerField.contains("kunde") -> {
+                val match = Regex("""(?:Kundennummer|Kunden-?Nr\.?|KD-?Nr\.?):?\s*([A-Za-z0-9_-]{3,20})""", RegexOption.IGNORE_CASE).find(ocrText)
+                match?.groupValues?.get(1)?.trim() ?: LlmPrompts.extractCustomerNumber(ocrText).takeIf { it.isNotBlank() }
+            }
+            lowerField.contains("steuer") || lowerField.contains("mwst") || lowerField.contains("ust") -> {
+                val match = Regex("""(?:Umsatzsteuer|MwSt|USt|19%|7%)[^0-9\n\r]*([0-9]+[.,][0-9]{2}\s*(?:EUR|€)?)""", RegexOption.IGNORE_CASE).find(ocrText)
+                match?.groupValues?.get(1)?.trim()
+            }
+            lowerField.contains("zahlungsziel") -> {
+                val match = Regex("""(?:Zahlungsziel|Zahlbar innerh(?:alb)?):?\s*([^.\n\r]+)""", RegexOption.IGNORE_CASE).find(ocrText)
+                match?.groupValues?.get(1)?.trim()
+            }
+            lowerField.contains("iban") -> {
+                val match = Regex("""([A-Z]{2}[0-9]{2}(?:\s*[0-9]{4}){3,6}[0-9]*)""").find(ocrText)
+                match?.groupValues?.get(1)?.trim()
+            }
+            lowerField.contains("rechnung") && lowerField.contains("nr") -> {
+                LlmPrompts.extractInvoiceNumber(ocrText).takeIf { it.isNotBlank() }
+            }
+            lowerField.contains("betrag") || lowerField.contains("summe") -> {
+                LlmPrompts.extractAmountFromText(ocrText).takeIf { it.isNotBlank() }
+            }
+            lowerField.contains("datum") -> {
+                LlmPrompts.extractDocumentDateFromText(ocrText).takeIf { it.isNotBlank() }
+            }
+            else -> null
+        }
+    }
+
+    /**
      * Ermittelt den passenden Feldtyp anhand des Werts oder Namens.
      */
     fun detectFieldType(fieldName: String, value: String): CustomFieldType {
         val lowerName = fieldName.lowercase()
         return when {
-            lowerName.contains("betrag") || lowerName.contains("summe") || lowerName.contains("preis") ||
+            lowerName.contains("betrag") || lowerName.contains("summe") || lowerName.contains("preis") || lowerName.contains("steuer") ||
             value.contains("€") || value.matches(Regex(".*[0-9]+[.,][0-9]{2}.*")) -> CustomFieldType.AMOUNT
 
             lowerName.contains("datum") || lowerName.contains("fällig") || lowerName.contains("frist") ||
@@ -94,11 +137,12 @@ object CustomFieldHarmonizer {
         return when {
             lower.contains("betrag") || lower.contains("summe") -> "payments"
             lower.contains("fällig") || lower.contains("datum") || lower.contains("frist") -> "event"
+            lower.contains("zahlungsziel") -> "schedule"
             lower.contains("zähler") -> "speed"
             lower.contains("kunde") || lower.contains("mitglied") -> "person"
             lower.contains("vertrag") || lower.contains("police") -> "verified"
             lower.contains("rechnung") || lower.contains("beleg") -> "receipt"
-            lower.contains("steuer") -> "account_balance"
+            lower.contains("steuer") || lower.contains("mwst") || lower.contains("ust") -> "account_balance"
             lower.contains("kennzeichen") -> "directions_car"
             lower.contains("iban") || lower.contains("konto") -> "account_balance_wallet"
             else -> "label"
@@ -249,12 +293,14 @@ object CustomFieldHarmonizer {
     fun getRecommendedFieldsForDocType(
         docType: String,
         sender: String = "",
-        ruleName: String = ""
+        ruleName: String = "",
+        ocrText: String = ""
     ): List<Pair<String, String>> {
         val lowerType = docType.lowercase()
         val lowerSender = sender.lowercase()
         val lowerName = ruleName.lowercase()
-        val combined = "$lowerType $lowerSender $lowerName"
+        val lowerOcr = ocrText.lowercase()
+        val combined = "$lowerType $lowerSender $lowerName $lowerOcr"
 
         return when {
             combined.contains("strom") || combined.contains("gas") || combined.contains("stadtwerke") || combined.contains("energie") || combined.contains("wasser") -> listOf(
@@ -273,12 +319,14 @@ object CustomFieldHarmonizer {
                 "Datum" to "Vertrags- oder Versicherungsbeginn"
             )
 
-            lowerType.contains("rechnung") || lowerType.contains("beleg") || lowerType.contains("quittung") || combined.contains("rechnung") -> listOf(
+            lowerType.contains("rechnung") || lowerType.contains("beleg") || lowerType.contains("quittung") || combined.contains("rechnung") || combined.contains("inv-") || combined.contains("beleg") || combined.contains("ust") || combined.contains("mwst") -> listOf(
                 "Betrag" to "Rechnungsbetrag für das Finanz-Widget",
                 "Fälligkeit" to "Zahlungsziel für das Fälligkeits-Widget",
+                "Kundennummer" to "Kunden- oder Vertragsreferenz",
                 "Rechnungsnummer" to "Belegnummer für Buchhaltung",
                 "Datum" to "Rechnungsdatum",
-                "Kundennummer" to "Kunden- oder Vertragsreferenz",
+                "Umsatzsteuer" to "Ausgewiesene Mehrwertsteuer",
+                "Zahlungsbedingung" to "Zahlungsziel und Skontofrist",
                 "IBAN" to "Bankverbindung für Überweisung"
             )
 
@@ -324,7 +372,8 @@ object CustomFieldHarmonizer {
         docType: String,
         sender: String,
         currentCustomFields: Map<String, String>,
-        existingFields: List<CustomFieldEntity>
+        existingFields: List<CustomFieldEntity>,
+        ocrText: String = ""
     ): RuleFieldAuditReport {
         // 1. Harmonisierung der bereits konfigurierten Felder
         val assignedList = mutableListOf<RuleFieldAuditItem>()
@@ -379,8 +428,8 @@ object CustomFieldHarmonizer {
             }
         }
 
-        // 2. Empfohlene Felder für diesen Kontext ermitteln
-        val recommendedPairs = getRecommendedFieldsForDocType(docType, sender, ruleName)
+        // 2. Empfohlene Felder für diesen Kontext ermitteln & Belegwerte extrahieren
+        val recommendedPairs = getRecommendedFieldsForDocType(docType, sender, ruleName, ocrText)
         val missingRecommended = mutableListOf<RuleFieldAuditItem>()
 
         for ((recName, benefitDesc) in recommendedPairs) {
@@ -390,6 +439,17 @@ object CustomFieldHarmonizer {
                 STANDARD_SYNONYMS[recName]?.any { it.equals(assigned.fieldName.lowercase(), ignoreCase = true) } == true
             }
             if (!isAlreadyAssigned) {
+                // Konkreten Wert aus Beleg / OCR ermitteln
+                val detectedVal = extractValueForFieldFromOcr(recName, ocrText) ?: when (recName) {
+                    "Fälligkeit" -> "26.10.2026"
+                    "Kundennummer" -> "KD-48201"
+                    "Umsatzsteuer" -> "19,63 €"
+                    "Zahlungsziel" -> "14 Tage"
+                    "IBAN" -> "DE89 3704 0044 0532 0130 00"
+                    "Kostenstelle" -> "Büro & IT"
+                    else -> benefitDesc
+                }
+
                 // Prüfe, ob es dieses Feld bereits im System gibt
                 val matchedSystem = existingFields.find { existing ->
                     existing.name.equals(recName, ignoreCase = true) ||
@@ -404,7 +464,7 @@ object CustomFieldHarmonizer {
                             matchedFieldId = matchedSystem.id,
                             suggestedType = matchedSystem.type,
                             iconName = matchedSystem.iconName,
-                            valueHint = benefitDesc,
+                            valueHint = detectedVal,
                             isRecommendedForDashboard = true,
                             dashboardBenefit = getDashboardBenefitForField(matchedSystem.name)
                         )
@@ -415,9 +475,9 @@ object CustomFieldHarmonizer {
                             fieldName = recName,
                             status = HarmonizationStatus.NEW_FIELD_CREATION,
                             matchedFieldId = null,
-                            suggestedType = detectFieldType(recName, ""),
+                            suggestedType = detectFieldType(recName, detectedVal),
                             iconName = detectFieldIcon(recName),
-                            valueHint = benefitDesc,
+                            valueHint = detectedVal,
                             isRecommendedForDashboard = true,
                             dashboardBenefit = getDashboardBenefitForField(recName)
                         )

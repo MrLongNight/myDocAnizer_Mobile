@@ -1,7 +1,8 @@
 package com.example.ui.navigation
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -11,12 +12,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.components.LocalAiAgentIcon
+import com.example.ui.components.TourElementBounds
+import com.example.ui.components.TourShapeType
 import com.example.ui.views.MainNavigationTab
 
 @Composable
@@ -28,11 +34,41 @@ fun MainBottomBar(
     onTabSelected: (MainNavigationTab) -> Unit,
     onOpenAiChatDrawer: () -> Unit,
     onToggleFabExpand: () -> Unit,
+    activeTourStep: Int? = null,
+    onTourElementClicked: ((Int) -> Unit)? = null,
+    onReportElementBounds: ((step: Int, bounds: TourElementBounds) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val fabRotation by animateFloatAsState(
-        targetValue = if (isFabExpanded) 45f else 0f,
+        targetValue = if (isFabExpanded) 135f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "fab_rotation"
+    )
+
+    val fabScale by animateFloatAsState(
+        targetValue = if (isFabExpanded) 1.15f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioHighBouncy),
+        label = "fab_scale"
+    )
+
+    val infiniteTransition = rememberInfiniteTransition(label = "fab_pulse_transition")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.18f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "fab_pulse_scale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "fab_pulse_alpha"
     )
 
     AnimatedVisibility(
@@ -57,22 +93,30 @@ fun MainBottomBar(
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface,
                 tonalElevation = 8.dp,
+                windowInsets = WindowInsets(0.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp)
+                    .height(86.dp)
+                    .padding(top = 6.dp)
                     .testTag("main_bottom_nav_bar")
             ) {
-                // 1. Dokumente Tab
+                // 1. Dokumente Tab (Tour Schritt 6)
                 val isDocanizerSelected = currentTab == MainNavigationTab.DOCANIZER
+                val isStepDocActive = activeTourStep == 6
                 NavigationBarItem(
                     selected = isDocanizerSelected,
-                    onClick = { onTabSelected(MainNavigationTab.DOCANIZER) },
+                    onClick = {
+                        if (isStepDocActive) onTourElementClicked?.invoke(6)
+                        else onTabSelected(MainNavigationTab.DOCANIZER)
+                    },
                     icon = {
-                        Icon(
-                            imageVector = if (isDocanizerSelected) Icons.Default.FolderSpecial else Icons.Default.Folder,
-                            contentDescription = "Dokumente",
-                            modifier = Modifier.size(if (isDocanizerSelected) 24.dp else 22.dp)
-                        )
+                        Box(modifier = Modifier.padding(top = 6.dp)) {
+                            Icon(
+                                imageVector = if (isDocanizerSelected) Icons.Default.FolderSpecial else Icons.Default.Folder,
+                                contentDescription = "Dokumente",
+                                modifier = Modifier.size(if (isDocanizerSelected) 24.dp else 22.dp)
+                            )
+                        }
                     },
                     label = {
                         Text(
@@ -86,22 +130,39 @@ fun MainBottomBar(
                     colors = navItemColors,
                     modifier = Modifier
                         .weight(1.25f)
+                        .onGloballyPositioned { coords ->
+                            val bounds = coords.boundsInRoot()
+                            val elemBounds = TourElementBounds(
+                                centerX = bounds.center.x,
+                                centerY = bounds.center.y,
+                                widthPx = bounds.width,
+                                heightPx = bounds.height,
+                                shapeType = TourShapeType.ROUNDED_RECT
+                            )
+                            onReportElementBounds?.invoke(6, elemBounds)
+                        }
                         .testTag("nav_item_docanizer")
                 )
 
                 Spacer(modifier = Modifier.weight(0.85f))
 
-                // 2. Dashboard Tab
+                // 2. Dashboard Tab (Tour Schritt 10)
                 val isDashboardSelected = currentTab == MainNavigationTab.DASHBOARD
+                val isStepDashActive = activeTourStep == 10
                 NavigationBarItem(
                     selected = isDashboardSelected,
-                    onClick = { onTabSelected(MainNavigationTab.DASHBOARD) },
+                    onClick = {
+                        if (isStepDashActive) onTourElementClicked?.invoke(10)
+                        else onTabSelected(MainNavigationTab.DASHBOARD)
+                    },
                     icon = {
-                        Icon(
-                            imageVector = if (isDashboardSelected) Icons.Default.SpaceDashboard else Icons.Default.Dashboard,
-                            contentDescription = "Dashboard",
-                            modifier = Modifier.size(if (isDashboardSelected) 24.dp else 22.dp)
-                        )
+                        Box(modifier = Modifier.padding(top = 6.dp)) {
+                            Icon(
+                                imageVector = if (isDashboardSelected) Icons.Default.SpaceDashboard else Icons.Default.Dashboard,
+                                contentDescription = "Dashboard",
+                                modifier = Modifier.size(if (isDashboardSelected) 24.dp else 22.dp)
+                            )
+                        }
                     },
                     label = {
                         Text(
@@ -115,31 +176,46 @@ fun MainBottomBar(
                     colors = navItemColors,
                     modifier = Modifier
                         .weight(1.1f)
+                        .onGloballyPositioned { coords ->
+                            val bounds = coords.boundsInRoot()
+                            val elemBounds = TourElementBounds(
+                                centerX = bounds.center.x,
+                                centerY = bounds.center.y,
+                                widthPx = bounds.width,
+                                heightPx = bounds.height,
+                                shapeType = TourShapeType.ROUNDED_RECT
+                            )
+                            onReportElementBounds?.invoke(10, elemBounds)
+                        }
                         .testTag("nav_item_dashboard")
                 )
 
                 Spacer(modifier = Modifier.weight(0.85f))
 
-                // 3. Scan InBox Tab
+                // 3. Scan InBox Tab (regulärer Tab, kein Tour-Schritt)
                 val isBatchSelected = currentTab == MainNavigationTab.BATCH_INBOX
                 NavigationBarItem(
                     selected = isBatchSelected,
-                    onClick = { onTabSelected(MainNavigationTab.BATCH_INBOX) },
+                    onClick = {
+                        onTabSelected(MainNavigationTab.BATCH_INBOX)
+                    },
                     icon = {
-                        BadgedBox(
-                            badge = {
-                                if (batchQueueSize > 0) {
-                                    Badge(containerColor = MaterialTheme.colorScheme.tertiary) {
-                                        Text("$batchQueueSize")
+                        Box(modifier = Modifier.padding(top = 6.dp)) {
+                            BadgedBox(
+                                badge = {
+                                    if (batchQueueSize > 0) {
+                                        Badge(containerColor = MaterialTheme.colorScheme.tertiary) {
+                                            Text("$batchQueueSize")
+                                        }
                                     }
                                 }
+                            ) {
+                                Icon(
+                                    imageVector = if (isBatchSelected) Icons.Default.AllInbox else Icons.Default.Inbox,
+                                    contentDescription = "Scan Eingang",
+                                    modifier = Modifier.size(if (isBatchSelected) 24.dp else 22.dp)
+                                )
                             }
-                        ) {
-                            Icon(
-                                imageVector = if (isBatchSelected) Icons.Default.AllInbox else Icons.Default.Inbox,
-                                contentDescription = "Scan Eingang",
-                                modifier = Modifier.size(if (isBatchSelected) 24.dp else 22.dp)
-                            )
                         }
                     },
                     label = {
@@ -162,13 +238,14 @@ fun MainBottomBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(72.dp),
+                    .height(86.dp),
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Spacer(modifier = Modifier.weight(1.25f))
 
-                // Left FAB: Chatbot
+                // Left FAB: Chatbot (Tour Schritt 7)
+                val isStepAiActive = activeTourStep == 7
                 Box(
                     modifier = Modifier
                         .weight(0.85f)
@@ -176,46 +253,96 @@ fun MainBottomBar(
                     contentAlignment = Alignment.Center
                 ) {
                     FloatingActionButton(
-                        onClick = onOpenAiChatDrawer,
+                        onClick = {
+                            if (isStepAiActive) onTourElementClicked?.invoke(7)
+                            else onOpenAiChatDrawer()
+                        },
                         containerColor = MaterialTheme.colorScheme.secondary,
                         contentColor = MaterialTheme.colorScheme.onSecondary,
                         shape = CircleShape,
                         elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
                         modifier = Modifier
-                            .size(62.dp)
+                            .size(60.dp)
+                            .onGloballyPositioned { coords ->
+                                val bounds = coords.boundsInRoot()
+                                val elemBounds = TourElementBounds(
+                                    centerX = bounds.center.x,
+                                    centerY = bounds.center.y,
+                                    widthPx = bounds.width,
+                                    heightPx = bounds.height,
+                                    shapeType = TourShapeType.CIRCLE
+                                )
+                                onReportElementBounds?.invoke(7, elemBounds)
+                            }
                             .testTag("main_chatbot_fab")
                     ) {
-                        LocalAiAgentIcon(
-                            modifier = Modifier.size(46.dp),
-                            tint = MaterialTheme.colorScheme.onSecondary
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            LocalAiAgentIcon(
+                                modifier = Modifier.size(38.dp),
+                                tint = MaterialTheme.colorScheme.onSecondary
+                            )
+                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.weight(1.1f))
 
-                // Right FAB: Scan/Import SpeedDial
+                // Right FAB: Scan/Import SpeedDial (Tour Schritt 1)
+                val isStep1Active = activeTourStep == 1
                 Box(
                     modifier = Modifier
                         .weight(0.85f)
                         .offset(y = (-18).dp),
                     contentAlignment = Alignment.Center
                 ) {
+                    if (!isStep1Active) {
+                        // Pulsierender Halo Ringeffekt im Normalzustand
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.secondary.copy(alpha = pulseAlpha),
+                            modifier = Modifier.size((60 * pulseScale).dp)
+                        ) {}
+                    }
+
                     FloatingActionButton(
-                        onClick = onToggleFabExpand,
+                        onClick = {
+                            if (isStep1Active) onTourElementClicked?.invoke(1)
+                            else onToggleFabExpand()
+                        },
                         containerColor = MaterialTheme.colorScheme.secondary,
                         contentColor = MaterialTheme.colorScheme.onSecondary,
                         shape = CircleShape,
-                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
+                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 12.dp),
                         modifier = Modifier
-                            .size(58.dp)
+                            .size(60.dp)
+                            .graphicsLayer {
+                                scaleX = fabScale
+                                scaleY = fabScale
+                            }
+                            .onGloballyPositioned { coords ->
+                                val bounds = coords.boundsInRoot()
+                                onReportElementBounds?.invoke(
+                                    1,
+                                    TourElementBounds(
+                                        centerX = bounds.center.x,
+                                        centerY = bounds.center.y,
+                                        widthPx = bounds.width,
+                                        heightPx = bounds.height,
+                                        shapeType = TourShapeType.CIRCLE
+                                    )
+                                )
+                            }
                             .testTag("main_add_fab")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Add,
+                            painter = androidx.compose.ui.res.painterResource(id = com.example.R.drawable.ic_icon_add_in),
                             contentDescription = if (isFabExpanded) "Menü schließen" else "Scan- & Importmenü öffnen",
+                            tint = MaterialTheme.colorScheme.onSecondary,
                             modifier = Modifier
-                                .size(30.dp)
+                                .size(32.dp)
                                 .graphicsLayer { rotationZ = fabRotation }
                         )
                     }

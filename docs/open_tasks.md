@@ -24,6 +24,8 @@ Dieses Dokument enthält den aktuellen Status der Modularisierung und Dateigrö�
 - **Paket 16 (`ReconciliationDialog.kt`)**: ✅ **Erledigt** – Von 898 auf 574 Zeilen reduziert (`ui/views/reconciliation/`: `ReconciliationFilterBarPane`, `ReconciliationMatchCardPane`, `AddCashTransactionDialog`, `AddBankWithdrawalDialog`, `AddPrivateWithdrawalDialog`).
 - **Paket 17 (`DocumentDetailModal.kt`)**: ✅ **Erledigt** – Von 896 auf 843 Zeilen reduziert (`ui/views/detail/`: `DocumentMetadataEditorPane`, `DocumentOcrPreviewPane`).
 - **Paket 18 (`ImportView.kt`)**: ✅ **Erledigt** – Von 884 auf 558 Zeilen reduziert (`ui/views/import/`: `ImportFilePickerPane`, `ImportMetadataFormPane`, `ImportOcrAndFormatPane`).
+- **Paket 20 (Erste-Schritte Tour UI & Skip-Option)**: ✅ **Erledigt** – Interaktive 11-Schritte Tour mit überarbeitetem Schritt-8 Tooltip auf dem AI-Agent Drawer, expliziten Skip-Buttons am oberen Bildschirmrand & im Tooltip-Header.
+- **Paket 21 (Zero-Knowledge Security & Bottom Bar Layout)**: ✅ **Erledigt** – Kein Default-Passwort, automatisches Routing bei Wizard-Skip, Sicherheits-Warnbanner, Log-Datei in Entwickler-Einstellungen verschoben & vergrößerte Bottom-Bar Abstände für "Dokumente", "Dashboard" und "InBox".
 
 ---
 

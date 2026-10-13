@@ -11,10 +11,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -47,11 +51,13 @@ fun AppLockScreen(
     val activity = context as? FragmentActivity
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showPasswordDialog by remember { mutableStateOf(false) }
+    var showRecoveryDialog by remember { mutableStateOf(false) }
     var enteredPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var passwordError by remember { mutableStateOf<String?>(null) }
 
     val syncPasswordKey by viewModel.syncPasswordKey.collectAsState()
+    val vaultSecManager = remember { com.example.service.VaultSecurityManager.getInstance(context) }
 
     val isBiometricAvailable = remember {
         viewModel.biometricAuthManager.checkBiometricAvailability() == com.example.service.BiometricAuthManager.BiometricHardwareStatus.AVAILABLE
@@ -121,6 +127,18 @@ fun AppLockScreen(
                     passwordError?.let { err ->
                         Text(text = err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
                     }
+
+                    TextButton(
+                        onClick = {
+                            showPasswordDialog = false
+                            showRecoveryDialog = true
+                        },
+                        modifier = Modifier.align(Alignment.CenterHorizontally).testTag("btn_forgot_password_in_dialog")
+                    ) {
+                        Icon(Icons.Default.HelpOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Passwort vergessen? Tresor wiederherstellen", fontSize = 12.sp)
+                    }
                 }
             },
             confirmButton = {
@@ -143,6 +161,18 @@ fun AppLockScreen(
                     Text("Abbrechen")
                 }
             }
+        )
+    }
+
+    if (showRecoveryDialog) {
+        VaultRecoveryModal(
+            vaultSecManager = vaultSecManager,
+            onRecoverySuccess = { newPassword ->
+                viewModel.setSyncPasswordKey(newPassword)
+                viewModel.unlockApp()
+                showRecoveryDialog = false
+            },
+            onDismiss = { showRecoveryDialog = false }
         )
     }
 
@@ -283,7 +313,277 @@ fun AppLockScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
+
+                TextButton(
+                    onClick = { showRecoveryDialog = true },
+                    modifier = Modifier.testTag("btn_lock_screen_recovery")
+                ) {
+                    Icon(Icons.Default.HelpOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Passwort vergessen? Tresor wiederherstellen",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
         }
     }
+}
+
+/**
+ * Modaler Wiederherstellungs-Dialog ("Passwort vergessen" Flow)
+ */
+@Composable
+fun VaultRecoveryModal(
+    vaultSecManager: com.example.service.VaultSecurityManager,
+    onRecoverySuccess: (newPassword: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedMethod by remember { mutableStateOf(com.example.service.VaultRecoveryMethod.BIP39_WORDS) }
+    var recoveredDek by remember { mutableStateOf<ByteArray?>(null) }
+    var recoveryError by remember { mutableStateOf<String?>(null) }
+
+    // Inputs
+    var bip39Input by remember { mutableStateOf("") }
+    var pdfQrInput by remember { mutableStateOf("") }
+    var pdfPinInput by remember { mutableStateOf("") }
+    var shamirShare1 by remember { mutableStateOf("") }
+    var shamirShare2 by remember { mutableStateOf("") }
+
+    // Neues Passwort nach erfolgreicher Rekonstruktion
+    var newMasterPass by remember { mutableStateOf("") }
+    var confirmMasterPass by remember { mutableStateOf("") }
+    var passError by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = if (recoveredDek == null) Icons.Default.SettingsBackupRestore else Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp)
+            )
+        },
+        title = {
+            Text(
+                text = if (recoveredDek == null) "Tresor wiederherstellen" else "Neues Master-Passwort setzen",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (recoveredDek == null) {
+                    Text(
+                        text = "Wähle deine eingerichtete Wiederherstellungsmethode:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(
+                            selected = selectedMethod == com.example.service.VaultRecoveryMethod.BIP39_WORDS,
+                            onClick = { selectedMethod = com.example.service.VaultRecoveryMethod.BIP39_WORDS; recoveryError = null },
+                            label = { Text("12 Wörter", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = selectedMethod == com.example.service.VaultRecoveryMethod.EMERGENCY_PDF,
+                            onClick = { selectedMethod = com.example.service.VaultRecoveryMethod.EMERGENCY_PDF; recoveryError = null },
+                            label = { Text("Notfall-PDF", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = selectedMethod == com.example.service.VaultRecoveryMethod.SHAMIR_2_OF_3,
+                            onClick = { selectedMethod = com.example.service.VaultRecoveryMethod.SHAMIR_2_OF_3; recoveryError = null },
+                            label = { Text("Shamir 2/3", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    when (selectedMethod) {
+                        com.example.service.VaultRecoveryMethod.BIP39_WORDS -> {
+                            Text("Gib deine 12 Sicherheitswörter mit Leerzeichen getrennt ein:", style = MaterialTheme.typography.labelSmall)
+                            OutlinedTextField(
+                                value = bip39Input,
+                                onValueChange = { bip39Input = it; recoveryError = null },
+                                label = { Text("12 Wörter Phrase") },
+                                minLines = 2,
+                                maxLines = 4,
+                                modifier = Modifier.fillMaxWidth().testTag("input_recovery_bip39")
+                            )
+                        }
+
+                        com.example.service.VaultRecoveryMethod.EMERGENCY_PDF -> {
+                            Text("Scanne den QR-Code des Notfallblatts oder füge den Code hier ein:", style = MaterialTheme.typography.labelSmall)
+                            OutlinedTextField(
+                                value = pdfQrInput,
+                                onValueChange = { pdfQrInput = it; recoveryError = null },
+                                label = { Text("QR-Code Inhalt oder Schlüssel") },
+                                minLines = 2,
+                                maxLines = 4,
+                                modifier = Modifier.fillMaxWidth().testTag("input_recovery_pdf_qr")
+                            )
+                            OutlinedTextField(
+                                value = pdfPinInput,
+                                onValueChange = { pdfPinInput = it; recoveryError = null },
+                                label = { Text("Optionaler Notfall-PIN (falls vergeben)") },
+                                singleLine = true,
+                                visualTransformation = PasswordVisualTransformation(),
+                                modifier = Modifier.fillMaxWidth().testTag("input_recovery_pdf_pin")
+                            )
+                        }
+
+                        com.example.service.VaultRecoveryMethod.SHAMIR_2_OF_3 -> {
+                            Text("Gib zwei beliebige deiner 3 Teilschlüssel (Shares) ein:", style = MaterialTheme.typography.labelSmall)
+                            OutlinedTextField(
+                                value = shamirShare1,
+                                onValueChange = { shamirShare1 = it; recoveryError = null },
+                                label = { Text("Erster Teilschlüssel (MYDOC-S...)") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().testTag("input_recovery_shamir_1")
+                            )
+                            OutlinedTextField(
+                                value = shamirShare2,
+                                onValueChange = { shamirShare2 = it; recoveryError = null },
+                                label = { Text("Zweiter Teilschlüssel (MYDOC-S...)") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().testTag("input_recovery_shamir_2")
+                            )
+                        }
+
+                        else -> {}
+                    }
+
+                    recoveryError?.let { err ->
+                        Text(text = err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                    }
+                } else {
+                    // Schritt 2: Neues Master-Passwort vergeben
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Text("DEK erfolgreich rekonstruiert! Bitte vergebe jetzt direkt ein neues Master-Passwort.", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = newMasterPass,
+                        onValueChange = { newMasterPass = it; passError = null },
+                        label = { Text("Neues Master-Passwort") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth().testTag("input_recovery_new_password")
+                    )
+
+                    OutlinedTextField(
+                        value = confirmMasterPass,
+                        onValueChange = { confirmMasterPass = it; passError = null },
+                        label = { Text("Neues Passwort bestätigen") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth().testTag("input_recovery_confirm_password")
+                    )
+
+                    passError?.let { err ->
+                        Text(text = err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (recoveredDek == null) {
+                Button(
+                    onClick = {
+                        recoveryError = null
+                        when (selectedMethod) {
+                            com.example.service.VaultRecoveryMethod.BIP39_WORDS -> {
+                                val words = bip39Input.trim().split(Regex("""\s+""")).filter { it.isNotBlank() }
+                                if (words.size != 12) {
+                                    recoveryError = "Bitte genau 12 Wörter eingeben (aktuell: ${words.size})."
+                                    return@Button
+                                }
+                                val dek = vaultSecManager.recoverDekWithBip39(words)
+                                if (dek != null) {
+                                    recoveredDek = dek
+                                } else {
+                                    recoveryError = "Wiederherstellung fehlgeschlagen: Ungültige Phrase oder Checksumme."
+                                }
+                            }
+
+                            com.example.service.VaultRecoveryMethod.EMERGENCY_PDF -> {
+                                if (pdfQrInput.isBlank()) {
+                                    recoveryError = "Bitte den Code oder QR-Inhalt eingeben."
+                                    return@Button
+                                }
+                                val dek = vaultSecManager.recoverDekFromEmergencyKit(pdfQrInput.trim(), pdfPinInput.ifBlank { null })
+                                if (dek != null) {
+                                    recoveredDek = dek
+                                } else {
+                                    recoveryError = "Wiederherstellung fehlgeschlagen: Ungültiger QR-Code oder falscher PIN."
+                                }
+                            }
+
+                            com.example.service.VaultRecoveryMethod.SHAMIR_2_OF_3 -> {
+                                if (shamirShare1.isBlank() || shamirShare2.isBlank()) {
+                                    recoveryError = "Bitte beide Teilschlüssel eingeben."
+                                    return@Button
+                                }
+                                val dek = vaultSecManager.recoverDekWithShamir(shamirShare1.trim(), shamirShare2.trim())
+                                if (dek != null) {
+                                    recoveredDek = dek
+                                } else {
+                                    recoveryError = "Wiederherstellung fehlgeschlagen: Die Teilschlüssel passen nicht zusammen."
+                                }
+                            }
+
+                            else -> {}
+                        }
+                    },
+                    modifier = Modifier.testTag("btn_submit_recovery")
+                ) {
+                    Text("Schlüssel prüfen")
+                }
+            } else {
+                Button(
+                    onClick = {
+                        if (newMasterPass.length < 8) {
+                            passError = "Das Passwort muss mindestens 8 Zeichen lang sein."
+                            return@Button
+                        }
+                        if (newMasterPass != confirmMasterPass) {
+                            passError = "Passwörter stimmen nicht überein."
+                            return@Button
+                        }
+                        val dek = recoveredDek ?: return@Button
+                        val success = vaultSecManager.resetPasswordWithRecoveredDek(newMasterPass, dek)
+                        if (success) {
+                            onRecoverySuccess(newMasterPass)
+                        } else {
+                            passError = "Fehler beim Setzen des neuen Master-Passworts."
+                        }
+                    },
+                    modifier = Modifier.testTag("btn_save_recovered_password")
+                ) {
+                    Text("Passwort speichern & entsperren")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Abbrechen")
+            }
+        }
+    )
 }

@@ -1153,12 +1153,20 @@ class SettingsRepository(context: Context) {
     }
 
     // Zero-Knowledge AES-256 Verschlüsselung & Cloud-Sync
-    private val _syncPasswordKey = MutableStateFlow(prefs.getString("sync_master_password", "MyDocAnizer2026MasterKey!") ?: "MyDocAnizer2026MasterKey!")
+    private val _syncPasswordKey = MutableStateFlow(prefs.getString("sync_master_password", "") ?: "")
     val syncPasswordKey: StateFlow<String> = _syncPasswordKey.asStateFlow()
 
     fun setSyncPasswordKey(key: String) {
         prefs.edit().putString("sync_master_password", key).apply()
         _syncPasswordKey.value = key
+    }
+
+    private val _isUnencryptedModeConfirmed = MutableStateFlow(prefs.getBoolean("unencrypted_mode_confirmed", false))
+    val isUnencryptedModeConfirmed: StateFlow<Boolean> = _isUnencryptedModeConfirmed.asStateFlow()
+
+    fun setUnencryptedModeConfirmed(confirmed: Boolean) {
+        prefs.edit().putBoolean("unencrypted_mode_confirmed", confirmed).apply()
+        _isUnencryptedModeConfirmed.value = confirmed
     }
 
     private val _autoCloudSyncEnabled = MutableStateFlow(prefs.getBoolean("cloud_sync_auto_enabled", false))

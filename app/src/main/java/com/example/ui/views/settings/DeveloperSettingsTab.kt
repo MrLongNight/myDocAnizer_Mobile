@@ -576,6 +576,74 @@ fun DeveloperSettingsTab(viewModel: DocAnizerViewModel) {
             }
         }
 
+        // Lokales Diagnose- & Audit-Protokoll (Log-Datei Export & Teilen)
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("card_audit_log_developer")
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.BugReport, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Column {
+                            Text("Diagnose- & Inferenz-Logdatei", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("100% lokales Audit aller KI-, OCR- & App-Aktionen", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                Text(
+                    text = "Protokolliert alle Aktivitäten, Inferenzschritte der lokalen LLMs und OCR-Treffer direkt im internen Speicher. Kann jederzeit zur Fehleranalyse exportiert oder geteilt werden.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { viewModel.exportAndShareAuditLog(context) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("btn_export_audit_log_developer"),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Log exportieren / teilen")
+                    }
+                    OutlinedButton(
+                        onClick = { viewModel.clearAuditLogs(context) },
+                        modifier = Modifier.testTag("btn_clear_audit_log_developer")
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Leeren")
+                    }
+                }
+            }
+        }
+
         // DIAGNOSE-LOGGING MODUS
         val currentLogLevel by viewModel.logLevel.collectAsState()
         Card(
