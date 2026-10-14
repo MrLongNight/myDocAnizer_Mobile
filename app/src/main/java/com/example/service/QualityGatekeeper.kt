@@ -82,6 +82,73 @@ object QualityGatekeeper {
         "november" to "11", "nov" to "11",
         "dezember" to "12", "dez" to "12"
     )
+    
+    /**
+     * Entfernt alle Whitespaces, Zeilenumbrüche und Bindestriche für einen robusten Textvergleich.
+     */
+    private fun canonicalNormalize(text: String): String {
+        return text.lowercase()
+            .replace("\\s".toRegex(), "")
+            .replace("-", "")
+            .replace("\n", "")
+            .replace("\r", "")
+    }
+
+    /**
+     * Prüft auf Gleichheit mit Toleranz für OCR-Artefakte (max. 1 Zeichen Abweichung ab 5 Zeichen).
+     */
+    private fun fuzzyMatch(target: String, text: String): Boolean {
+        val t = canonicalNormalize(target)
+        val s = canonicalNormalize(text)
+        
+        if (s.contains(t)) return true
+        if (t.length < 5) return false
+
+        // OCR-Spezifische Normalisierung für Verwechslungskandidaten
+        fun ocrNormalize(input: String): String {
+            return input
+                .replace('0', 'o')
+                .replace('1', 'i')
+                .replace('l', 'i')
+                .replace('5', 's')
+        }
+
+        val tOcr = ocrNormalize(t)
+        val sOcr = ocrNormalize(s)
+        if (sOcr.contains(tOcr)) return true
+
+        // Levenshtein-Distanz von 1 (sehr einfach gehalten für Performance)
+        // Wir prüfen gleitende Fenster in s, die die Länge von t +/- 1 haben
+        for (i in 0..s.length - t.length + 1) {
+            val sub = s.substring(i, (i + t.length + 1).coerceAtMost(s.length))
+            if (levenshteinDistance(t, sub) <= 1) return true
+        }
+        
+        return false
+    }
+
+    private fun levenshteinDistance(s1: String, s2: String): Int {
+        if (s1 == s2) return 0
+        if (s1.isEmpty()) return s2.length
+        if (s2.isEmpty()) return s1.length
+        
+        val dp = IntArray(s2.length + 1) { it }
+        for (i in 1..s1.length) {
+            var prev = i
+            var lastUpperLeft = i - 1
+            for (j in 1..s2.length) {
+                val temp = dp[j]
+                dp[j] = if (s1[i - 1] == s2[j - 1]) {
+                    lastUpperLeft
+                } else {
+                    minOf(dp[j] + 1, prev + 1, lastUpperLeft + 1)
+                }
+                lastUpperLeft = temp
+                prev = dp[j]
+            }
+        }
+        return dp[s2.length]
+    }
 
     /**
      * Normalisiert Betragsangaben ("1.000,00 €", "49,99 EUR", "1,250.00")
@@ -298,7 +365,7 @@ object QualityGatekeeper {
         if (!effectiveAmount.isNullOrBlank()) {
             val normAmount = normalizeAmount(effectiveAmount)
             if (normAmount != null) {
-                val foundInOcr = normAmount.searchVariants.any { lowerOcr.contains(it.lowercase()) }
+                val foundInOcr = normAmount.searchVariants.any { fuzzyMatch(it, ocrText) }
                 var isPlausible = true
                 var warning: String? = null
 
@@ -350,15 +417,15 @@ object QualityGatekeeper {
         if (!effectiveDueDate.isNullOrBlank()) {
             val normDate = normalizeDate(effectiveDueDate)
             if (normDate != null) {
+                var foundInOcr = false
                 var matchIndex = -1
                 for (v in normDate.searchVariants) {
-                    val idx = lowerOcr.indexOf(v.lowercase())
-                    if (idx != -1) {
-                        matchIndex = idx
+                    if (fuzzyMatch(v, ocrText)) {
+                        foundInOcr = true
+                        matchIndex = lowerOcr.indexOf(v.lowercase()) // Fallback-Index für Kontext-Check
                         break
                     }
                 }
-                val foundInOcr = matchIndex != -1
 
                 var isPlausible = true
                 var warning: String? = null
@@ -428,7 +495,7 @@ object QualityGatekeeper {
         if (!effectiveDocDate.isNullOrBlank()) {
             val normDate = normalizeDate(effectiveDocDate)
             if (normDate != null) {
-                val foundInOcr = normDate.searchVariants.any { lowerOcr.contains(it.lowercase()) }
+                val foundInOcr = normDate.searchVariants.any { fuzzyMatch(it, ocrText) }
                 checks.add(
                     FieldQualityCheck(
                         fieldName = "Belegdatum",
@@ -455,8 +522,7 @@ object QualityGatekeeper {
             val normIban = normalizeIban(effectiveIban)
             if (normIban != null) {
                 val formattedIban = normIban.chunked(4).joinToString(" ")
-                val cleanOcr = lowerOcr.replace(" ", "")
-                val foundInOcr = cleanOcr.contains(normIban.lowercase()) || lowerOcr.contains(formattedIban.lowercase())
+                val foundInOcr = fuzzyMatch(normIban, ocrText) || fuzzyMatch(formattedIban, ocrText)
 
                 var isPlausible = true
                 var warning: String? = null
@@ -504,8 +570,7 @@ object QualityGatekeeper {
         customFields.forEach { (key, value) ->
             if (key.equals("kundennummer", ignoreCase = true) || key.equals("rechnungsnummer", ignoreCase = true) || key.equals("vertragsnummer", ignoreCase = true)) {
                 if (value.isNotBlank()) {
-                    val cleanVal = value.trim().lowercase()
-                    val foundInOcr = lowerOcr.contains(cleanVal) || lowerOcr.replace("-", "").contains(cleanVal.replace("-", ""))
+                    val foundInOcr = fuzzyMatch(value, ocrText)
                     if (!foundInOcr) {
                         warnings.add("$key '$value' nicht im Text verifiziert")
                         confidencePenalty += 0.10f

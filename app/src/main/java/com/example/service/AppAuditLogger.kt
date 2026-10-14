@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
@@ -151,12 +152,14 @@ object AppAuditLogger {
         }
 
         // In-Memory Liste aktualisieren
-        val current = _logs.value.toMutableList()
-        current.add(0, entry) // Neueste Einträge zuerst
-        if (current.size > MAX_MEMORY_LOGS) {
-            current.removeAt(current.size - 1)
+        _logs.update { list ->
+            val current = list.toMutableList()
+            current.add(0, entry) // Neueste Einträge zuerst
+            if (current.size > MAX_MEMORY_LOGS) {
+                current.removeAt(current.size - 1)
+            }
+            current
         }
-        _logs.value = current
 
         // Im Hintergrund auf die rotierende Logdatei schreiben
         val ctx = appContext
@@ -189,34 +192,38 @@ object AppAuditLogger {
             reasoningTrace = if (fullReasoning.isNotBlank()) fullReasoning else reasoningSnippet
         )
 
-        val current = _logs.value.toMutableList()
-        current.add(0, entry)
-        if (current.size > MAX_MEMORY_LOGS) {
-            current.removeAt(current.size - 1)
+        _logs.update { list ->
+            val current = list.toMutableList()
+            current.add(0, entry)
+            if (current.size > MAX_MEMORY_LOGS) {
+                current.removeAt(current.size - 1)
+            }
+            current
         }
-        _logs.value = current
 
         // Benchmark-Statistik pro Modell aktualisieren
-        val currentBenchmarks = _modelBenchmarks.value.toMutableMap()
-        val prev = currentBenchmarks[modelId] ?: ModelBenchmarkStats(
-            modelId = modelId,
-            modelName = modelId
-        )
-        val newTotal = prev.totalInferences + 1
-        val newAvgLatency = ((prev.avgLatencyMs * prev.totalInferences) + latencyMs) / newTotal
-        val newAvgConf = ((prev.avgConfidence * prev.totalInferences) + confidence) / newTotal
-        val newAvgFields = ((prev.avgFieldsExtracted * prev.totalInferences) + customFieldsCount) / newTotal
-        val peakRam = maxOf(prev.peakRamDeltaMb, ramDeltaMb)
+        _modelBenchmarks.update { map ->
+            val currentBenchmarks = map.toMutableMap()
+            val prev = currentBenchmarks[modelId] ?: ModelBenchmarkStats(
+                modelId = modelId,
+                modelName = modelId
+            )
+            val newTotal = prev.totalInferences + 1
+            val newAvgLatency = ((prev.avgLatencyMs * prev.totalInferences) + latencyMs) / newTotal
+            val newAvgConf = ((prev.avgConfidence * prev.totalInferences) + confidence) / newTotal
+            val newAvgFields = ((prev.avgFieldsExtracted * prev.totalInferences) + customFieldsCount) / newTotal
+            val peakRam = maxOf(prev.peakRamDeltaMb, ramDeltaMb)
 
-        currentBenchmarks[modelId] = prev.copy(
-            totalInferences = newTotal,
-            avgLatencyMs = newAvgLatency,
-            avgConfidence = newAvgConf,
-            avgFieldsExtracted = newAvgFields,
-            peakRamDeltaMb = peakRam,
-            lastUsedTimestamp = System.currentTimeMillis()
-        )
-        _modelBenchmarks.value = currentBenchmarks
+            currentBenchmarks[modelId] = prev.copy(
+                totalInferences = newTotal,
+                avgLatencyMs = newAvgLatency,
+                avgConfidence = newAvgConf,
+                avgFieldsExtracted = newAvgFields,
+                peakRamDeltaMb = peakRam,
+                lastUsedTimestamp = System.currentTimeMillis()
+            )
+            currentBenchmarks
+        }
 
         val ctx = appContext
         if (ctx != null) {
@@ -310,7 +317,7 @@ object AppAuditLogger {
                         isError = line.contains("[ERROR]")
                     )
                 }.reversed()
-                _logs.value = parsedList
+                _logs.update { parsedList }
             }
         } catch (_: Exception) {}
     }
@@ -359,7 +366,7 @@ object AppAuditLogger {
 
     fun clearLogs(context: Context) {
         synchronized(logLock) {
-            _logs.value = emptyList()
+            _logs.update { emptyList() }
             try {
                 val file = getLogFile(context)
                 if (file.exists()) file.delete()

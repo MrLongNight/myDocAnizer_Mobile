@@ -113,4 +113,61 @@ object GoogleDriveClient {
             Result.failure(e)
         }
     }
+
+    /**
+     * Ruft die Liste der Änderungen seit dem letzten Sync-Token ab (Incremental Delta-Sync).
+     */
+    suspend fun fetchChanges(accessToken: String, pageToken: String): Result<Pair<String, List<JSONObject>>> = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://www.googleapis.com/drive/v3/changes?pageToken=$pageToken&fields=nextPageToken,newStartPageToken,changes(fileId,removed,file(name,mimeType,modifiedTime,md5Checksum))"
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $accessToken")
+                .get()
+                .build()
+
+            httpClient.newCall(request).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val json = JSONObject(resp.body?.string() ?: "{}")
+                    val changes = mutableListOf<JSONObject>()
+                    val changesArr = json.optJSONArray("changes")
+                    if (changesArr != null) {
+                        for (i in 0 until changesArr.length()) {
+                            changes.add(changesArr.getJSONObject(i))
+                        }
+                    }
+                    val nextToken = json.optString("nextPageToken", json.optString("newStartPageToken", ""))
+                    Result.success(Pair(nextToken, changes))
+                } else {
+                    Result.failure(IOException("Google Drive Changes API Fehler: HTTP ${resp.code}"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Ruft ein initiales Start-Token für die Changes-API ab.
+     */
+    suspend fun getStartPageToken(accessToken: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("https://www.googleapis.com/drive/v3/changes/startPageToken")
+                .header("Authorization", "Bearer $accessToken")
+                .get()
+                .build()
+
+            httpClient.newCall(request).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val json = JSONObject(resp.body?.string() ?: "{}")
+                    Result.success(json.optString("startPageToken", ""))
+                } else {
+                    Result.failure(IOException("Google Drive StartToken Fehler: HTTP ${resp.code}"))
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

@@ -1,5 +1,7 @@
 package com.example.service
 
+import android.util.Log
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Credentials
@@ -137,6 +139,27 @@ object WebDavClient {
             val targetUrl = if (cleanUrl.endsWith("/")) "$cleanUrl$remoteFileName" else "$cleanUrl/$remoteFileName"
             val credential = if (user.isNotBlank() || pass.isNotBlank()) Credentials.basic(user, pass) else null
 
+            // Step 1: Check if file already exists and get its ETag/Last-Modified
+            val checkRequest = Request.Builder()
+                .url(targetUrl)
+                .head()
+                .apply {
+                    if (credential != null) header("Authorization", credential)
+                }
+                .build()
+
+            val remoteMetadata = httpClient.newCall(checkRequest).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    Pair(resp.header("ETag"), resp.header("Last-Modified"))
+                } else null
+            }
+
+            // Step 2: Upload only if no conflict or forced (Simplified: log if exists)
+            if (remoteMetadata != null) {
+                Log.i("WebDavClient", "Datei existiert bereits auf Server. ETag: ${remoteMetadata.first}, Last-Modified: ${remoteMetadata.second}")
+                // In einer produktiven Version könnte hier ein Vergleich mit lokalen Metadaten stattfinden.
+            }
+
             val body = localFile.asRequestBody(mimeType.toMediaTypeOrNull())
 
             val request = Request.Builder()
@@ -144,12 +167,16 @@ object WebDavClient {
                 .put(body)
                 .apply {
                     if (credential != null) header("Authorization", credential)
+                    // Optimistische Sperre via ETag falls vorhanden
+                    remoteMetadata?.first?.let { header("If-Match", it) }
                 }
                 .build()
 
             httpClient.newCall(request).execute().use { resp ->
                 if (resp.isSuccessful || resp.code in 200..204) {
                     Result.success(true)
+                } else if (resp.code == 412) {
+                    Result.failure(IOException("Upload-Konflikt: Die Datei auf dem Server wurde zwischenzeitlich geändert (ETag Mismatch)."))
                 } else {
                     Result.failure(IOException("WebDAV PUT Upload fehlgeschlagen: HTTP ${resp.code} ${resp.message}"))
                 }

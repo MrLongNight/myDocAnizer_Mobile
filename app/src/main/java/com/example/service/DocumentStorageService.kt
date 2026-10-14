@@ -517,13 +517,16 @@ object DocumentStorageService {
      * Nutzt 64KB Streaming-Puffer, um OutOfMemoryErrors bei großen Dateien zu verhindern.
      */
     fun encryptFile(inputFile: File, outputFile: File, passwordKey: String): File {
+        if (passwordKey.isBlank()) {
+            throw IllegalArgumentException("Master-Passwort darf für die Verschlüsselung nicht leer sein")
+        }
         val salt = ByteArray(SALT_LENGTH_BYTES)
         val iv = ByteArray(GCM_IV_LENGTH_BYTES)
         val secureRandom = SecureRandom()
         secureRandom.nextBytes(salt)
         secureRandom.nextBytes(iv)
 
-        val secretKey = deriveKey(passwordKey.ifBlank { "MyDocAnizer2026MasterKey!" }, salt)
+        val secretKey = deriveKey(passwordKey, salt)
 
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
@@ -618,6 +621,82 @@ object DocumentStorageService {
      * Packt alle archivierten Dokumente und die Index-Metadaten in ein ZIP-Container
      * und verschlüsselt diesen vollständig clientseitig mit AES-256-GCM.
      */
+    private fun documentToJson(doc: DocumentEntity): JSONObject {
+        return JSONObject().apply {
+            put("id", doc.id)
+            put("title", doc.title)
+            put("sender", doc.sender)
+            put("fileName", doc.fileName)
+            put("filePath", doc.filePath)
+            put("mainCategory", doc.mainCategory)
+            put("subCategory", doc.subCategory)
+            put("mainCategoryId", doc.mainCategoryId)
+            put("subCategoryId", doc.subCategoryId)
+            put("docType", doc.docType)
+            put("tags", doc.tags)
+            put("ocrText", doc.ocrText)
+            put("colorMode", doc.colorMode)
+            put("pageCount", doc.pageCount)
+            put("fileSizeFormatted", doc.fileSizeFormatted)
+            put("isEncrypted", doc.isEncrypted)
+            put("isSynced", doc.isSynced)
+            put("createdAt", doc.createdAt)
+            put("isDeleted", doc.isDeleted)
+            if (doc.deletedAt != null) put("deletedAt", doc.deletedAt)
+            if (doc.contractEndDate != null) put("contractEndDate", doc.contractEndDate)
+            if (doc.cancellationDeadline != null) put("cancellationDeadline", doc.cancellationDeadline)
+            put("reminderDaysBefore", doc.reminderDaysBefore)
+            put("hasCalendarReminder", doc.hasCalendarReminder)
+            put("calendarEventType", doc.calendarEventType)
+            put("reminderNotes", doc.reminderNotes)
+            if (doc.amount != null) put("amount", doc.amount)
+            put("customIcon", doc.customIcon)
+            put("companyLogo", doc.companyLogo)
+        }
+    }
+
+    private fun jsonToDocument(obj: JSONObject, targetDir: File, defaultId: Long): DocumentEntity {
+        val id = obj.optLong("id", defaultId)
+        val fileName = obj.optString("fileName", "doc_$id.pdf")
+        val fullPath = File(targetDir, fileName).absolutePath
+        return DocumentEntity(
+            id = id,
+            title = obj.optString("title", "Wiederhergestelltes Dokument"),
+            sender = obj.optString("sender", ""),
+            fileName = fileName,
+            filePath = obj.optString("filePath", fullPath),
+            mainCategory = obj.optString("mainCategory", "Allgemein"),
+            subCategory = obj.optString("subCategory", "Diverses"),
+            mainCategoryId = obj.optString("mainCategoryId", "A01"),
+            subCategoryId = obj.optString("subCategoryId", "B1.01"),
+            docType = obj.optString("docType", "Dokument"),
+            tags = obj.optString("tags", ""),
+            ocrText = obj.optString("ocrText", ""),
+            colorMode = obj.optString("colorMode", "BW"),
+            pageCount = obj.optInt("pageCount", 1),
+            fileSizeFormatted = obj.optString("fileSizeFormatted", "${if (File(fullPath).exists()) (File(fullPath).length() / 1024).coerceAtLeast(1) else 10} KB"),
+            isEncrypted = obj.optBoolean("isEncrypted", true),
+            isSynced = obj.optBoolean("isSynced", false),
+            createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+            isDeleted = obj.optBoolean("isDeleted", false),
+            deletedAt = if (obj.has("deletedAt") && !obj.isNull("deletedAt")) obj.getLong("deletedAt") else null,
+            contractEndDate = if (obj.has("contractEndDate") && !obj.isNull("contractEndDate")) obj.getLong("contractEndDate") else null,
+            cancellationDeadline = if (obj.has("cancellationDeadline") && !obj.isNull("cancellationDeadline")) obj.getLong("cancellationDeadline") else null,
+            reminderDaysBefore = obj.optInt("reminderDaysBefore", 14),
+            hasCalendarReminder = obj.optBoolean("hasCalendarReminder", false),
+            calendarEventType = obj.optString("calendarEventType", "BOTH"),
+            reminderNotes = obj.optString("reminderNotes", ""),
+            amount = if (obj.has("amount") && !obj.isNull("amount")) obj.getDouble("amount") else null,
+            customIcon = obj.optString("customIcon", ""),
+            companyLogo = obj.optString("companyLogo", "")
+        )
+    }
+
+    /**
+     * 1-Klick-Sicherung & Export:
+     * Packt alle archivierten Dokumente und die Index-Metadaten in ein ZIP-Container
+     * und verschlüsselt diesen vollständig clientseitig mit AES-256-GCM.
+     */
     suspend fun createEncryptedBackupArchive(
         context: Context,
         docs: List<DocumentEntity>,
@@ -630,20 +709,7 @@ object DocumentStorageService {
                 // 1. Central Disaster Recovery Index beilegen
                 val jsonArray = JSONArray()
                 docs.forEach { doc ->
-                    val obj = JSONObject().apply {
-                        put("id", doc.id)
-                        put("title", doc.title)
-                        put("sender", doc.sender)
-                        put("fileName", doc.fileName)
-                        put("mainCategory", doc.mainCategory)
-                        put("subCategory", doc.subCategory)
-                        put("mainCategoryId", doc.mainCategoryId)
-                        put("subCategoryId", doc.subCategoryId)
-                        put("docType", doc.docType)
-                        put("tags", doc.tags)
-                        put("createdAt", doc.createdAt)
-                    }
-                    jsonArray.put(obj)
+                    jsonArray.put(documentToJson(doc))
                 }
                 val indexEntry = ZipEntry("doc_index.json")
                 zos.putNextEntry(indexEntry)
@@ -717,28 +783,7 @@ object DocumentStorageService {
                 val array = JSONArray(indexJsonString)
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
-                    val id = obj.optLong("id", System.currentTimeMillis() + i)
-                    val fileName = obj.optString("fileName", "doc_$id.pdf")
-                    val fullPath = File(targetDir, fileName).absolutePath
-                    val doc = DocumentEntity(
-                        id = id,
-                        title = obj.optString("title", "Wiederhergestelltes Dokument"),
-                        sender = obj.optString("sender", ""),
-                        filePath = fullPath,
-                        fileName = fileName,
-                        fileSizeFormatted = "${if (File(fullPath).exists()) (File(fullPath).length() / 1024).coerceAtLeast(1) else 10} KB",
-                        pageCount = 1,
-                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                        mainCategory = obj.optString("mainCategory", "Allgemein"),
-                        subCategory = obj.optString("subCategory", "Diverses"),
-                        mainCategoryId = obj.optString("mainCategoryId", "A01"),
-                        subCategoryId = obj.optString("subCategoryId", "B1.01"),
-                        docType = obj.optString("docType", "Dokument"),
-                        tags = obj.optString("tags", ""),
-                        ocrText = "",
-                        isSynced = false
-                    )
-                    restoredDocs.add(doc)
+                    restoredDocs.add(jsonToDocument(obj, targetDir, System.currentTimeMillis() + i))
                 }
             }
 
@@ -756,18 +801,7 @@ object DocumentStorageService {
     fun buildEncryptedIndex(context: Context, docs: List<DocumentEntity>, passwordKey: String): File {
         val jsonArray = JSONArray()
         docs.forEach { doc ->
-            val obj = JSONObject().apply {
-                put("id", doc.id)
-                put("title", doc.title)
-                put("sender", doc.sender)
-                put("fileName", doc.fileName)
-                put("mainCategory", doc.mainCategory)
-                put("subCategory", doc.subCategory)
-                put("docType", doc.docType)
-                put("tags", doc.tags)
-                put("createdAt", doc.createdAt)
-            }
-            jsonArray.put(obj)
+            jsonArray.put(documentToJson(doc))
         }
 
         val rawFile = File(context.cacheDir, "doc_index_plain.json")

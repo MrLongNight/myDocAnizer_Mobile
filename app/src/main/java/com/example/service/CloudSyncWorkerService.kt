@@ -1,6 +1,9 @@
 package com.example.service
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.example.data.DocumentDao
@@ -35,6 +38,25 @@ object CloudSyncWorkerService {
         } catch (e: Exception) {
             true // Fallback wenn Permission nicht auswertbar
         }
+    }
+
+    /**
+     * Ermittelt den aktuellen Batteriestand in Prozent.
+     */
+    fun getBatteryLevel(context: Context): Int {
+        val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        return if (level >= 0 && scale > 0) (level * 100 / scale.toFloat()).toInt() else 50
+    }
+
+    /**
+     * Prüft, ob das Gerät aktuell geladen wird.
+     */
+    fun isCharging(context: Context): Boolean {
+        val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        return status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
     }
 
     /**
@@ -79,7 +101,18 @@ object CloudSyncWorkerService {
             var uploadedCount = 0
 
             _syncState.value = SyncState.Syncing("Zero-Knowledge Verschlüsselung (AES-256-GCM + PBKDF2)...")
+            
+            val batteryLevel = getBatteryLevel(context)
+            val charging = isCharging(context)
+            val lowBattery = batteryLevel < 20 && !charging
+            
+            if (lowBattery && pendingDocs.isNotEmpty()) {
+                _syncState.value = SyncState.Syncing("Energiesparmodus: Synchronisiere nur Metadaten (PDF-Uploads pausiert bei $batteryLevel%)...")
+            }
+
             for (doc in pendingDocs) {
+                if (lowBattery) continue // Überspringe Binär-Blobs bei niedrigem Batteriestand
+                
                 val originalPdf = File(doc.filePath)
                 if (originalPdf.exists()) {
                     val encryptedBlob = File(context.cacheDir, "${doc.fileName}.enc")

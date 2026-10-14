@@ -739,7 +739,7 @@ data class CloudSyncConfig(
     val enableWebDavNas: Boolean = false, // Standard: immer AUS
     val enableLocalVault: Boolean = true, // Standard: immer AN (Dokumente im lokalen App-Speicher)
     val enableManualUsbExport: Boolean = false, // Stufe 1: Regelmäßiges 1-Klick Backup auf USB-Stick/SD/PC
-    val googleDriveAccount: String = "mr.locke84@gmail.com",
+    val googleDriveAccount: String = "",
     val googleDriveFolder: String = "myDocAnizer_Vault",
     val googleDriveConnected: Boolean = false,
     val googleDriveAccessToken: String = "",

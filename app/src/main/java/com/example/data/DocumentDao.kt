@@ -6,6 +6,17 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DocumentDao {
+    companion object {
+        fun sanitizeFtsQuery(raw: String): String {
+            val cleaned = raw.replace(Regex("[\"\\*\\-:()\\\\]"), " ").trim()
+            val tokens = cleaned.split(Regex("\\s+")).filter { it.isNotBlank() }
+            return if (tokens.isEmpty()) {
+                ""
+            } else {
+                tokens.joinToString(" AND ") { "$it*" }
+            }
+        }
+    }
     @Query("SELECT * FROM documents WHERE isDeleted = 0 ORDER BY createdAt DESC")
     fun getAllDocuments(): Flow<List<DocumentEntity>>
 

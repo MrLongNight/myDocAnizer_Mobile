@@ -95,6 +95,14 @@ class P2pSyncServer(
                     } catch (e: Exception) {
                         break
                     }
+                    
+                    val remoteAddress = clientSocket.inetAddress.hostAddress ?: ""
+                    if (!isLocalIp(remoteAddress)) {
+                        Log.w("P2pSyncServer", "Blockiere Verbindung von externer IP: $remoteAddress")
+                        try { clientSocket.close() } catch (_: Exception) {}
+                        continue
+                    }
+
                     scope.launch {
                         handleClient(clientSocket)
                     }
@@ -1284,6 +1292,9 @@ class P2pSyncServer(
     }
 
     companion object {
+        const val NSD_SERVICE_TYPE = "_mydocanizer._tcp"
+        const val DISCOVERY_TIMEOUT_MS = 15000L
+
         fun getLocalIpAddress(): String {
             try {
                 val interfaces = NetworkInterface.getNetworkInterfaces()
@@ -1305,6 +1316,17 @@ class P2pSyncServer(
                 // Ignore
             }
             return "192.168.1.100"
+        }
+
+        /**
+         * Sicherheits-Check: Erlaubt nur Verbindungen aus dem privaten lokalen Netzwerk (RFC 1918).
+         */
+        fun isLocalIp(ip: String): Boolean {
+            return ip == "127.0.0.1" || 
+                   ip == "0:0:0:0:0:0:0:1" ||
+                   ip.startsWith("192.168.") || 
+                   ip.startsWith("10.") || 
+                   (ip.startsWith("172.") && ip.substring(4, 6).toIntOrNull() in 16..31)
         }
     }
 }

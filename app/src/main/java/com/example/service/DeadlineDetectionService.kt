@@ -59,9 +59,9 @@ object DeadlineDetectionService {
 
         // 1. Kündigungsfristen & Kündigungsstichtage
         val cancellationPatterns = listOf(
-            Regex("""(?:kündigen\s+bis|kündbar\s+bis|spätestens\s+kündbar\s+bis|kündigung\s+bis|kündigungsstichtag|kündigungstermin)[\s\w:]*?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE),
-            Regex("""(?:kündigen\s+bis|kündigung\s+bis)[\s\w:]*?(\d{1,2}\.?\s+[A-Za-zä]+\s+\d{2,4})""", RegexOption.IGNORE_CASE),
-            Regex("""kündigungsfrist[\s\w:]*?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE)
+            Regex("""(?:kündigen\s+bis|kündbar\s+bis|spätestens\s+kündbar\s+bis|kündigung\s+bis|kündigungsstichtag|kündigungstermin)[^\n\r.;]{0,50}?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE),
+            Regex("""(?:kündigen\s+bis|kündigung\s+bis)[^\n\r.;]{0,50}?(\d{1,2}\.?\s+[A-Za-zäöüÄÖÜß]+\s+\d{2,4})""", RegexOption.IGNORE_CASE),
+            Regex("""kündigungsfrist[^\n\r.;]{0,50}?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE)
         )
 
         for (pattern in cancellationPatterns) {
@@ -86,8 +86,8 @@ object DeadlineDetectionService {
 
         // 2. Vertragslaufzeit-Ende / Mindestlaufzeit
         val contractEndPatterns = listOf(
-            Regex("""(?:vertragslaufzeit\s+bis|laufzeit\s+bis|mindestvertragslaufzeit\s+bis|mindestlaufzeit\s+bis|vertragsende)[\s\w:]*?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE),
-            Regex("""(?:vertragslaufzeit\s+bis|vertragsende)[\s\w:]*?(\d{1,2}\.?\s+[A-Za-zä]+\s+\d{2,4})""", RegexOption.IGNORE_CASE)
+            Regex("""(?:vertragslaufzeit\s+bis|laufzeit\s+bis|mindestvertragslaufzeit\s+bis|mindestlaufzeit\s+bis|vertragsende)[^\n\r.;]{0,50}?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE),
+            Regex("""(?:vertragslaufzeit\s+bis|vertragsende)[^\n\r.;]{0,50}?(\d{1,2}\.?\s+[A-Za-zäöüÄÖÜß]+\s+\d{2,4})""", RegexOption.IGNORE_CASE)
         )
 
         for (pattern in contractEndPatterns) {
@@ -112,8 +112,8 @@ object DeadlineDetectionService {
 
         // 3. Zahlungsziel / Fälligkeiten
         val paymentPatterns = listOf(
-            Regex("""(?:zahlbar\s+bis|zahlungsziel|fällig\s+am|fällig\s+bis|überweisen\s+sie\s+bis|rechnungsausgleich\s+bis)[\s\w:]*?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE),
-            Regex("""(?:fällig|zahlbar)[\s\w:]*?(\d{1,2}\.?\s+[A-Za-zä]+\s+\d{2,4})""", RegexOption.IGNORE_CASE)
+            Regex("""(?:zahlbar\s+bis|zahlungsziel|fällig\s+am|fällig\s+bis|überweisen\s+sie\s+bis|rechnungsausgleich\s+bis)[^\n\r.;]{0,50}?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE),
+            Regex("""(?:fällig|zahlbar)[^\n\r.;]{0,50}?(\d{1,2}\.?\s+[A-Za-zäöüÄÖÜß]+\s+\d{2,4})""", RegexOption.IGNORE_CASE)
         )
 
         for (pattern in paymentPatterns) {
@@ -138,8 +138,8 @@ object DeadlineDetectionService {
 
         // 4. Ablaufdatum & Gültigkeit (z.B. Ausweise, Pässe, Bescheide, TÜV)
         val expirationPatterns = listOf(
-            Regex("""(?:gültig\s+bis|ablaufdatum|gilt\s+bis|verfällt\s+am)[\s\w:]*?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE),
-            Regex("""(?:widerspruchsfrist\s+bis|einspruchsfrist\s+bis)[\s\w:]*?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE)
+            Regex("""(?:gültig\s+bis|ablaufdatum|gilt\s+bis|verfällt\s+am)[^\n\r.;]{0,50}?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE),
+            Regex("""(?:widerspruchsfrist\s+bis|einspruchsfrist\s+bis)[^\n\r.;]{0,50}?(\d{1,2}\.\d{1,2}\.\d{2,4})""", RegexOption.IGNORE_CASE)
         )
 
         for (pattern in expirationPatterns) {

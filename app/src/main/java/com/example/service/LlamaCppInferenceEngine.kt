@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 /**
@@ -95,6 +96,7 @@ class LlamaCppInferenceEngine(private val context: Context) {
     companion object {
         private const val TAG = "LlamaCppEngine"
         private var isNativeLibLoaded = false
+        private val inferenceMutex = kotlinx.coroutines.sync.Mutex()
 
         private fun safeLogI(tag: String, msg: String) {
             try { Log.i(tag, msg) } catch (_: Throwable) { println("[$tag] $msg") }
@@ -108,23 +110,13 @@ class LlamaCppInferenceEngine(private val context: Context) {
 
         init {
             try {
-                // Nur laden, wenn die native Bibliothek im Dateisystem tatsächlich vorhanden ist
-                val nativeLibCandidates = listOf(
-                    "/data/data/${com.example.BuildConfig.APPLICATION_ID}/lib/libllama_android.so",
-                    "/data/app/${com.example.BuildConfig.APPLICATION_ID}/lib/libllama_android.so"
-                )
-                val exists = nativeLibCandidates.any { java.io.File(it).exists() }
-                if (exists) {
-                    System.loadLibrary("llama_android")
-                    isNativeLibLoaded = true
-                    safeLogI(TAG, "Native llama.cpp JNI-Bibliothek erfolgreich geladen.")
-                } else {
-                    isNativeLibLoaded = false
-                    safeLogI(TAG, "Verwende optimierte On-Device Kotlin/JNI Fallback-Pipeline (100% lokal).")
-                }
+                // Direktes Laden der nativen Bibliothek (AGP/NNDK übernimmt das Deployment)
+                System.loadLibrary("llama_android")
+                isNativeLibLoaded = true
+                safeLogI(TAG, "Native llama.cpp JNI-Bibliothek erfolgreich geladen.")
             } catch (e: Throwable) {
                 isNativeLibLoaded = false
-                safeLogI(TAG, "Fallback-Pipeline aktiv: ${e.message}")
+                safeLogI(TAG, "Fallback-Pipeline aktiv: On-Device Kotlin/JNI Fallback (100% lokal). Grund: ${e.message}")
             }
         }
 
@@ -442,12 +434,15 @@ ws ::= [ \t\n\r]*
         params: InferenceParams = InferenceParams(maxTokens = 350, grammar = DMS_JSON_GBNF)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
         val filteredSlice = OcrPreFilterMatrix.extractFirstRunSlice(ocrText)
-        val systemPrompt = buildSmallModelOptimizedPrompt(whitelistedCustomFields)
+        val useTriage = whitelistedCustomFields.isEmpty()
+        val systemPrompt = if (useTriage) TRIAGE_SYSTEM_PROMPT else buildSmallModelOptimizedPrompt(whitelistedCustomFields)
+        val targetParams = if (useTriage) params.copy(grammar = TRIAGE_JSON_GBNF) else params
+
         val rawOutput = executeInference(
             modelFile = modelFile,
             prompt = "OCR-KOPFZEILEN (TRIAGE):\n$filteredSlice",
             systemPrompt = systemPrompt,
-            params = params
+            params = targetParams
         )
         parseDmsJson(rawOutput, filteredSlice)
     }
@@ -528,19 +523,21 @@ ws ::= [ \t\n\r]*
 
             val formattedPrompt = buildChatPrompt(systemPrompt, prompt)
 
-            val output = if (isNativeLibLoaded) {
-                nativeExecuteLlamaWithGrammar(
-                    modelPath = modelFile.absolutePath,
-                    prompt = formattedPrompt,
-                    threads = params.threads,
-                    gpuLayers = if (checkGpuAccelerationSupport()) params.gpuLayers else 0,
-                    temp = params.temperature,
-                    topP = params.topP,
-                    maxTokens = params.maxTokens,
-                    grammar = params.grammar ?: ""
-                )
-            } else {
-                executeFallbackInference(prompt, systemPrompt)
+            val output = inferenceMutex.withLock {
+                if (isNativeLibLoaded) {
+                    nativeExecuteLlamaWithGrammar(
+                        modelPath = modelFile.absolutePath,
+                        prompt = formattedPrompt,
+                        threads = params.threads,
+                        gpuLayers = if (checkGpuAccelerationSupport()) params.gpuLayers else 0,
+                        temp = params.temperature,
+                        topP = params.topP,
+                        maxTokens = params.maxTokens,
+                        grammar = params.grammar ?: ""
+                    )
+                } else {
+                    executeFallbackInference(prompt, systemPrompt)
+                }
             }
 
             val endTime = System.currentTimeMillis()

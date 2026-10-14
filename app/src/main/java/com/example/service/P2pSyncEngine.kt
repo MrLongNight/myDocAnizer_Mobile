@@ -584,6 +584,11 @@ class P2pSyncEngine(
             emptyList()
         }
     }
+
+    companion object {
+        const val NSD_SERVICE_TYPE = "_mydocanizer._tcp"
+        const val DISCOVERY_TIMEOUT_MS = 15000L
+    }
 }
 
 sealed class PairingResult {

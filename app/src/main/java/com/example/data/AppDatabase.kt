@@ -158,6 +158,10 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE VIRTUAL TABLE IF NOT EXISTS `documents_fts` USING fts4(content=`documents`, `title`, `sender`, `ocrText`, `tags`)")
                 db.execSQL("INSERT INTO `documents_fts` (`docid`, `title`, `sender`, `ocrText`, `tags`) SELECT `id`, `title`, `sender`, `ocrText`, `tags` FROM `documents`")
+                db.execSQL("CREATE TRIGGER IF NOT EXISTS `room_fts_content_sync_documents_fts_BEFORE_UPDATE` BEFORE UPDATE ON `documents` BEGIN DELETE FROM `documents_fts` WHERE `docid`=OLD.`rowid`; END;")
+                db.execSQL("CREATE TRIGGER IF NOT EXISTS `room_fts_content_sync_documents_fts_BEFORE_DELETE` BEFORE DELETE ON `documents` BEGIN DELETE FROM `documents_fts` WHERE `docid`=OLD.`rowid`; END;")
+                db.execSQL("CREATE TRIGGER IF NOT EXISTS `room_fts_content_sync_documents_fts_AFTER_UPDATE` AFTER UPDATE ON `documents` BEGIN INSERT INTO `documents_fts`(`docid`, `title`, `sender`, `ocrText`, `tags`) VALUES (NEW.`rowid`, NEW.`title`, NEW.`sender`, NEW.`ocrText`, NEW.`tags`); END;")
+                db.execSQL("CREATE TRIGGER IF NOT EXISTS `room_fts_content_sync_documents_fts_AFTER_INSERT` AFTER INSERT ON `documents` BEGIN INSERT INTO `documents_fts`(`docid`, `title`, `sender`, `ocrText`, `tags`) VALUES (NEW.`rowid`, NEW.`title`, NEW.`sender`, NEW.`ocrText`, NEW.`tags`); END;")
             }
         }
 
