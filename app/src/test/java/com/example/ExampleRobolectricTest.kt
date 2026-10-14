@@ -1366,6 +1366,63 @@ class ExampleRobolectricTest {
     assertTrue(secManager.isUnlocked())
     assertTrue(secManager.getActiveDek()!!.contentEquals(originalDek!!))
   }
+
+  @Test
+  fun `verify TOTP engine generation computation and verification`() {
+    val context = ApplicationProvider.getApplicationContext<Application>()
+    val secManager = com.example.service.VaultSecurityManager.getInstance(context)
+
+    val secret = secManager.generateTotpSecret()
+    assertTrue(secret.length >= 20)
+
+    val codeNow = secManager.computeTotpCode(secret)
+    assertEquals(6, codeNow.length)
+    assertTrue(codeNow.all { it.isDigit() })
+
+    // Verification of current code
+    assertTrue(secManager.verifyTotpCode(secret, codeNow))
+    assertFalse(secManager.verifyTotpCode(secret, "999999".takeIf { it != codeNow } ?: "123456"))
+
+    // URI generation
+    val uri = secManager.getTotpUri(secret, "TestUser")
+    assertTrue(uri.startsWith("otpauth://totp/myDocAnizer:TestUser?secret="))
+  }
+
+  @Test
+  fun `verify 2FA keyfile and recovery code generation and recovery`() {
+    val context = ApplicationProvider.getApplicationContext<Application>()
+    val secManager = com.example.service.VaultSecurityManager.getInstance(context)
+
+    val keyToken = secManager.generateKeyFileToken()
+    assertEquals(64, keyToken.length)
+
+    val recCode = secManager.generateRecoveryCode()
+    assertEquals(39, recCode.length) // 32 chars + 7 hyphens = 39
+
+    val setupRes = secManager.initializeVault(
+      masterPassword = "StrongPassword789!",
+      enableBiometrics = true,
+      recoveryMethod = com.example.service.VaultRecoveryMethod.RECOVERY_CODE,
+      securityTier = com.example.service.VaultSecurityTier.TWO_FACTOR,
+      factorType = com.example.service.VaultFactorType.PASSWORD_AND_KEYFILE,
+      keyFileToken = keyToken,
+      recoveryCode = recCode,
+      autoLockMinutes = 10
+    )
+
+    assertEquals(com.example.service.VaultSecurityTier.TWO_FACTOR, secManager.vaultStatus.value.securityTier)
+    assertEquals(com.example.service.VaultFactorType.PASSWORD_AND_KEYFILE, secManager.vaultStatus.value.factorType)
+    assertEquals(10, secManager.getAutoLockMinutes())
+
+    // Recovery test with recovery code
+    secManager.lockVault()
+    assertFalse(secManager.isUnlocked())
+
+    val recoveredDek = secManager.recoverDekWithRecoveryCode(recCode)
+    assertNotNull(recoveredDek)
+    assertTrue(recoveredDek!!.contentEquals(setupRes.dek))
+    assertTrue(secManager.isUnlocked())
+  }
 }
 
 

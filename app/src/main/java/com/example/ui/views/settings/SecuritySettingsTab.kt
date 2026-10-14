@@ -253,6 +253,65 @@ fun LegacySecuritySettingsTab(
                 )
             }
         }
+
+        // Privatsphäre & Analytics
+        val analyticsEnabled by viewModel.analyticsEnabled.collectAsState()
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Analytics,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .size(28.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "Deine Mithilfe (Analytics)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Anonyme Statistiken zur App-Optimierung",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = analyticsEnabled,
+                        onCheckedChange = { viewModel.setAnalyticsEnabled(it) }
+                    )
+                }
+                Text(
+                    text = "Wir schätzen dein Vertrauen riesig! Während andere Apps Nutzungsdaten oft ungefragt erfassen, setzen wir auf echte Fairness: Du entscheidest völlig frei. Deine Hilfe ermöglicht uns eine schnellere Optimierung – ganz ohne Nachteile für dich und ohne Zugriff auf deine Dokumente.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 
     if (showPasswordDialog) {

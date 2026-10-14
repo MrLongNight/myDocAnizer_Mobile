@@ -504,6 +504,11 @@ fun VaultSettingsScreen(
                                     }
                                 }
 
+                                VaultRecoveryMethod.RECOVERY_CODE -> {
+                                    Text("Aktiver Einmal-Notfall-Schlüssel (32 Zeichen):", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    Text("Ein sicherer 32-stelliger Wiederherstellungsschlüssel ist hinterlegt. Verwende diesen im Notfall bei Passwortverlust.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+
                                 VaultRecoveryMethod.NONE -> {
                                     Text("Aktuell ist keine Notfall-Methode eingerichtet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                                 }

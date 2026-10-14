@@ -57,7 +57,11 @@ fun AppLockScreen(
     var passwordError by remember { mutableStateOf<String?>(null) }
 
     val syncPasswordKey by viewModel.syncPasswordKey.collectAsState()
+    val vaultStatus by viewModel.vaultStatus.collectAsState()
     val vaultSecManager = remember { com.example.service.VaultSecurityManager.getInstance(context) }
+    
+    var enteredTotpCode by remember { mutableStateOf("") }
+    var enteredKeyFileToken by remember { mutableStateOf("") }
 
     val isBiometricAvailable = remember {
         viewModel.biometricAuthManager.checkBiometricAvailability() == com.example.service.BiometricAuthManager.BiometricHardwareStatus.AVAILABLE
@@ -114,16 +118,50 @@ fun AppLockScreen(
                         },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = {
-                            if (syncPasswordKey.isBlank() || enteredPassword == syncPasswordKey) {
+                            val success = if (vaultStatus.isUnencryptedMode) {
+                                true
+                            } else {
+                                vaultSecManager.unlockVault(
+                                    password = enteredPassword,
+                                    keyFileToken = if (vaultStatus.keyFileEnabled) enteredKeyFileToken else null,
+                                    totpCode = if (vaultStatus.totpEnabled) enteredTotpCode else null
+                                )
+                            }
+
+                            if (success) {
                                 viewModel.unlockApp()
                                 showPasswordDialog = false
                             } else {
-                                passwordError = "Falsches Passwort"
+                                passwordError = "Falsches Passwort oder ungültiger 2. Faktor"
                             }
                         }),
                         isError = passwordError != null,
                         modifier = Modifier.fillMaxWidth().testTag("input_lock_password")
                     )
+
+                    // TOTP Feld falls aktiviert
+                    if (vaultStatus.totpEnabled) {
+                        OutlinedTextField(
+                            value = enteredTotpCode,
+                            onValueChange = { enteredTotpCode = it.take(6) },
+                            label = { Text("Authenticator-Code (6-stellig)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            modifier = Modifier.fillMaxWidth().testTag("input_lock_totp")
+                        )
+                    }
+
+                    // Keyfile-Token Feld falls aktiviert
+                    if (vaultStatus.keyFileEnabled) {
+                        OutlinedTextField(
+                            value = enteredKeyFileToken,
+                            onValueChange = { enteredKeyFileToken = it },
+                            label = { Text("Schlüsseldatei-Token") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("input_lock_keyfile")
+                        )
+                    }
+
                     passwordError?.let { err ->
                         Text(text = err, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
                     }
@@ -144,11 +182,21 @@ fun AppLockScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (syncPasswordKey.isBlank() || enteredPassword == syncPasswordKey) {
+                        val success = if (vaultStatus.isUnencryptedMode) {
+                            true
+                        } else {
+                            vaultSecManager.unlockVault(
+                                password = enteredPassword,
+                                keyFileToken = if (vaultStatus.keyFileEnabled) enteredKeyFileToken else null,
+                                totpCode = if (vaultStatus.totpEnabled) enteredTotpCode else null
+                            )
+                        }
+
+                        if (success) {
                             viewModel.unlockApp()
                             showPasswordDialog = false
                         } else {
-                            passwordError = "Falsches Passwort"
+                            passwordError = "Falsches Passwort oder ungültiger 2. Faktor"
                         }
                     },
                     modifier = Modifier.testTag("btn_confirm_password_unlock")
@@ -289,7 +337,7 @@ fun AppLockScreen(
 
                 OutlinedButton(
                     onClick = { 
-                        if (syncPasswordKey.isBlank()) {
+                        if (vaultStatus.isUnencryptedMode) {
                             viewModel.unlockApp()
                         } else {
                             showPasswordDialog = true 
@@ -308,7 +356,7 @@ fun AppLockScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (syncPasswordKey.isBlank()) "Direkt entsperren (Kein Passwort gesetzt)" else "Mit Passwort / PIN entsperren",
+                        text = if (vaultStatus.isUnencryptedMode) "Direkt entsperren (Kein Passwort gesetzt)" else "Mit Passwort / PIN entsperren",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold
                     )

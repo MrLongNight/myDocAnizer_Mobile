@@ -1421,4 +1421,13 @@ class SettingsRepository(context: Context) {
         _lastRatingDismissedTime.value = now
         _launchesSinceDismissal.value = 0
     }
+
+    // Analytics Opt-in
+    private val _analyticsEnabled = MutableStateFlow(prefs.getBoolean("analytics_enabled", false))
+    val analyticsEnabled: StateFlow<Boolean> = _analyticsEnabled.asStateFlow()
+
+    fun setAnalyticsEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("analytics_enabled", enabled).apply()
+        _analyticsEnabled.value = enabled
+    }
 }

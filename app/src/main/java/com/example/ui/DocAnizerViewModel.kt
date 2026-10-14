@@ -57,6 +57,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         triggerRatingPromptOnSuccess()
     }
     val syncManager = SyncManager(p2pSyncManager, settingsRepo, viewModelScope)
+    val analyticsManager = AnalyticsManager(application, settingsRepo.analyticsEnabled)
 
     init {
         AppAuditLogger.init(application)
@@ -83,9 +84,22 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             } catch (_: Throwable) {}
         }
+
+        // Analytics Launch Event
+        analyticsManager.logEvent("app_launch")
+
+        // Listen for analytics consent changes
+        viewModelScope.launch {
+            settingsRepo.analyticsEnabled.collect { enabled ->
+                analyticsManager.updateConsent(enabled)
+            }
+        }
     }
 
     val auditLogs: StateFlow<List<AuditLogEntry>> = AppAuditLogger.logs
+
+    val analyticsEnabled: StateFlow<Boolean> = settingsRepo.analyticsEnabled
+    fun setAnalyticsEnabled(enabled: Boolean) = settingsRepo.setAnalyticsEnabled(enabled)
 
     fun exportAndShareAuditLog(context: android.content.Context) {
         try {

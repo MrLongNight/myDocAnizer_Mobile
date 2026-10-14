@@ -39,13 +39,55 @@ enum class VaultRecoveryMethod {
     NONE,
     BIP39_WORDS,
     EMERGENCY_PDF,
-    SHAMIR_2_OF_3;
+    SHAMIR_2_OF_3,
+    RECOVERY_CODE;
 
     fun getDisplayName(): String = when (this) {
         NONE -> "Keine Wiederherstellung (Experten-Modus)"
         BIP39_WORDS -> "12 Sicherheitswörter (BIP-39)"
         EMERGENCY_PDF -> "Notfall-Schlüsseldatei (PDF mit QR-Code)"
         SHAMIR_2_OF_3 -> "Schlüssel-Teilung (Shamir 2 von 3)"
+        RECOVERY_CODE -> "Einmaliger Notfall-Schlüssel (32 Zeichen)"
+    }
+}
+
+/**
+ * Grundsätzliche Sicherheitsstufe (Stufen A, B, C).
+ */
+enum class VaultSecurityTier {
+    UNENCRYPTED,
+    ONE_FACTOR,
+    TWO_FACTOR;
+
+    fun getDisplayName(): String = when (this) {
+        UNENCRYPTED -> "A) Keine Verschlüsselung (Unverschlüsselt)"
+        ONE_FACTOR -> "B) Verschlüsselung mit einem Faktor (1-Faktor)"
+        TWO_FACTOR -> "C) Verschlüsselung mit zwei Faktoren (2-Faktor / 2FA)"
+    }
+
+    fun getBadge(): String = when (this) {
+        UNENCRYPTED -> "Ungeschützt"
+        ONE_FACTOR -> "Standard"
+        TWO_FACTOR -> "Maximaler Schutz"
+    }
+}
+
+/**
+ * Konkrete Faktoren-Art für den Tresor.
+ */
+enum class VaultFactorType {
+    NONE,
+    PASSWORD,
+    KEYFILE,
+    PASSWORD_AND_KEYFILE,
+    PASSWORD_AND_TOTP;
+
+    fun getDisplayName(): String = when (this) {
+        NONE -> "Kein Faktor (Unverschlüsselt)"
+        PASSWORD -> "Master-Passwort"
+        KEYFILE -> "Schlüsseldatei (.key)"
+        PASSWORD_AND_KEYFILE -> "Master-Passwort + Schlüsseldatei"
+        PASSWORD_AND_TOTP -> "Master-Passwort + Authenticator-App (TOTP)"
     }
 }
 
@@ -71,7 +113,13 @@ data class VaultHeader(
     val emergencyPdfChecksum: String? = null,
     val shamirShareHashes: List<String> = emptyList(),
     val hasEmergencyPin: Boolean = false,
-    val emergencyPinSaltBase64: String? = null
+    val emergencyPinSaltBase64: String? = null,
+    val securityTier: VaultSecurityTier = VaultSecurityTier.ONE_FACTOR,
+    val factorType: VaultFactorType = VaultFactorType.PASSWORD,
+    val totpSecret: String? = null,
+    val keyFileTokenHash: String? = null,
+    val recoveryCodeHash: String? = null,
+    val autoLockMinutes: Int = 5
 )
 
 /**
@@ -85,7 +133,12 @@ data class VaultStatus(
     val recoveryMethod: VaultRecoveryMethod = VaultRecoveryMethod.NONE,
     val recoveryStatusLabel: String = "Nicht eingerichtet",
     val hasEmergencyPin: Boolean = false,
-    val createdAt: Long = 0L
+    val createdAt: Long = 0L,
+    val securityTier: VaultSecurityTier = VaultSecurityTier.ONE_FACTOR,
+    val factorType: VaultFactorType = VaultFactorType.PASSWORD,
+    val totpEnabled: Boolean = false,
+    val keyFileEnabled: Boolean = false,
+    val autoLockMinutes: Int = 5
 )
 
 /**
@@ -163,7 +216,9 @@ class VaultSecurityManager private constructor(private val context: Context) {
             return VaultStatus(
                 isInitialized = false,
                 isUnencryptedMode = unencrypted,
-                recoveryStatusLabel = if (unencrypted) "Unverschlüsselter Modus" else "Nicht konfiguriert"
+                recoveryStatusLabel = if (unencrypted) "Unverschlüsselter Modus" else "Nicht konfiguriert",
+                securityTier = if (unencrypted) VaultSecurityTier.UNENCRYPTED else VaultSecurityTier.ONE_FACTOR,
+                factorType = if (unencrypted) VaultFactorType.NONE else VaultFactorType.PASSWORD
             )
         }
         val label = when (header.recoveryMethod) {
@@ -171,6 +226,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             VaultRecoveryMethod.BIP39_WORDS -> "Aktiv: 12 Sicherheitswörter (BIP-39)"
             VaultRecoveryMethod.EMERGENCY_PDF -> "Aktiv: Notfall-Schlüsseldatei (PDF)" + if (header.hasEmergencyPin) " mit PIN" else ""
             VaultRecoveryMethod.SHAMIR_2_OF_3 -> "Aktiv: Schlüssel-Teilung (2 von 3 Shamir-Shares)"
+            VaultRecoveryMethod.RECOVERY_CODE -> "Aktiv: Einmaliger Notfall-Schlüssel (32 Zeichen)"
         }
         return VaultStatus(
             isInitialized = true,
@@ -180,7 +236,12 @@ class VaultSecurityManager private constructor(private val context: Context) {
             recoveryMethod = header.recoveryMethod,
             recoveryStatusLabel = label,
             hasEmergencyPin = header.hasEmergencyPin,
-            createdAt = header.createdAt
+            createdAt = header.createdAt,
+            securityTier = header.securityTier,
+            factorType = header.factorType,
+            totpEnabled = !header.totpSecret.isNullOrBlank(),
+            keyFileEnabled = !header.keyFileTokenHash.isNullOrBlank(),
+            autoLockMinutes = header.autoLockMinutes
         )
     }
 
@@ -251,16 +312,40 @@ class VaultSecurityManager private constructor(private val context: Context) {
         recoveryMethod: VaultRecoveryMethod,
         emergencyPin: String? = null,
         bip39Words: List<String>? = null,
-        existingDek: ByteArray? = null
+        existingDek: ByteArray? = null,
+        securityTier: VaultSecurityTier = if (masterPassword.isBlank()) VaultSecurityTier.UNENCRYPTED else VaultSecurityTier.ONE_FACTOR,
+        factorType: VaultFactorType = if (masterPassword.isBlank()) VaultFactorType.NONE else VaultFactorType.PASSWORD,
+        totpSecret: String? = null,
+        keyFileToken: String? = null,
+        recoveryCode: String? = null,
+        autoLockMinutes: Int = 5
     ): VaultSetupResult {
         val dek = existingDek ?: generateRandomDek()
         val vaultId = "VAULT-" + UUID.randomUUID().toString().take(8).uppercase(Locale.ROOT)
         val createdAt = System.currentTimeMillis()
 
-        // 1. Passwort-Schutz via Argon2id
+        if (securityTier == VaultSecurityTier.UNENCRYPTED) {
+            setUnencryptedModeEnabled(true)
+        } else {
+            setUnencryptedModeEnabled(false)
+        }
+
+        // 1. Passwort- oder Keyfile-Schutz via Argon2id
         val salt = ByteArray(16)
         secureRandom.nextBytes(salt)
-        val kekPassword = deriveKekArgon2id(masterPassword, salt)
+        
+        // Kombiniere Faktoren für 2-Faktor-Verschlüsselung (Bessere Sicherheit durch echte Entropie-Addition)
+        val combinedSecret = when {
+            masterPassword.isNotBlank() && !keyFileToken.isNullOrBlank() -> {
+                // Bei Passwort + Keyfile kombinieren wir beide für die Schlüsselableitung
+                "$masterPassword:$keyFileToken"
+            }
+            masterPassword.isNotBlank() -> masterPassword
+            !keyFileToken.isNullOrBlank() -> keyFileToken
+            else -> "myDocAnizer-unencrypted-fallback"
+        }
+        
+        val kekPassword = deriveKekArgon2id(combinedSecret, salt)
         val (encryptedDekPassword, ivPassword) = encryptAesGcm(dek, kekPassword)
         kekPassword.fill(0)
 
@@ -287,6 +372,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         var shareHashes: List<String> = emptyList()
         var hasPin = false
         var pinSaltBase64: String? = null
+        var recCodeHash: String? = null
 
         when (recoveryMethod) {
             VaultRecoveryMethod.NONE -> {
@@ -303,7 +389,6 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 recoverySaltBase64 = Base64.encodeToString(recoverySalt, Base64.NO_WRAP)
             }
             VaultRecoveryMethod.EMERGENCY_PDF -> {
-                // Optional durch Einrichtungs-Pin schützen
                 var payloadDek = dek
                 if (!emergencyPin.isNullOrBlank()) {
                     hasPin = true
@@ -322,7 +407,20 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 val shares = splitSecretShamir2of3(dek)
                 shareHashes = shares.map { calculateSha256(it.token.toByteArray(Charsets.UTF_8)) }
             }
+            VaultRecoveryMethod.RECOVERY_CODE -> {
+                val code = recoveryCode ?: generateRecoveryCode()
+                val kekRecovery = deriveKekFromRecoveryCode(code)
+                val (encDek, iv) = encryptAesGcm(dek, kekRecovery)
+                kekRecovery.fill(0)
+                encDekRecoveryBase64 = Base64.encodeToString(encDek, Base64.NO_WRAP)
+                recoveryIvBase64 = Base64.encodeToString(iv, Base64.NO_WRAP)
+                recCodeHash = calculateSha256(code.replace("-", "").trim().uppercase(Locale.ROOT).toByteArray(Charsets.UTF_8))
+            }
         }
+
+        val keyTokenHash = if (!keyFileToken.isNullOrBlank()) {
+            calculateSha256(keyFileToken.toByteArray(Charsets.UTF_8))
+        } else null
 
         val header = VaultHeader(
             version = 1,
@@ -343,7 +441,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
             emergencyPdfChecksum = emergencyChecksum,
             shamirShareHashes = shareHashes,
             hasEmergencyPin = hasPin,
-            emergencyPinSaltBase64 = pinSaltBase64
+            emergencyPinSaltBase64 = pinSaltBase64,
+            securityTier = securityTier,
+            factorType = factorType,
+            totpSecret = totpSecret,
+            keyFileTokenHash = keyTokenHash,
+            recoveryCodeHash = recCodeHash,
+            autoLockMinutes = autoLockMinutes
         )
 
         saveVaultHeader(header)
@@ -353,28 +457,60 @@ class VaultSecurityManager private constructor(private val context: Context) {
             vaultId = vaultId,
             dek = dek,
             bip39Words = if (recoveryMethod == VaultRecoveryMethod.BIP39_WORDS) (bip39Words ?: generateBip39Mnemonic()) else null,
-            shamirShares = if (recoveryMethod == VaultRecoveryMethod.SHAMIR_2_OF_3) splitSecretShamir2of3(dek) else null
+            shamirShares = if (recoveryMethod == VaultRecoveryMethod.SHAMIR_2_OF_3) splitSecretShamir2of3(dek) else null,
+            totpSecret = totpSecret,
+            keyFileToken = keyFileToken,
+            recoveryCode = if (recoveryMethod == VaultRecoveryMethod.RECOVERY_CODE) (recoveryCode ?: generateRecoveryCode()) else null
         )
     }
 
     /**
      * Entsperrt den Tresor mit dem Master-Passwort und lädt den DEK in den RAM.
      */
-    fun unlockWithPassword(password: String): Boolean {
+    /**
+     * Entsperrt den Tresor mit den gewählten Faktoren (Passwort, Schlüsseldatei, TOTP).
+     * Unterstützt Zero-Knowledge 1-Faktor und 2-Faktor Authentifizierung.
+     */
+    fun unlockVault(
+        password: String? = null,
+        keyFileToken: String? = null,
+        totpCode: String? = null
+    ): Boolean {
         val header = _vaultHeader.value ?: return false
+        
+        // 1. TOTP Check (falls im Header aktiviert)
+        if (!header.totpSecret.isNullOrBlank()) {
+            if (totpCode == null || !verifyTotpCode(header.totpSecret, totpCode)) {
+                return false
+            }
+        }
+        
+        // 2. Faktor-Kombination für die KEK-Ableitung
+        val combinedSecret = when {
+            !password.isNullOrBlank() && !keyFileToken.isNullOrBlank() -> "$password:$keyFileToken"
+            !password.isNullOrBlank() -> password
+            !keyFileToken.isNullOrBlank() -> keyFileToken
+            else -> return false
+        }
+        
         return try {
             val salt = Base64.decode(header.argon2SaltBase64, Base64.NO_WRAP)
-            val kek = deriveKekArgon2id(password, salt, header.argon2Iterations, header.argon2MemoryKb)
+            val kek = deriveKekArgon2id(combinedSecret, salt, header.argon2Iterations, header.argon2MemoryKb)
             val ciphertext = Base64.decode(header.encryptedDekByPasswordBase64, Base64.NO_WRAP)
             val iv = Base64.decode(header.passwordDekIvBase64, Base64.NO_WRAP)
             val dek = decryptAesGcm(ciphertext, iv, kek)
             kek.fill(0)
-            activeDek = dek
+            activeDek = dek.copyOf()
             true
         } catch (e: Exception) {
             false
         }
     }
+
+    /**
+     * Abwärtskompatible Wrapper-Methode für bestehende Aufrufe.
+     */
+    fun unlockWithPassword(password: String): Boolean = unlockVault(password = password)
 
     /**
      * Entsperrt den Tresor via Android KeyStore Biometrie.
@@ -903,6 +1039,12 @@ class VaultSecurityManager private constructor(private val context: Context) {
         }
         json.put("hasEmergencyPin", header.hasEmergencyPin)
         header.emergencyPinSaltBase64?.let { json.put("emergencyPinSalt", it) }
+        json.put("securityTier", header.securityTier.name)
+        json.put("factorType", header.factorType.name)
+        header.totpSecret?.let { json.put("totpSecret", it) }
+        header.keyFileTokenHash?.let { json.put("keyFileTokenHash", it) }
+        header.recoveryCodeHash?.let { json.put("recoveryCodeHash", it) }
+        json.put("autoLockMinutes", header.autoLockMinutes)
 
         prefs.edit().putString("vault_header_json_v1", json.toString()).apply()
         _vaultHeader.value = header
@@ -941,7 +1083,21 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 emergencyPdfChecksum = json.optString("pdfChecksum").ifBlank { null },
                 shamirShareHashes = hashes,
                 hasEmergencyPin = json.optBoolean("hasEmergencyPin", false),
-                emergencyPinSaltBase64 = json.optString("emergencyPinSalt").ifBlank { null }
+                emergencyPinSaltBase64 = json.optString("emergencyPinSalt").ifBlank { null },
+                securityTier = try {
+                    VaultSecurityTier.valueOf(json.optString("securityTier", VaultSecurityTier.ONE_FACTOR.name))
+                } catch (e: Exception) {
+                    VaultSecurityTier.ONE_FACTOR
+                },
+                factorType = try {
+                    VaultFactorType.valueOf(json.optString("factorType", VaultFactorType.PASSWORD.name))
+                } catch (e: Exception) {
+                    VaultFactorType.PASSWORD
+                },
+                totpSecret = json.optString("totpSecret").ifBlank { null },
+                keyFileTokenHash = json.optString("keyFileTokenHash").ifBlank { null },
+                recoveryCodeHash = json.optString("recoveryCodeHash").ifBlank { null },
+                autoLockMinutes = json.optInt("autoLockMinutes", 5)
             )
         } catch (e: Exception) {
             null
@@ -1037,6 +1193,67 @@ class VaultSecurityManager private constructor(private val context: Context) {
             null
         }
     }
+
+    // =========================================================================
+    // 8. 2FA (TOTP, SCHLÜSSELDATEI & NOTFALL-SCHLÜSSEL)
+    // =========================================================================
+
+    fun generateKeyFileToken(): String {
+        val bytes = ByteArray(32)
+        secureRandom.nextBytes(bytes)
+        return bytes.joinToString("") { "%02X".format(it) }
+    }
+
+    fun generateRecoveryCode(): String {
+        val chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+        val randomBytes = ByteArray(32)
+        secureRandom.nextBytes(randomBytes)
+        val sb = StringBuilder()
+        for (i in 0 until 32) {
+            if (i > 0 && i % 4 == 0) sb.append("-")
+            val idx = (randomBytes[i].toInt() and 0xFF) % chars.length
+            sb.append(chars[idx])
+        }
+        return sb.toString()
+    }
+
+    fun deriveKekFromRecoveryCode(code: String): ByteArray {
+        val clean = code.replace("-", "").trim().uppercase(Locale.ROOT)
+        val salt = "myDocAnizer-recovery-code-salt".toByteArray(Charsets.UTF_8)
+        val spec = PBEKeySpec(clean.toCharArray(), salt, 20_000, 256)
+        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+        return factory.generateSecret(spec).encoded
+    }
+
+    fun recoverDekWithRecoveryCode(code: String): ByteArray? {
+        val header = _vaultHeader.value ?: return null
+        if (header.encryptedDekByRecoveryBase64 == null || header.recoveryDekIvBase64 == null) return null
+        return try {
+            val kek = deriveKekFromRecoveryCode(code)
+            val ciphertext = Base64.decode(header.encryptedDekByRecoveryBase64, Base64.NO_WRAP)
+            val iv = Base64.decode(header.recoveryDekIvBase64, Base64.NO_WRAP)
+            val dek = decryptAesGcm(ciphertext, iv, kek)
+            activeDek = dek.copyOf()
+            dek
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun generateTotpSecret(): String = TotpEngine.generateSecret()
+    fun computeTotpCode(secretBase32: String, timeMillis: Long = System.currentTimeMillis()): String = TotpEngine.computeCode(secretBase32, timeMillis)
+    fun verifyTotpCode(secretBase32: String, code: String): Boolean = TotpEngine.verifyCode(secretBase32, code)
+    fun getTotpUri(secretBase32: String, accountName: String = "Tresor"): String = TotpEngine.getUri(secretBase32, accountName)
+
+    fun setAutoLockMinutes(minutes: Int) {
+        val currentHeader = _vaultHeader.value ?: return
+        val updated = currentHeader.copy(autoLockMinutes = minutes)
+        saveVaultHeader(updated)
+    }
+
+    fun getAutoLockMinutes(): Int {
+        return _vaultHeader.value?.autoLockMinutes ?: 5
+    }
 }
 
 /**
@@ -1046,8 +1263,105 @@ data class VaultSetupResult(
     val vaultId: String,
     val dek: ByteArray,
     val bip39Words: List<String>?,
-    val shamirShares: List<ShamirShare>?
+    val shamirShares: List<ShamirShare>?,
+    val totpSecret: String? = null,
+    val keyFileToken: String? = null,
+    val recoveryCode: String? = null
 )
+
+/**
+ * Base32 Kodierung gemäß RFC 4648.
+ */
+object Base32 {
+    private const val ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+    fun encode(data: ByteArray): String {
+        val out = StringBuilder()
+        var buffer = 0
+        var bitsLeft = 0
+        for (b in data) {
+            buffer = (buffer shl 8) or (b.toInt() and 0xFF)
+            bitsLeft += 8
+            while (bitsLeft >= 5) {
+                val index = (buffer shr (bitsLeft - 5)) and 0x1F
+                bitsLeft -= 5
+                out.append(ALPHABET[index])
+            }
+        }
+        if (bitsLeft > 0) {
+            val index = (buffer shl (5 - bitsLeft)) and 0x1F
+            out.append(ALPHABET[index])
+        }
+        return out.toString()
+    }
+
+    fun decode(base32: String): ByteArray {
+        val clean = base32.replace(" ", "").replace("-", "").uppercase(Locale.ROOT)
+        var buffer = 0
+        var bitsLeft = 0
+        val out = mutableListOf<Byte>()
+        for (c in clean) {
+            val valIndex = ALPHABET.indexOf(c)
+            if (valIndex < 0) continue
+            buffer = (buffer shl 5) or valIndex
+            bitsLeft += 5
+            if (bitsLeft >= 8) {
+                out.add(((buffer shr (bitsLeft - 8)) and 0xFF).toByte())
+                bitsLeft -= 8
+            }
+        }
+        return out.toByteArray()
+    }
+}
+
+/**
+ * Zeitbasiertes Einmalkennwort (TOTP) gemäß RFC 6238 / RFC 4226.
+ */
+object TotpEngine {
+    fun generateSecret(): String {
+        val bytes = ByteArray(20) // 160 bits
+        SecureRandom().nextBytes(bytes)
+        return Base32.encode(bytes)
+    }
+
+    fun computeCode(secretBase32: String, timeMillis: Long = System.currentTimeMillis()): String {
+        val timeStepSeconds = 30L
+        val counter = timeMillis / 1000L / timeStepSeconds
+        val keyBytes = try {
+            Base32.decode(secretBase32)
+        } catch (e: Exception) {
+            return "000000"
+        }
+        val mac = javax.crypto.Mac.getInstance("HmacSHA1")
+        mac.init(SecretKeySpec(keyBytes, "HmacSHA1"))
+        val buffer = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(counter).array()
+        val hash = mac.doFinal(buffer)
+        val offset = (hash[hash.size - 1].toInt() and 0x0F)
+        val binary = ((hash[offset].toInt() and 0x7F) shl 24) or
+                ((hash[offset + 1].toInt() and 0xFF) shl 16) or
+                ((hash[offset + 2].toInt() and 0xFF) shl 8) or
+                (hash[offset + 3].toInt() and 0xFF)
+        val otp = binary % 1_000_000
+        return "%06d".format(otp)
+    }
+
+    fun verifyCode(secretBase32: String, inputCode: String, timeMillis: Long = System.currentTimeMillis()): Boolean {
+        val trimmed = inputCode.trim()
+        if (trimmed.length != 6) return false
+        val timeStepSeconds = 30L
+        for (stepOffset in -1..1) {
+            val checkTime = timeMillis + (stepOffset * timeStepSeconds * 1000L)
+            if (computeCode(secretBase32, checkTime) == trimmed) {
+                return true
+            }
+        }
+        return false
+    }
+
+    fun getUri(secretBase32: String, accountName: String = "Tresor", issuer: String = "myDocAnizer"): String {
+        return "otpauth://totp/$issuer:$accountName?secret=$secretBase32&issuer=$issuer&digits=6&period=30"
+    }
+}
 
 // =============================================================================
 // REINE KOTLIN KRYPTOGRAFIE-ENGINES (ARGON2ID, BIP-39, SHAMIR GF(256))

@@ -37,9 +37,9 @@ fun SetupWizardDialog(
 
     val activeSteps = remember(appViewLevel) {
         when (appViewLevel) {
-            AppViewLevel.STANDARD -> listOf(1, 2, 8, 11)
-            AppViewLevel.ADVANCED -> listOf(1, 2, 3, 4, 6, 8, 9, 11)
-            AppViewLevel.EXPERT -> listOf(1, 2, 12, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+            AppViewLevel.STANDARD -> listOf(1, 2, 8, 13, 11)
+            AppViewLevel.ADVANCED -> listOf(1, 2, 3, 4, 6, 8, 9, 13, 11)
+            AppViewLevel.EXPERT -> listOf(1, 2, 12, 3, 4, 5, 6, 7, 8, 9, 10, 13, 11)
         }
     }
 
@@ -115,10 +115,10 @@ fun SetupWizardDialog(
         AlertDialog(
             onDismissRequest = { showSecurityRequiredDialog = false },
             icon = { Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Master-Passwort erforderlich", fontWeight = FontWeight.Bold) },
+            title = { Text("Sicherheitsfaktor erforderlich", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    text = "Die Vergabe eines Master-Passworts ist im Assistenten Pflicht, es sei denn, die Option 'Ohne Master-Passwort nutzen (Unverschlüsselt)' wird aktiv gewählt.",
+                    text = "Die Vergabe eines Master-Passworts bzw. Zugangsfaktors ist im Assistenten Pflicht, es sei denn, die Stufe 'A) Keine Verschlüsselung (Unverschlüsselt)' wird aktiv gewählt.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
@@ -218,6 +218,7 @@ fun SetupWizardDialog(
                     Crossfade(targetState = currentStepId, label = "wizard_step_crossfade") { stepId ->
                         when (WizardStep.fromId(stepId)) {
                             is WizardStep.Welcome -> StepWelcome(viewModel, isManualReconfig)
+                            is WizardStep.PrivacyAndAnalytics -> StepPrivacyAndAnalytics(viewModel)
                             is WizardStep.ViewModeAndRestore -> StepViewModeAndRestore(viewModel, isManualReconfig, onStartRestore = { isRestoreMode = true })
                             is WizardStep.IncomeExpenseConfig -> StepIncomeExpenseConfig(viewModel)
                             is WizardStep.StorageLocation -> StepStorageLocation(viewModel, pdfSettings)

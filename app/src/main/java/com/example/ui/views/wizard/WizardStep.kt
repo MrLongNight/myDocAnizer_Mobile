@@ -5,6 +5,7 @@ package com.example.ui.views.wizard
  */
 sealed class WizardStep(val id: Int) {
     data object Welcome : WizardStep(1)
+    data object PrivacyAndAnalytics : WizardStep(13)
     data object ViewModeAndRestore : WizardStep(2)
     data object IncomeExpenseConfig : WizardStep(12)
     data object StorageLocation : WizardStep(3)
@@ -20,6 +21,7 @@ sealed class WizardStep(val id: Int) {
     companion object {
         fun fromId(id: Int): WizardStep = when (id) {
             1 -> Welcome
+            13 -> PrivacyAndAnalytics
             2 -> ViewModeAndRestore
             12 -> IncomeExpenseConfig
             3 -> StorageLocation
