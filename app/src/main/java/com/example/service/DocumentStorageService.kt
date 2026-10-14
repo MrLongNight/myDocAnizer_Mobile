@@ -363,7 +363,7 @@ object DocumentStorageService {
     }
 
     /**
-     * Erstellt ein formatiertes, durchsuchbares A4-PDF-Dokument aus einer E-Mail mit Kopfdaten
+     * Erstellt ein formatiertes, durchsuchbares A4-PDF-Dokument aus einer E-Mail mit Kopfdaten (mehrseitige Unterstützung)
      */
     suspend fun generateEmailPdf(
         context: Context,
@@ -378,12 +378,25 @@ object DocumentStorageService {
         val document = PdfDocument()
         val pageWidth = 595
         val pageHeight = 842
-        val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
-        val page = document.startPage(pageInfo)
-        val canvas = page.canvas
+        var pageNumber = 1
+
+        val bgPaint = Paint().apply { color = Color.WHITE }
+        val footerPaint = Paint().apply {
+            color = Color.GRAY
+            textSize = 8f
+            isAntiAlias = true
+        }
+        val bodyPaint = Paint().apply {
+            color = Color.rgb(30, 41, 59)
+            textSize = 11f
+            isAntiAlias = true
+        }
+
+        var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+        var page = document.startPage(pageInfo)
+        var canvas = page.canvas
 
         // Weißer Hintergrund
-        val bgPaint = Paint().apply { color = Color.WHITE }
         canvas.drawRect(0f, 0f, pageWidth.toFloat(), pageHeight.toFloat(), bgPaint)
 
         // Header-Kasten
@@ -438,43 +451,45 @@ object DocumentStorageService {
         }
         canvas.drawLine(36f, 142f, (pageWidth - 36).toFloat(), 142f, divPaint)
 
-        // Body-Text
-        val bodyPaint = Paint().apply {
-            color = Color.rgb(30, 41, 59)
-            textSize = 11f
-            isAntiAlias = true
+        var y = 170f
+
+        fun startNewPage() {
+            canvas.drawText("Archiviert mit myDocAnizer • Volltext-indexiert (Seite $pageNumber)", 36f, (pageHeight - 20).toFloat(), footerPaint)
+            document.finishPage(page)
+            pageNumber++
+            pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+            page = document.startPage(pageInfo)
+            canvas = page.canvas
+            canvas.drawRect(0f, 0f, pageWidth.toFloat(), pageHeight.toFloat(), bgPaint)
+            y = 50f
         }
 
-        var y = 170f
         val lines = bodyText.split("\n")
         for (rawLine in lines) {
             val words = rawLine.split(" ")
             var currentLine = ""
             for (w in words) {
                 if ((currentLine + w).length > 70) {
+                    if (y > pageHeight - 50) {
+                        startNewPage()
+                    }
                     canvas.drawText(currentLine, 36f, y, bodyPaint)
                     y += 16f
                     currentLine = "$w "
-                    if (y > pageHeight - 50) break
                 } else {
                     currentLine += "$w "
                 }
             }
-            if (currentLine.isNotBlank() && y <= pageHeight - 50) {
+            if (currentLine.isNotBlank()) {
+                if (y > pageHeight - 50) {
+                    startNewPage()
+                }
                 canvas.drawText(currentLine, 36f, y, bodyPaint)
                 y += 16f
             }
-            if (y > pageHeight - 50) break
         }
 
-        // Fußzeile
-        val footerPaint = Paint().apply {
-            color = Color.GRAY
-            textSize = 8f
-            isAntiAlias = true
-        }
-        canvas.drawText("Archiviert mit myDocAnizer • Volltext-indexiert", 36f, (pageHeight - 20).toFloat(), footerPaint)
-
+        canvas.drawText("Archiviert mit myDocAnizer • Volltext-indexiert (Seite $pageNumber)", 36f, (pageHeight - 20).toFloat(), footerPaint)
         document.finishPage(page)
 
         try {
@@ -660,8 +675,13 @@ object DocumentStorageService {
         val id = obj.optLong("id", defaultId)
         val fileName = obj.optString("fileName", "doc_$id.pdf")
         val safeName = File(fileName).name
-        val restoredFile = File(targetDir, safeName)
-        val resolvedPath = if (restoredFile.exists()) restoredFile.absolutePath else obj.optString("filePath", restoredFile.absolutePath)
+        val uniqueRestoredFile = File(targetDir, "${id}_$safeName")
+        val legacyRestoredFile = File(targetDir, safeName)
+        val resolvedPath = when {
+            uniqueRestoredFile.exists() -> uniqueRestoredFile.absolutePath
+            legacyRestoredFile.exists() -> legacyRestoredFile.absolutePath
+            else -> obj.optString("filePath", uniqueRestoredFile.absolutePath)
+        }
         return DocumentEntity(
             id = id,
             title = obj.optString("title", "Wiederhergestelltes Dokument"),
@@ -719,11 +739,13 @@ object DocumentStorageService {
                 zos.write(jsonArray.toString().toByteArray(Charsets.UTF_8))
                 zos.closeEntry()
 
-                // 2. Dokument-PDFs archivieren
+                // 2. Dokument-PDFs archivieren (mit eindeutigen Präfixen zur Vermeidung von ZipException Kollisionen)
                 for (doc in docs) {
                     val file = File(doc.filePath)
                     if (file.exists()) {
-                        val entry = ZipEntry("documents/${doc.fileName}")
+                        val safeName = File(doc.fileName).name
+                        val uniqueArchiveName = "${doc.id}_$safeName"
+                        val entry = ZipEntry("documents/$uniqueArchiveName")
                         zos.putNextEntry(entry)
                         file.inputStream().use { it.copyTo(zos) }
                         zos.closeEntry()

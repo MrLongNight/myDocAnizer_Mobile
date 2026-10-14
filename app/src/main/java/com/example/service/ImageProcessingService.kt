@@ -6,6 +6,14 @@ import kotlinx.coroutines.withContext
 
 object ImageProcessingService {
 
+    private fun ensureSoftwareBitmap(src: Bitmap): Bitmap {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && src.config == Bitmap.Config.HARDWARE) {
+            src.copy(Bitmap.Config.ARGB_8888, false) ?: src
+        } else {
+            src
+        }
+    }
+
     data class ImageAnalysisResult(
         val isRecommendedBw: Boolean,
         val brightness: Float, // 0.0 to 1.0
@@ -17,8 +25,9 @@ object ImageProcessingService {
      * Analyzes image for automatic B&W vs Color selection and lighting guidelines
      */
     suspend fun analyzeImage(bitmap: Bitmap): ImageAnalysisResult = withContext(Dispatchers.Default) {
-        val width = bitmap.width
-        val height = bitmap.height
+        val workingBitmap = ensureSoftwareBitmap(bitmap)
+        val width = workingBitmap.width
+        val height = workingBitmap.height
 
         // Downsample for rapid realtime analysis
         val sampleSize = 40
@@ -31,7 +40,7 @@ object ImageProcessingService {
 
         for (x in 0 until width step stepX) {
             for (y in 0 until height step stepY) {
-                val pixel = bitmap.getPixel(x, y)
+                val pixel = workingBitmap.getPixel(x, y)
                 val r = Color.red(pixel)
                 val g = Color.green(pixel)
                 val b = Color.blue(pixel)
@@ -75,8 +84,9 @@ object ImageProcessingService {
         cleanBackgroundWhite: Boolean = true
     ): Bitmap = withContext(Dispatchers.Default) {
         try {
-            val width = src.width
-            val height = src.height
+            val workingSrc = ensureSoftwareBitmap(src)
+            val width = workingSrc.width
+            val height = workingSrc.height
             val bmpGrayscale = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bmpGrayscale)
             val paint = Paint()
@@ -92,7 +102,7 @@ object ImageProcessingService {
             cm.preConcat(grayMatrix)
 
             paint.colorFilter = ColorMatrixColorFilter(cm)
-            canvas.drawBitmap(src, 0f, 0f, paint)
+            canvas.drawBitmap(workingSrc, 0f, 0f, paint)
 
             bmpGrayscale
         } catch (_: Throwable) {
@@ -109,8 +119,9 @@ object ImageProcessingService {
         brightnessOffset: Float = -10f
     ): Bitmap = withContext(Dispatchers.Default) {
         try {
-            val width = src.width
-            val height = src.height
+            val workingSrc = ensureSoftwareBitmap(src)
+            val width = workingSrc.width
+            val height = workingSrc.height
             val bmpEnhanced = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bmpEnhanced)
             val paint = Paint()
@@ -125,7 +136,7 @@ object ImageProcessingService {
             cm.preConcat(satMatrix)
 
             paint.colorFilter = ColorMatrixColorFilter(cm)
-            canvas.drawBitmap(src, 0f, 0f, paint)
+            canvas.drawBitmap(workingSrc, 0f, 0f, paint)
 
             bmpEnhanced
         } catch (_: Throwable) {
@@ -153,9 +164,10 @@ object ImageProcessingService {
      */
     fun measureSharpness(bitmap: Bitmap): Float {
         return try {
+            val workingBmp = ensureSoftwareBitmap(bitmap)
             val sampleW = 200
-            val sampleH = (200 * (bitmap.height.toFloat() / bitmap.width.toFloat())).toInt().coerceAtLeast(100)
-            val small = Bitmap.createScaledBitmap(bitmap, sampleW, sampleH, false)
+            val sampleH = (200 * (workingBmp.height.toFloat() / workingBmp.width.toFloat())).toInt().coerceAtLeast(100)
+            val small = Bitmap.createScaledBitmap(workingBmp, sampleW, sampleH, false)
             var edgeSum = 0.0
             var count = 0
 
@@ -246,12 +258,13 @@ object ImageProcessingService {
      */
     fun autoCropDocument(src: Bitmap): Bitmap {
         try {
-            val width = src.width
-            val height = src.height
+            val workingSrc = ensureSoftwareBitmap(src)
+            val width = workingSrc.width
+            val height = workingSrc.height
             
             // Schnelle Analyse auf einer herunterskalierten Version
             val scale = 0.1f
-            val smallBmp = Bitmap.createScaledBitmap(src, (width * scale).toInt(), (height * scale).toInt(), false)
+            val smallBmp = Bitmap.createScaledBitmap(workingSrc, (width * scale).toInt(), (height * scale).toInt(), false)
             val sw = smallBmp.width
             val sh = smallBmp.height
             

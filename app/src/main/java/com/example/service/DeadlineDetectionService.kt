@@ -195,12 +195,19 @@ object DeadlineDetectionService {
             var year = match.groupValues[3].toIntOrNull() ?: return null
             if (year < 100) year += 2000
 
+            if (day !in 1..31 || month !in 1..12 || year !in 2000..2100) return null
+
             cal.clear()
+            cal.isLenient = false
             cal.set(Calendar.YEAR, year)
             cal.set(Calendar.MONTH, month - 1)
             cal.set(Calendar.DAY_OF_MONTH, day)
             cal.set(Calendar.HOUR_OF_DAY, 12)
-            return cal.timeInMillis
+            return try {
+                cal.timeInMillis
+            } catch (_: Exception) {
+                null
+            }
         }
 
         // Textuell: 15. November 2026
@@ -211,12 +218,19 @@ object DeadlineDetectionService {
             var year = match.groupValues[3].toIntOrNull() ?: return null
             if (year < 100) year += 2000
 
+            if (day !in 1..31 || month !in 0..11 || year !in 2000..2100) return null
+
             cal.clear()
+            cal.isLenient = false
             cal.set(Calendar.YEAR, year)
             cal.set(Calendar.MONTH, month)
             cal.set(Calendar.DAY_OF_MONTH, day)
             cal.set(Calendar.HOUR_OF_DAY, 12)
-            return cal.timeInMillis
+            return try {
+                cal.timeInMillis
+            } catch (_: Exception) {
+                null
+            }
         }
 
         return null

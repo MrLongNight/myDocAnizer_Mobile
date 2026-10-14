@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.mydocanizer.app.zwyxdl"
     minSdk = 24
     targetSdk = 36
-    versionCode = 201
-    versionName = "2.0.1"
+    versionCode = 260
+    versionName = "2.6.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

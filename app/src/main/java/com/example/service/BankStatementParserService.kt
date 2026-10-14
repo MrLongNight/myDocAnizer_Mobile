@@ -57,11 +57,10 @@ object BankStatementParserService {
 
             // Wir lesen die ersten paar KB ein um das Encoding zu raten
             val previewBytes = ByteArray(4096)
-            context.contentResolver.openInputStream(uri)?.use { it.read(previewBytes) }
-            
-            val previewUtf8 = String(previewBytes, StandardCharsets.UTF_8)
-            val useIso = (!previewUtf8.contains("ä") && !previewUtf8.contains("ö") && !previewUtf8.contains("ü") && 
-                          String(previewBytes, Charset.forName("ISO-8859-1")).contains("ü"))
+            val bytesRead = context.contentResolver.openInputStream(uri)?.use { it.read(previewBytes) } ?: 0
+            val previewUtf8 = if (bytesRead > 0) String(previewBytes, 0, bytesRead, StandardCharsets.UTF_8) else ""
+            val previewIso = if (bytesRead > 0) String(previewBytes, 0, bytesRead, Charset.forName("ISO-8859-1")) else ""
+            val useIso = (!previewUtf8.contains("ä") && !previewUtf8.contains("ö") && !previewUtf8.contains("ü") && previewIso.contains("ü"))
             
             val charset = if (useIso) Charset.forName("ISO-8859-1") else StandardCharsets.UTF_8
 
