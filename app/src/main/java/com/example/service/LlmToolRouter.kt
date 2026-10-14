@@ -16,6 +16,7 @@ interface ToolActionHandler {
     suspend fun onUpdateDocumentStatus(docId: String, newStatus: String): String
     suspend fun onOpenAppSection(section: String): String
     suspend fun onCreateFolder(folderName: String, parentCategory: String?): String
+    suspend fun onCreateCustomDashboardWidget(title: String, subtitle: String, widgetType: String, targetCategory: String, targetTag: String, numericLimit: Double, colorHex: Long): String
 }
 
 /**
@@ -147,6 +148,28 @@ class LlmToolRouter(
                     AppToolCall.Unknown(toolName, argsObj?.toString() ?: "{}")
                 }
             }
+            AppTool.CreateCustomDashboardWidget.name -> {
+                val title = argsObj?.get("title")?.jsonPrimitive?.contentOrNull ?: ""
+                val subtitle = argsObj?.get("subtitle")?.jsonPrimitive?.contentOrNull ?: ""
+                val widgetType = argsObj?.get("widgetType")?.jsonPrimitive?.contentOrNull ?: "FOLDER_MONITOR"
+                val targetCategory = argsObj?.get("targetCategory")?.jsonPrimitive?.contentOrNull ?: ""
+                val targetTag = argsObj?.get("targetTag")?.jsonPrimitive?.contentOrNull ?: ""
+                val numericLimit = argsObj?.get("numericLimit")?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: 0.0
+                val colorHex = argsObj?.get("colorHex")?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0xFF2563EB
+                if (title.isNotBlank()) {
+                    AppToolCall.CreateCustomDashboardWidget(
+                        title = title.trim(),
+                        subtitle = subtitle.trim(),
+                        widgetType = widgetType.trim(),
+                        targetCategory = targetCategory.trim(),
+                        targetTag = targetTag.trim(),
+                        numericLimit = numericLimit,
+                        colorHex = colorHex
+                    )
+                } else {
+                    AppToolCall.Unknown(toolName, argsObj.toString())
+                }
+            }
             else -> {
                 AppToolCall.Unknown(toolName = toolName, argumentsJson = argsObj?.toString() ?: "{}")
             }
@@ -215,6 +238,28 @@ class LlmToolRouter(
                     ?: argsObj?.optString("category", "")?.takeIf { it.isNotBlank() }
                 if (folderName.isNotBlank()) {
                     AppToolCall.CreateFolder(folderName = folderName.trim(), parentCategory = parentCategory?.trim())
+                } else {
+                    AppToolCall.Unknown(toolName, argsObj?.toString() ?: "{}")
+                }
+            }
+            AppTool.CreateCustomDashboardWidget.name -> {
+                val title = argsObj?.optString("title", "") ?: ""
+                val subtitle = argsObj?.optString("subtitle", "") ?: ""
+                val widgetType = argsObj?.optString("widgetType", "FOLDER_MONITOR") ?: "FOLDER_MONITOR"
+                val targetCategory = argsObj?.optString("targetCategory", "") ?: ""
+                val targetTag = argsObj?.optString("targetTag", "") ?: ""
+                val numericLimit = argsObj?.optDouble("numericLimit", 0.0) ?: 0.0
+                val colorHex = argsObj?.optLong("colorHex", 0xFF2563EBL) ?: 0xFF2563EBL
+                if (title.isNotBlank()) {
+                    AppToolCall.CreateCustomDashboardWidget(
+                        title = title.trim(),
+                        subtitle = subtitle.trim(),
+                        widgetType = widgetType.trim(),
+                        targetCategory = targetCategory.trim(),
+                        targetTag = targetTag.trim(),
+                        numericLimit = numericLimit,
+                        colorHex = colorHex
+                    )
                 } else {
                     AppToolCall.Unknown(toolName, argsObj?.toString() ?: "{}")
                 }
@@ -344,6 +389,26 @@ class LlmToolRouter(
                     confirmationMessage = confirmation,
                     actionType = "OPEN_EXPLORER",
                     actionLabel = "📂 Neuen Ordner im Tresor anzeigen",
+                    success = true
+                )
+            }
+
+            is AppToolCall.CreateCustomDashboardWidget -> {
+                val confirmation = actionHandler?.onCreateCustomDashboardWidget(
+                    title = toolCall.title,
+                    subtitle = toolCall.subtitle,
+                    widgetType = toolCall.widgetType,
+                    targetCategory = toolCall.targetCategory,
+                    targetTag = toolCall.targetTag,
+                    numericLimit = toolCall.numericLimit,
+                    colorHex = toolCall.colorHex
+                ) ?: "Smartes Dashboard-Element ‚${toolCall.title}‘ wurde erfolgreich erstellt!"
+
+                LlmRouterResult.ToolCallExecuted(
+                    toolCall = toolCall,
+                    confirmationMessage = confirmation,
+                    actionType = "OPEN_DASHBOARD",
+                    actionLabel = "📊 Zum Dashboard",
                     success = true
                 )
             }

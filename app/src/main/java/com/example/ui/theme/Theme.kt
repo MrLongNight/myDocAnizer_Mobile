@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 
 fun getColorSchemeForSkin(skin: String, isDark: Boolean, highContrast: Boolean = false): ColorScheme {
     if (highContrast) {
@@ -329,7 +330,13 @@ fun MyApplicationTheme(
     highContrast: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = getColorSchemeForSkin(colorSkin, darkTheme, highContrast)
+    val context = LocalContext.current
+    val colorScheme = when {
+        android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S -> {
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+        else -> getColorSchemeForSkin(colorSkin, darkTheme, highContrast)
+    }
 
     MaterialTheme(
         colorScheme = colorScheme,

@@ -295,14 +295,15 @@ Antworte AUSSCHLIESSLICH mit diesem exakten JSON-Schema:
 
         /**
          * GBNF (Grammar-Based Network Format) zur hardwareseitigen Erzwingung der JSON-Struktur in llama.cpp.
-         * Erlaubt beliebige dynamische Key-Value-Paare im 'globale_zusatzfelder'-Objekt.
+         * Erlaubt beliebige dynamische Key-Value-Paare im 'globale_zusatzfelder'-Objekt sowie optionale Whitespaces und Typen.
          */
         const val DMS_JSON_GBNF: String = """
 root ::= "{" ws "\"_reasoning\":" ws string "," ws "\"absender\":" ws opt_string "," ws "\"dokumententyp\":" ws opt_string "," ws "\"match_keywords\":" ws string_array "," ws "\"kategorie_vorschlag\":" ws opt_string "," ws "\"vorgeschlagener_pfad\":" ws opt_string "," ws "\"globale_zusatzfelder\":" ws object "}" ws
 opt_string ::= string | "null"
 string_array ::= "[" ws (string ("," ws string)*)? ws "]"
 object ::= "{" ws (pair ("," ws pair)*)? ws "}"
-pair ::= string ":" ws string
+pair ::= string ws ":" ws (string | number | "true" | "false" | "null")
+number ::= [0-9]+ ("." [0-9]+)?
 string ::= "\"" ([^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4}))* "\""
 ws ::= [ \t\n\r]*
 """
@@ -312,6 +313,7 @@ ws ::= [ \t\n\r]*
             folderStrategy: FolderStrategy = FolderStrategy.BY_CATEGORY
         ): DmsExtractionResponse {
             val lower = ocrText.lowercase()
+            val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
             val detectedSender = when {
                 lower.contains("congstar") -> "congstar"
                 lower.contains("deutsche post") || lower.contains("postbank") -> "Deutsche Post"
@@ -363,7 +365,7 @@ ws ::= [ \t\n\r]*
             val suggestedPath = when (folderStrategy) {
                 FolderStrategy.BY_SENDER -> "${detectedSender ?: "Dokumente"}/$detectedType"
                 FolderStrategy.BY_CATEGORY -> "$catSuggestion/$detectedType"
-                FolderStrategy.CHRONOLOGICAL -> "2026/$detectedType"
+                FolderStrategy.CHRONOLOGICAL -> "$currentYear/$detectedType"
                 FolderStrategy.FLAT -> "Dokumente"
             }
 
@@ -431,10 +433,14 @@ ws ::= [ \t\n\r]*
         modelFile: File,
         ocrText: String,
         whitelistedCustomFields: List<String> = emptyList(),
+        useStrictTriage: Boolean = true,
         params: InferenceParams = InferenceParams(maxTokens = 350, grammar = DMS_JSON_GBNF)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
+        if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
+            return@withContext createHeuristicFallbackResponse(ocrText)
+        }
         val filteredSlice = OcrPreFilterMatrix.extractFirstRunSlice(ocrText)
-        val useTriage = whitelistedCustomFields.isEmpty()
+        val useTriage = useStrictTriage && whitelistedCustomFields.isEmpty()
         val systemPrompt = if (useTriage) TRIAGE_SYSTEM_PROMPT else buildSmallModelOptimizedPrompt(whitelistedCustomFields)
         val targetParams = if (useTriage) params.copy(grammar = TRIAGE_JSON_GBNF) else params
 
@@ -461,6 +467,9 @@ ws ::= [ \t\n\r]*
         department: DepartmentTeam? = null,
         params: InferenceParams = InferenceParams(maxTokens = 600, grammar = DMS_JSON_GBNF)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
+        if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
+            return@withContext createHeuristicFallbackResponse(ocrText, folderStrategy)
+        }
         val targetDept = department ?: DepartmentTeam.dispatch(ocrText)
         val systemPrompt = buildDepartmentSystemPrompt(
             department = targetDept,
@@ -494,6 +503,9 @@ ws ::= [ \t\n\r]*
         systemPrompt: String = BASE_SYSTEM_PROMPT,
         params: InferenceParams = InferenceParams()
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
+        if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
+            return@withContext createHeuristicFallbackResponse(ocrText)
+        }
         val rawOutput = executeInference(
             modelFile = modelFile,
             prompt = "OCR-VOLLTEXT:\n$ocrText",
@@ -521,7 +533,7 @@ ws ::= [ \t\n\r]*
                 return@withContext executeFallbackInference(prompt, systemPrompt)
             }
 
-            val formattedPrompt = buildChatPrompt(systemPrompt, prompt)
+            val formattedPrompt = buildChatPrompt(systemPrompt, prompt, modelFile.name)
 
             val output = inferenceMutex.withLock {
                 if (isNativeLibLoaded) {
@@ -583,6 +595,11 @@ ws ::= [ \t\n\r]*
         try {
             var jsonStr = rawOutput.trim()
 
+            // Filter out <think>...</think> blocks if present (for DeepSeek-R1 Distill)
+            if (jsonStr.contains("<think>") && jsonStr.contains("</think>")) {
+                jsonStr = jsonStr.substringAfter("</think>").trim()
+            }
+
             // Extrahiere JSON aus ```json ... ``` Blöcken falls vorhanden
             if (jsonStr.contains("```json")) {
                 jsonStr = jsonStr.substringAfter("```json").substringBefore("```").trim()
@@ -636,13 +653,14 @@ ws ::= [ \t\n\r]*
                 matchKeywords = matchKeywords,
                 kategorieVorschlag = catSuggestion,
                 vorgeschlagenerPfad = pathSuggestion ?: run {
+                    val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
                     val snd = absender ?: "Dokumente"
                     val typ = docType ?: "Allgemein"
                     val cat = catSuggestion ?: "Finanzen"
                     when (folderStrategy) {
                         FolderStrategy.BY_SENDER -> "$snd/$typ"
                         FolderStrategy.BY_CATEGORY -> "$cat/$typ"
-                        FolderStrategy.CHRONOLOGICAL -> "2026/$typ"
+                        FolderStrategy.CHRONOLOGICAL -> "$currentYear/$typ"
                         FolderStrategy.FLAT -> "Dokumente"
                     }
                 },
@@ -655,99 +673,14 @@ ws ::= [ \t\n\r]*
         }
     }
 
-    fun createHeuristicFallbackResponse(
-        ocrText: String,
-        folderStrategy: FolderStrategy = FolderStrategy.BY_CATEGORY
-    ): DmsExtractionResponse {
-        val lower = ocrText.lowercase()
-        val detectedSender = when {
-            lower.contains("congstar") -> "congstar"
-            lower.contains("deutsche post") || lower.contains("postbank") -> "Deutsche Post"
-            lower.contains("dhl") -> "DHL Paket"
-            lower.contains("vodafone") -> "Vodafone GmbH"
-            lower.contains("telekom") || lower.contains("magenta") -> "Deutsche Telekom"
-            lower.contains("o2") || lower.contains("telefonica") -> "Telefónica O2"
-            lower.contains("1&1") -> "1&1 Telecom"
-            lower.contains("allianz") -> "Allianz"
-            lower.contains("ergo") -> "ERGO Versicherung"
-            lower.contains("huk") -> "HUK-COBURG"
-            lower.contains("finanzamt") -> "Finanzamt"
-            lower.contains("stadtwerke") -> "Stadtwerke"
-            lower.contains("e.on") || lower.contains("eon") -> "E.ON Energie"
-            lower.contains("vattenfall") -> "Vattenfall"
-            lower.contains("barmer") -> "BARMER"
-            lower.contains("techniker") || lower.contains("tk ") -> "Techniker Krankenkasse"
-            lower.contains("aok") -> "AOK"
-            lower.contains("sparkasse") -> "Sparkasse"
-            lower.contains("volksbank") || lower.contains("raiffeisenbank") -> "Volksbank Raiffeisenbank"
-            lower.contains("ing-diba") || lower.contains("ing diba") -> "ING"
-            lower.contains("dkb") -> "DKB"
-            lower.contains("commerzbank") -> "Commerzbank"
-            lower.contains("deutsche bank") -> "Deutsche Bank"
-            lower.contains("adac") -> "ADAC"
-            lower.contains("amazon") -> "Amazon"
-            lower.contains("paypal") -> "PayPal"
-            lower.contains("klarna") -> "Klarna"
-            else -> null
+    private fun buildChatPrompt(system: String, user: String, modelName: String = ""): String {
+        val lower = modelName.lowercase()
+        return when {
+            lower.contains("llama-3") || lower.contains("llama3") ->
+                "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n$system<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n$user<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+            else ->
+                "<|im_start|>system\n$system<|im_end|>\n<|im_start|>user\n$user<|im_end|>\n<|im_start|>assistant\n"
         }
-        val detectedType = when {
-            lower.contains("rechnung") || lower.contains("rechnungsbetrag") || lower.contains("invoice") -> "Rechnung"
-            lower.contains("vertrag") || lower.contains("versicherungsschein") || lower.contains("police") -> "Vertrag"
-            lower.contains("bescheid") || lower.contains("steuerbescheid") -> "Bescheid"
-            lower.contains("gehalt") || lower.contains("entgelt") || lower.contains("lohnabrechnung") -> "Gehaltsabrechnung"
-            lower.contains("quittung") || lower.contains("kassenbon") || lower.contains("beleg") -> "Kassenbeleg"
-            lower.contains("brief") || lower.contains("schreiben") || lower.contains("mitteilung") || lower.contains("deutsche post") -> "Brief"
-            else -> "Dokument"
-        }
-
-        val keywords = listOfNotNull(detectedSender?.lowercase()?.split(" ")?.firstOrNull(), detectedType.lowercase())
-
-        val catSuggestion = when (detectedType) {
-            "Rechnung", "Gehaltsabrechnung", "Kassenbeleg" -> "Finanzen"
-            "Vertrag", "Bescheid" -> "Verträge"
-            else -> "Post & Dokumente"
-        }
-
-        val suggestedPath = when (folderStrategy) {
-            FolderStrategy.BY_SENDER -> "${detectedSender ?: "Dokumente"}/$detectedType"
-            FolderStrategy.BY_CATEGORY -> "$catSuggestion/$detectedType"
-            FolderStrategy.CHRONOLOGICAL -> "2026/$detectedType"
-            FolderStrategy.FLAT -> "Dokumente"
-        }
-
-        val fallbackFields = mutableMapOf<String, String>()
-        val amt = com.example.service.llm.LlmPrompts.extractAmountFromText(ocrText)
-        if (amt.isNotBlank()) fallbackFields["Betrag"] = amt
-        val due = com.example.service.llm.LlmPrompts.extractDueDateFromText(ocrText)
-        if (due.isNotBlank()) fallbackFields["Fälligkeit"] = due
-        val docDate = com.example.service.llm.LlmPrompts.extractDocumentDateFromText(ocrText)
-        if (docDate.isNotBlank()) fallbackFields["Datum"] = docDate
-        val custNo = com.example.service.llm.LlmPrompts.extractCustomerNumber(ocrText)
-        if (custNo.isNotBlank()) fallbackFields["Kundennummer"] = custNo
-        val invNo = com.example.service.llm.LlmPrompts.extractInvoiceNumber(ocrText)
-        if (invNo.isNotBlank()) fallbackFields["Rechnungsnummer"] = invNo
-        val polNo = com.example.service.llm.LlmPrompts.extractPolicyNumber(ocrText)
-        if (polNo.isNotBlank()) fallbackFields["Policennummer"] = polNo
-        val meterNo = com.example.service.llm.LlmPrompts.extractMeterNumber(ocrText)
-        if (meterNo.isNotBlank()) fallbackFields["Zählernummer"] = meterNo
-        val plate = com.example.service.llm.LlmPrompts.extractLicensePlate(ocrText)
-        if (plate.isNotBlank()) fallbackFields["Kennzeichen"] = plate
-        val taxId = com.example.service.llm.LlmPrompts.extractTaxId(ocrText)
-        if (taxId.isNotBlank()) fallbackFields["Steuernummer"] = taxId
-
-        return DmsExtractionResponse(
-            reasoning = "Strukturierte On-Device Erkennung: ${detectedSender ?: "Allgemeines Dokument"} ($detectedType).",
-            absender = detectedSender,
-            dokumententyp = detectedType,
-            matchKeywords = keywords,
-            kategorieVorschlag = catSuggestion,
-            vorgeschlagenerPfad = suggestedPath,
-            globaleZusatzfelder = fallbackFields
-        )
-    }
-
-    private fun buildChatPrompt(system: String, user: String): String {
-        return "<|im_start|>system\n$system<|im_end|>\n<|im_start|>user\n$user<|im_end|>\n<|im_start|>assistant\n"
     }
 
     private fun executeFallbackInference(ocrText: String, systemPrompt: String): String {

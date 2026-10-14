@@ -20,6 +20,7 @@ import com.example.model.TemplateItem
 import com.example.model.DocRule
 import com.example.model.BatchDocumentItem
 import com.example.model.BatchItemStatus
+import com.example.model.*
 import com.example.service.*
 import com.example.BuildConfig
 import com.example.util.DebugDataSeeder
@@ -2450,6 +2451,18 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         override suspend fun onCreateFolder(folderName: String, parentCategory: String?): String {
             return createFolderFromTool(folderName, parentCategory)
         }
+
+        override suspend fun onCreateCustomDashboardWidget(
+            title: String,
+            subtitle: String,
+            widgetType: String,
+            targetCategory: String,
+            targetTag: String,
+            numericLimit: Double,
+            colorHex: Long
+        ): String {
+            return createCustomDashboardWidgetFromTool(title, subtitle, widgetType, targetCategory, targetTag, numericLimit, colorHex)
+        }
     }
 
     val llmToolRouter = LlmToolRouter(toolActionHandler)
@@ -2583,6 +2596,82 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         )
 
         return "📁 Der Ordner **„$cleanName“** wurde erfolgreich im Dokumenten-Tresor angelegt!\n\nDu findest ihn jetzt direkt in deiner Ordnerstruktur ($mainCat ➔ $subCat)."
+    }
+
+    suspend fun createCustomDashboardWidgetFromTool(
+        title: String,
+        subtitle: String,
+        widgetType: String,
+        targetCategory: String,
+        targetTag: String,
+        numericLimit: Double,
+        colorHex: Long
+    ): String {
+        val cleanTitle = title.trim().replace("\"", "").replace("'", "").trim()
+        if (cleanTitle.isBlank()) return "⚠️ Der Titel des Widgets darf nicht leer sein."
+
+        val parsedType = try {
+            com.example.model.CustomWidgetType.valueOf(widgetType.uppercase())
+        } catch (_: Exception) {
+            com.example.model.CustomWidgetType.FOLDER_MONITOR
+        }
+
+        val widgetEntity = CustomDashboardWidgetEntity(
+            id = UUID.randomUUID().toString(),
+            title = cleanTitle,
+            subtitle = subtitle.trim(),
+            widgetType = parsedType,
+            targetMainCategory = targetCategory.trim(),
+            targetSubCategory = "",
+            targetCustomFieldId = "",
+            targetCustomFieldValue = "",
+            numericLimit = numericLimit,
+            noteContent = "",
+            colorHex = colorHex,
+            iconName = when(parsedType) {
+                com.example.model.CustomWidgetType.FOLDER_MONITOR -> "folder_open"
+                com.example.model.CustomWidgetType.CUSTOM_FIELD_MONITOR -> "label"
+                com.example.model.CustomWidgetType.DEADLINE_MONITOR -> "event"
+                com.example.model.CustomWidgetType.BUDGET_LIMIT -> "savings"
+                com.example.model.CustomWidgetType.QUICK_SHORTCUT -> "bolt"
+                com.example.model.CustomWidgetType.STICKY_NOTE -> "edit_note"
+            },
+            isEnabled = true,
+            position = 0
+        )
+
+        db.customDashboardWidgetDao().insertOrUpdateWidget(widgetEntity)
+
+        val customWidget = com.example.model.CustomDashboardWidget(
+            id = widgetEntity.id,
+            title = cleanTitle,
+            subtitle = subtitle.trim(),
+            type = when(parsedType) {
+                com.example.model.CustomWidgetType.FOLDER_MONITOR -> com.example.model.CustomDashboardWidgetType.FILTER_DOCUMENTS
+                com.example.model.CustomWidgetType.CUSTOM_FIELD_MONITOR -> com.example.model.CustomDashboardWidgetType.TAG_FILTER
+                com.example.model.CustomWidgetType.DEADLINE_MONITOR -> com.example.model.CustomDashboardWidgetType.TAG_FILTER
+                com.example.model.CustomWidgetType.BUDGET_LIMIT -> com.example.model.CustomDashboardWidgetType.BUDGET_GOAL
+                com.example.model.CustomWidgetType.QUICK_SHORTCUT -> com.example.model.CustomDashboardWidgetType.FILTER_DOCUMENTS
+                com.example.model.CustomWidgetType.STICKY_NOTE -> com.example.model.CustomDashboardWidgetType.NOTE_MEMO
+            },
+            iconName = widgetEntity.iconName,
+            colorSkin = "MYDOCANIZER",
+            periodScope = ElementPeriodScope.ALL,
+            targetCategory = targetCategory.trim(),
+            targetTag = targetTag.trim(),
+            targetAmount = numericLimit,
+            isEnabled = true
+        )
+        settingsRepo.addCustomWidget(customWidget)
+
+        AppAuditLogger.log(
+            category = LogCategory.STORAGE_DMS,
+            tag = "LlmToolRouter",
+            message = "Smartes Dashboard-Element via KI-Tool 'createCustomDashboardWidget' erstellt",
+            details = "Titel: '$cleanTitle' (Typ: $widgetType)"
+        )
+
+        return "Smartes Dashboard-Element ‚$cleanTitle‘ wurde erfolgreich erstellt!"
     }
 
     suspend fun sendChatMessageSync(userText: String, attachedDoc: DocumentEntity? = _selectedChatDocument.value): LlmRouterResult {

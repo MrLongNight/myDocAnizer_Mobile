@@ -9,7 +9,8 @@ class LlmToolExecutor {
         private val STOP_WORDS = setOf("wie", "viele", "habe", "ich", "was", "und", "der", "die", "das", "ein", "eine", "den", "dem", "des", "zu", "von", "im", "in", "mit", "für")
     }
 
-    fun executeDocumentAssistant(question: String, documents: List<DocumentEntity>): String {
+    fun executeDocumentAssistant(question: String, rawDocuments: List<DocumentEntity>): String {
+        val documents = rawDocuments.sortedByDescending { it.createdAt }.take(30)
         val qLower = question.lowercase().trim()
         val now = System.currentTimeMillis()
 
@@ -156,9 +157,10 @@ class LlmToolExecutor {
 
     fun executeAssistantWithFollowUps(
         question: String,
-        documents: List<DocumentEntity>,
+        rawDocuments: List<DocumentEntity>,
         attachedDoc: DocumentEntity? = null
     ): LocalAiChatResult {
+        val documents = rawDocuments.sortedByDescending { it.createdAt }.take(30)
         val q = question.trim()
         val qLower = q.lowercase()
         val sdf = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.GERMAN)

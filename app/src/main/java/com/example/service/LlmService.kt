@@ -450,9 +450,9 @@ class LlmService(private val context: Context) {
                 isHardwareRecommended = false,
                 hardwareRecommendationReason = "Geringer RAM-Bedarf, ideal für Posteingangs-Triage.",
                 downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-                fileName = "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-                isDownloaded = isModelPhysicallyOnDisk("qwen2.5-0.5b-instruct-q4_k_m.gguf"),
-                localFileSizeBytes = getModelDiskSize("qwen2.5-0.5b-instruct-q4_k_m.gguf"),
+                fileName = "distil-qwen-0.8b-invoice-triage-q4_k_m.gguf",
+                isDownloaded = isModelPhysicallyOnDisk("distil-qwen-0.8b-invoice-triage-q4_k_m.gguf"),
+                localFileSizeBytes = getModelDiskSize("distil-qwen-0.8b-invoice-triage-q4_k_m.gguf"),
                 isSelected = false,
                 isCuratedApproved = true,
                 modelCategory = "DMS & Rechnungsextraktion"

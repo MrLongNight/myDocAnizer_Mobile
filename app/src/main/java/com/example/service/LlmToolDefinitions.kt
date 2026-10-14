@@ -183,6 +183,57 @@ sealed class AppTool(
         )
     )
 
+    // 5. Tool: Smartes Dashboard-Element erstellen
+    object CreateCustomDashboardWidget : AppTool(
+        name = "createCustomDashboardWidget",
+        description = "Erstellt ein neues smartes Dashboard-Element bzw. Widget (z.B. Ordner-Monitor, Fristen-Radar, Budget-Limit) im Dashboard der App.",
+        parameters = listOf(
+            ToolParameter(
+                name = "title",
+                type = "string",
+                description = "Titel des Dashboard-Elements (z.B. 'Steuern 2024', 'Monatsbudget')",
+                isRequired = true
+            ),
+            ToolParameter(
+                name = "subtitle",
+                type = "string",
+                description = "Untertitel oder Beschreibung des Widgets",
+                isRequired = false
+            ),
+            ToolParameter(
+                name = "widgetType",
+                type = "string",
+                description = "Typ des Widgets",
+                isRequired = true,
+                enumValues = listOf("FOLDER_MONITOR", "CUSTOM_FIELD_MONITOR", "DEADLINE_MONITOR", "BUDGET_LIMIT", "QUICK_SHORTCUT", "STICKY_NOTE")
+            ),
+            ToolParameter(
+                name = "targetCategory",
+                type = "string",
+                description = "Zielkategorie im Tresor",
+                isRequired = false
+            ),
+            ToolParameter(
+                name = "targetTag",
+                type = "string",
+                description = "Ziel-Tag (z.B. #garantie)",
+                isRequired = false
+            ),
+            ToolParameter(
+                name = "numericLimit",
+                type = "number",
+                description = "Numerisches Limit oder Budget-Betrag",
+                isRequired = false
+            ),
+            ToolParameter(
+                name = "colorHex",
+                type = "number",
+                description = "Farb-Hex-Wert als Long",
+                isRequired = false
+            )
+        )
+    )
+
     companion object {
         /**
          * Standard-Liste aller im Chatbot registrierten nativen Tools.
@@ -192,7 +243,8 @@ sealed class AppTool(
                 FilterDocuments,
                 UpdateDocumentStatus,
                 CreateFolder,
-                OpenAppSection
+                OpenAppSection,
+                CreateCustomDashboardWidget
             )
     }
 }
@@ -219,6 +271,16 @@ sealed class AppToolCall {
     data class CreateFolder(
         val folderName: String,
         val parentCategory: String? = null
+    ) : AppToolCall()
+
+    data class CreateCustomDashboardWidget(
+        val title: String,
+        val subtitle: String = "",
+        val widgetType: String = "FOLDER_MONITOR",
+        val targetCategory: String = "",
+        val targetTag: String = "",
+        val numericLimit: Double = 0.0,
+        val colorHex: Long = 0xFF2563EB
     ) : AppToolCall()
 
     data class Unknown(
