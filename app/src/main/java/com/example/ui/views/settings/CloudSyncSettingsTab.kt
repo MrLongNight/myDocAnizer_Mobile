@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.*
 import com.example.ui.DocAnizerViewModel
-import com.example.ui.views.PairingWizardDialog
+import com.example.ui.views.p2p.PairingWizardDialog
 import com.example.ui.views.wizard.cloud.*
 import kotlinx.coroutines.launch
 

@@ -60,7 +60,7 @@ object ImageProcessingService {
             isRecommendedBw = isRecommendedBw,
             brightness = avgLuminance.toFloat(),
             isWellLit = isWellLit,
-            skewAngleDegrees = 0.4f // Live level alignment
+            skewAngleDegrees = 0.0f
         )
     }
 
@@ -314,9 +314,8 @@ object ImageProcessingService {
         src: Bitmap,
         preferredMode: String = "AUTO"
     ): Pair<Bitmap, Boolean> = withContext(Dispatchers.Default) {
-        // 1. Automatische Ausrichtung (Straighten) & Perspektiven-Zuschnitt (Auto-Crop)
-        val straightened = straightenBitmap(src, 0.4f)
-        val cropped = autoCropDocument(straightened)
+        // 1. Perspektiven-Zuschnitt (Auto-Crop) - Rotation entfernt für Performance
+        val cropped = autoCropDocument(src)
 
         val shouldUseColor = when (preferredMode.uppercase()) {
             "COLOR" -> true
@@ -335,7 +334,6 @@ object ImageProcessingService {
         }
 
         // Speicherbereinigung
-        if (straightened != src && straightened != cropped) runCatching { straightened.recycle() }
         if (cropped != src && cropped != processedBitmap) runCatching { cropped.recycle() }
 
         Pair(processedBitmap, shouldUseColor)

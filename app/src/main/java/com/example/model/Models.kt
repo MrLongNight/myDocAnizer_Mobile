@@ -5,6 +5,9 @@ import androidx.room.Entity
 import androidx.room.Fts4
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.Embedded
+import androidx.room.Relation
+import androidx.room.Transaction
 
 @Immutable
 @Entity(
@@ -109,6 +112,20 @@ data class DocumentCustomFieldValueEntity(
     val customFieldId: String,
     val fieldValue: String,
     val updatedAt: Long = System.currentTimeMillis()
+)
+
+/**
+ * Relation-Klasse zur Vermeidung von N+1 Abfragen beim Laden von Dokumenten samt Zusatzfeldern.
+ */
+data class DocumentWithCustomFields(
+    @Embedded
+    val document: DocumentEntity,
+
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "documentId"
+    )
+    val customFieldValues: List<DocumentCustomFieldValueEntity>
 )
 
 data class CustomFieldWithValue(

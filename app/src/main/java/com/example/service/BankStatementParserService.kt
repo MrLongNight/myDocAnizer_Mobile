@@ -49,16 +49,27 @@ object BankStatementParserService {
      */
     fun parseFromUri(context: Context, uri: Uri, filename: String = ""): BankStatementParseResult {
         return try {
-            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                ?: return BankStatementParseResult(emptyList(), 0, 0, 0.0, "Unbekannt", listOf("Datei konnte nicht gelesen werden."))
-
-            // Versuche zuerst UTF-8, prüfe ob ISO-8859-1 sinnvoller ist (häufig bei Sparkassen/VR-Banken)
-            var text = String(bytes, StandardCharsets.UTF_8)
-            if (text.contains("") || (!text.contains("ä") && !text.contains("ö") && !text.contains("ü") && String(bytes, Charset.forName("ISO-8859-1")).contains("ü"))) {
-                text = String(bytes, Charset.forName("ISO-8859-1"))
+            val MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB Limit
+            val fileSize = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: 0
+            if (fileSize > MAX_FILE_SIZE) {
+                return BankStatementParseResult(emptyList(), 0, 0, 0.0, "Zu groß", listOf("Datei ist zu groß (Max 5 MB)."))
             }
 
-            parseCsvOrText(text, filename)
+            // Wir lesen die ersten paar KB ein um das Encoding zu raten
+            val previewBytes = ByteArray(4096)
+            context.contentResolver.openInputStream(uri)?.use { it.read(previewBytes) }
+            
+            val previewUtf8 = String(previewBytes, StandardCharsets.UTF_8)
+            val useIso = (!previewUtf8.contains("ä") && !previewUtf8.contains("ö") && !previewUtf8.contains("ü") && 
+                          String(previewBytes, Charset.forName("ISO-8859-1")).contains("ü"))
+            
+            val charset = if (useIso) Charset.forName("ISO-8859-1") else StandardCharsets.UTF_8
+
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                BufferedReader(InputStreamReader(inputStream, charset)).use { reader ->
+                    parseFromReader(reader, filename)
+                }
+            } ?: BankStatementParseResult(emptyList(), 0, 0, 0.0, "Fehler", listOf("Datei konnte nicht gelesen werden."))
         } catch (e: Exception) {
             BankStatementParseResult(
                 entries = emptyList(),
@@ -75,7 +86,21 @@ object BankStatementParserService {
      * Parst Text (CSV oder formatierter Text) in BankStatementEntryEntity-Einträge.
      */
     fun parseCsvOrText(rawContent: String, filename: String = ""): BankStatementParseResult {
-        val lines = rawContent.lines().map { it.trim() }.filter { it.isNotBlank() }
+        return parseFromReader(BufferedReader(rawContent.reader()), filename)
+    }
+
+    /**
+     * Kern-Logik: Parst Zeile für Zeile aus einem Reader, um RAM-Spitzen zu vermeiden.
+     */
+    private fun parseFromReader(reader: BufferedReader, filename: String = ""): BankStatementParseResult {
+        val lines = mutableListOf<String>()
+        var line: String?
+        while (reader.readLine().also { line = it } != null) {
+            if (line?.isNotBlank() == true) {
+                lines.add(line!!.trim())
+            }
+        }
+
         if (lines.isEmpty()) {
             return BankStatementParseResult(emptyList(), 0, 0, 0.0, "Leere Datei", listOf("Die Datei enthält keinen lesbaren Text."))
         }

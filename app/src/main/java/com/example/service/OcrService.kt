@@ -21,8 +21,22 @@ object OcrService {
      */
     suspend fun recognizeText(bitmap: Bitmap, senderHint: String = "", titleHint: String = ""): String = withContext(Dispatchers.Default) {
         val startTime = System.currentTimeMillis()
+        var workingBitmap = bitmap
+        var needsRecycle = false
+
         try {
-            val inputImage = InputImage.fromBitmap(bitmap, 0)
+            // Downsampling: ML Kit arbeitet optimal bei ca. 1500-2000px. 
+            // Extrem hohe Auflösungen verbrauchen nur unnötig RAM ohne Genauigkeitsgewinn.
+            val maxEdge = 2200
+            if (bitmap.width > maxEdge || bitmap.height > maxEdge) {
+                val scale = maxEdge.toFloat() / maxOf(bitmap.width, bitmap.height)
+                val targetW = (bitmap.width * scale).toInt()
+                val targetH = (bitmap.height * scale).toInt()
+                workingBitmap = Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
+                needsRecycle = true
+            }
+
+            val inputImage = InputImage.fromBitmap(workingBitmap, 0)
             val recognizedText = suspendCancellableCoroutine<String> { continuation ->
                 recognizer.process(inputImage)
                     .addOnSuccessListener { visionText ->
@@ -60,6 +74,10 @@ object OcrService {
             }
             AppAuditLogger.logError("OcrService", "Fehler bei OCR-Texterkennung: ${e.message}", e)
             fallback
+        } finally {
+            if (needsRecycle) {
+                runCatching { workingBitmap.recycle() }
+            }
         }
     }
 }

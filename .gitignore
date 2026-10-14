@@ -19,3 +19,5 @@ debug.keystore
 .build-outputs/
 *.apk
 *.aab
+.aistudio/
+app/applet/

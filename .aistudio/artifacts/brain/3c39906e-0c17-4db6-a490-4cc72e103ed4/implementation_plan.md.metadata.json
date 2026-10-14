@@ -1,6 +1,0 @@
-{
-  "summary": "Umfassender Implementierungsplan für die intuitive Neugestaltung der Verschlüsselungs- und Sicherheitsarchitektur im Setup-Assistenten (SetupWizardDialog / SecurityWizardStep). Strukturiert in 4 geführte Phasen: Grundstufe wählen (Keine vs. 1-Faktor vs. 2-Faktor), Faktoren konfigurieren (Passwort, Schlüsseldatei, TOTP), Notfall-Wiederherstellung mit Info-Popups absichern sowie App-Zugriff via Biometrie & Auto-Lock schützen.",
-  "updatedAt": "2026-10-13T22:40:38.357668079Z",
-  "requestFeedback": true,
-  "userFacing": true
-}

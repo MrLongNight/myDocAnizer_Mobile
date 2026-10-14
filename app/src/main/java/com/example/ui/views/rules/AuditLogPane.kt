@@ -1,11 +1,14 @@
-package com.example.ui.views
+package com.example.ui.views.rules
 
-import android.widget.Toast
+import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -20,44 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.service.AuditLogEntry
+import com.example.service.LogCategory
 import com.example.ui.DocAnizerViewModel
-import com.example.ui.views.rules.DocumentRulesSettingsTab as RulesDocumentRulesSettingsTab
-import com.example.ui.views.rules.OnDeviceAiAgentSettingsTab as RulesOnDeviceAiAgentSettingsTab
-
-@Composable
-fun RulesAndAiSettingsTab(
-    viewModel: DocAnizerViewModel,
-    modifier: Modifier = Modifier
-) {
-    RulesDocumentRulesSettingsTab(viewModel = viewModel, modifier = modifier)
-}
-
-@Composable
-fun DocumentRulesSettingsTab(
-    viewModel: DocAnizerViewModel,
-    modifier: Modifier = Modifier
-) {
-    RulesDocumentRulesSettingsTab(viewModel = viewModel, modifier = modifier)
-}
-
-@Composable
-fun OnDeviceAiAgentSettingsTab(
-    viewModel: DocAnizerViewModel,
-    modifier: Modifier = Modifier
-) {
-    RulesOnDeviceAiAgentSettingsTab(viewModel = viewModel, modifier = modifier)
-}
-
-@Composable
-fun SystemDiagnosticsAndLogTab(
-    viewModel: DocAnizerViewModel,
-    modifier: Modifier = Modifier
-) {
-    AuditLogContent(
-        viewModel = viewModel,
-        modifier = modifier.fillMaxSize()
-    )
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,7 +38,8 @@ fun AuditLogContent(
     val availableModels by viewModel.availableModels.collectAsStateWithLifecycle()
     val modelBenchmarks by viewModel.modelBenchmarks.collectAsStateWithLifecycle()
     val activeModel = availableModels.find { it.isSelected } ?: availableModels.firstOrNull()
-    var selectedCategoryFilter by remember { mutableStateOf<com.example.service.LogCategory?>(null) }
+
+    var selectedCategoryFilter by remember { mutableStateOf<LogCategory?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var showBenchmarkOverview by remember { mutableStateOf(false) }
 
@@ -109,89 +78,147 @@ fun AuditLogContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            "System-Audit & KI-Protokolle",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "Echtzeit-Diagnose, Latenzen & Reasoning-Traces",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        IconButton(onClick = { viewModel.clearAuditLogs() }) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = "Protokolle löschen")
-                        }
-                        Button(
-                            onClick = {
-                                val report = viewModel.exportAuditLogsReport()
-                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("AuditLog", report))
-                                Toast.makeText(context, "Protokolle in Zwischenablage kopiert", Toast.LENGTH_SHORT).show()
-                            },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Exportieren", fontSize = 12.sp)
-                        }
-                    }
-                }
-
-                // Statistiken & Benchmarks Button
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "Einträge gesamt: ${auditLogs.size} (gefiltert: ${filteredLogs.size})",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    OutlinedButton(
-                        onClick = { showBenchmarkOverview = !showBenchmarkOverview },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (showBenchmarkOverview) "Benchmarks verbergen" else "Modell-Benchmarks", fontSize = 11.sp)
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Column {
+                            Text("100% Lokales Audit- & KI-Diagnose-Log", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("DSGVO-konform: Keine Cloud-Übertragung, 0 Byte Abfluss", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
 
-                if (showBenchmarkOverview) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Aktives KI-Modell:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${activeModel?.name ?: "Keines"} (${activeModel?.quantFormat ?: ""})", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Protokoll-Einträge:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${auditLogs.size} Ereignisse im Speicher", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                        }
+                        if (modelBenchmarks.isNotEmpty()) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("Modell-Benchmarks:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                TextButton(
+                                    onClick = { showBenchmarkOverview = !showBenchmarkOverview },
+                                    contentPadding = PaddingValues(0.dp),
+                                    modifier = Modifier.height(24.dp)
+                                ) {
+                                    Text(
+                                        text = if (showBenchmarkOverview) "Statistik verbergen" else "${modelBenchmarks.size} Modelle verglichen ▼",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Ausklappbare Modell-Benchmark-Statistik
+                AnimatedVisibility(visible = showBenchmarkOverview && modelBenchmarks.isNotEmpty()) {
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Hardware & LLM Leistungs-Benchmarks", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                            if (modelBenchmarks.isEmpty()) {
-                                Text("Noch keine Benchmarks aufgezeichnet. Führe Testabfragen im Chat oder bei Dokumentscans durch.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            } else {
-                                modelBenchmarks.forEach { (modelName, bench) ->
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text(modelName, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                                        Text("∅ ${bench.avgLatencyMs}ms | RAM Δ: ${bench.avgRamDeltaMb}MB | Tokens/s: ${bench.tokensPerSec}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Hardware- & Genauigkeits-Vergleich:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            modelBenchmarks.values.forEach { bench ->
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text(bench.modelName.take(28), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                            Text("${bench.totalInferences} Durchläufe", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                            Text("Ø Latenz: ${bench.avgLatencyMs}ms", style = MaterialTheme.typography.bodySmall, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Peak RAM: ${"%.1f".format(bench.peakRamDeltaMb)} MB", style = MaterialTheme.typography.bodySmall, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Text("Ø Felder: ${"%.1f".format(bench.avgFieldsExtracted)}", style = MaterialTheme.typography.bodySmall, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { viewModel.exportAndShareAuditLog(context) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("btn_export_audit_log"),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Log exportieren / teilen", style = MaterialTheme.typography.labelMedium)
+                    }
+
+                    OutlinedButton(
+                        onClick = { viewModel.clearAuditLogs(context) },
+                        modifier = Modifier.testTag("btn_clear_audit_log")
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Leeren", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
             }
         }
 
-        // Such- & Filterleiste
+        // Filter-Chips
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            FilterChip(
+                selected = selectedCategoryFilter == null,
+                onClick = { selectedCategoryFilter = null },
+                label = { Text("Alle (${auditLogs.size})") }
+            )
+            LogCategory.values().forEach { cat ->
+                val count = auditLogs.count { it.category == cat }
+                FilterChip(
+                    selected = selectedCategoryFilter == cat,
+                    onClick = { selectedCategoryFilter = if (selectedCategoryFilter == cat) null else cat },
+                    label = { Text("${cat.icon} ${cat.label} ($count)") }
+                )
+            }
+        }
+
+        // Suchzeile
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Protokolle durchsuchen (Tag, Text, OCR, Think)...") },
+            placeholder = { Text("Im Log filtern (z.B. Modell, OCR, Think)...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
             trailingIcon = {
                 if (searchQuery.isNotEmpty()) {
@@ -234,8 +261,9 @@ fun AuditLogContent(
 }
 
 @Composable
-fun AuditLogItemCard(entry: com.example.service.AuditLogEntry) {
+fun AuditLogItemCard(entry: AuditLogEntry) {
     var expanded by remember { mutableStateOf(false) }
+
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = if (entry.isError) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -275,12 +303,14 @@ fun AuditLogItemCard(entry: com.example.service.AuditLogEntry) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
             Text(
                 text = entry.message,
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
                 color = if (entry.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
             )
+
             // Hardware Telemetrie Badges (wenn vorhanden)
             if (entry.ramDeltaMb != null || entry.latencyMs != null) {
                 Row(
@@ -317,6 +347,7 @@ fun AuditLogItemCard(entry: com.example.service.AuditLogEntry) {
                     }
                 }
             }
+
             if (entry.details.isNotBlank()) {
                 if (expanded) {
                     Surface(
@@ -340,6 +371,7 @@ fun AuditLogItemCard(entry: com.example.service.AuditLogEntry) {
                     )
                 }
             }
+
             // Detaillierter Reasoning-Trace (Gedankengang) wenn vorhanden & ausgeklappt
             if (expanded && !entry.reasoningTrace.isNullOrBlank()) {
                 Surface(
