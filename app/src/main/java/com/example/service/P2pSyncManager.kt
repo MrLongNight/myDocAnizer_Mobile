@@ -232,7 +232,9 @@ class P2pSyncManager(
                         isAuthorized = obj.optBoolean("isAuthorized", true),
                         pairedAt = obj.optLong("pairedAt", System.currentTimeMillis()),
                         lastSyncTimestamp = obj.optLong("lastSyncTimestamp", 0L),
-                        lastSyncStatus = obj.optString("lastSyncStatus", "Bereit")
+                        lastSyncStatus = obj.optString("lastSyncStatus", "Bereit"),
+                        role = obj.optString("role", "Master-Peer"),
+                        deviceType = obj.optString("deviceType", "ANDROID_PEER")
                     )
                 )
             }
@@ -255,6 +257,8 @@ class P2pSyncManager(
                 put("pairedAt", item.pairedAt)
                 put("lastSyncTimestamp", item.lastSyncTimestamp)
                 put("lastSyncStatus", item.lastSyncStatus)
+                put("role", item.role)
+                put("deviceType", item.deviceType)
             }
             array.put(obj)
         }

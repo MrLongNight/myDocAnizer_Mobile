@@ -70,6 +70,22 @@ Beispiele:
 }
 ```
 
+- Nutzer: "Erstelle mir ein Widget für meine Stromrechnungen"
+  Antwort:
+```json
+{
+  "name": "createCustomDashboardWidget",
+  "arguments": {
+    "title": "Stromrechnungen",
+    "subtitle": "Kosten-Monitor",
+    "widgetType": "FOLDER_MONITOR",
+    "targetCategory": "Energie",
+    "iconName": "bolt",
+    "colorHex": 4278190080
+  }
+}
+```
+
 Wenn der Nutzer hingegen eine reine Informationsfrage stellt, eine Zusammenfassung wünscht oder ein Musterschreiben anfordert, antworte direkt in verständlichem, formatiertem Text ohne JSON-Block."""
 
     /**
@@ -88,7 +104,8 @@ Wenn der Nutzer hingegen eine reine Informationsfrage stellt, eine Zusammenfassu
      */
     fun buildInjectedSystemPrompt(
         basePrompt: String = BASE_ASSISTANT_INSTRUCTIONS,
-        tools: List<AppTool> = AppTool.DEFAULT_TOOLS
+        tools: List<AppTool> = AppTool.DEFAULT_TOOLS,
+        documentContextSummary: String = ""
     ): String {
         val toolsJson = buildToolsJsonArray(tools)
 
@@ -101,6 +118,13 @@ Wenn der Nutzer hingegen eine reine Informationsfrage stellt, eine Zusammenfassu
             appendLine(toolsJson)
             appendLine("```")
             appendLine()
+            if (documentContextSummary.isNotBlank()) {
+                appendLine()
+                appendLine("### DOKUMENTEN-KONTEXT (AKTUELLER BESTAND):")
+                appendLine("Nutze diese Informationen, um Tool-Calls präziser zu machen (z.B. richtige Kategorien für Widgets wählen):")
+                appendLine(documentContextSummary)
+                appendLine()
+            }
             append(TOOL_USAGE_DIRECTIVE.trim())
         }
     }

@@ -164,6 +164,7 @@ fun AiDocumentChatDrawer(
                     modifier = Modifier
                         .fillMaxSize()
                         .statusBarsPadding()
+                        .navigationBarsPadding()
                         .imePadding()
                 ) {
                     // KOPFZEILE (Schlank & Minimal mit Roboter AI Icon und Session Status)

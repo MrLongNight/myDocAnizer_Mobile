@@ -747,7 +747,12 @@ class P2pSyncServer(
                     put("deletedAt", doc.deletedAt ?: 0L)
                     put("contractEndDate", doc.contractEndDate ?: 0L)
                     put("cancellationDeadline", doc.cancellationDeadline ?: 0L)
+                    put("reminderDaysBefore", doc.reminderDaysBefore)
+                    put("hasCalendarReminder", doc.hasCalendarReminder)
+                    put("reminderNotes", doc.reminderNotes)
                     put("amount", doc.amount ?: 0.0)
+                    put("customIcon", doc.customIcon)
+                    put("companyLogo", doc.companyLogo)
                     put("fileChecksum", checksum)
                 }
                 array.put(obj)

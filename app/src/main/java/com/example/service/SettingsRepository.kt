@@ -285,7 +285,7 @@ class SettingsRepository(context: Context) {
         val current = _customDashboardWidgets.value.toMutableList()
         val index = current.indexOfFirst { it.id == id }
         if (index != -1) {
-            current[index] = current[index].copy(noteText = text)
+            current[index] = current[index].copy(noteContent = text)
             saveCustomDashboardWidgets(current)
         }
     }

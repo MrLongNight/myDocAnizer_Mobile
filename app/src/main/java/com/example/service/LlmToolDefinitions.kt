@@ -230,6 +230,36 @@ sealed class AppTool(
                 type = "number",
                 description = "Farb-Hex-Wert als Long",
                 isRequired = false
+            ),
+            ToolParameter(
+                name = "targetSubCategory",
+                type = "string",
+                description = "Optionale Unterkategorie",
+                isRequired = false
+            ),
+            ToolParameter(
+                name = "targetCustomFieldName",
+                type = "string",
+                description = "Name eines spezifischen Zusatzfeldes",
+                isRequired = false
+            ),
+            ToolParameter(
+                name = "targetCustomFieldValue",
+                type = "string",
+                description = "Wert des Zusatzfeldes für den Filter",
+                isRequired = false
+            ),
+            ToolParameter(
+                name = "noteContent",
+                type = "string",
+                description = "Inhalt für Sticky-Note Widgets",
+                isRequired = false
+            ),
+            ToolParameter(
+                name = "iconName",
+                type = "string",
+                description = "Name des Icons (z.B. 'analytics', 'Folder', 'description')",
+                isRequired = false
             )
         )
     )
@@ -280,7 +310,12 @@ sealed class AppToolCall {
         val targetCategory: String = "",
         val targetTag: String = "",
         val numericLimit: Double = 0.0,
-        val colorHex: Long = 0xFF2563EB
+        val colorHex: Long = 0xFF2563EB,
+        val targetSubCategory: String = "",
+        val targetCustomFieldName: String = "",
+        val targetCustomFieldValue: String = "",
+        val noteContent: String = "",
+        val iconName: String = "analytics"
     ) : AppToolCall()
 
     data class Unknown(

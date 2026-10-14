@@ -287,6 +287,13 @@ sealed class LlmUndoAction {
         override val description: String = "Dokumenten-Filter zurücksetzen",
         override val timestamp: Long = System.currentTimeMillis()
     ) : LlmUndoAction()
+
+    data class DashboardWidgetCreated(
+        val widgetId: String,
+        val widgetTitle: String,
+        override val description: String = "Widget „$widgetTitle“ entfernen",
+        override val timestamp: Long = System.currentTimeMillis()
+    ) : LlmUndoAction()
 }
 
 @Immutable

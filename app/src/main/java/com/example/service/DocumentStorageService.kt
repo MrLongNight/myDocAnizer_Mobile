@@ -563,6 +563,7 @@ object DocumentStorageService {
      * Nutzt 64KB Streaming-Puffer für minimale Speichernutzung.
      */
     fun decryptFile(inputFile: File, outputFile: File, passwordKey: String): Boolean {
+        if (passwordKey.isBlank()) return false
         return try {
             val fileLength = inputFile.length()
             val minHeaderSize = SALT_LENGTH_BYTES + GCM_IV_LENGTH_BYTES + 16
@@ -585,7 +586,7 @@ object DocumentStorageService {
                     readTotal += r
                 }
 
-                val secretKey = deriveKey(passwordKey.ifBlank { "MyDocAnizer2026MasterKey!" }, salt)
+                val secretKey = deriveKey(passwordKey, salt)
                 val cipher = Cipher.getInstance("AES/GCM/NoPadding")
                 cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
 
@@ -658,13 +659,15 @@ object DocumentStorageService {
     private fun jsonToDocument(obj: JSONObject, targetDir: File, defaultId: Long): DocumentEntity {
         val id = obj.optLong("id", defaultId)
         val fileName = obj.optString("fileName", "doc_$id.pdf")
-        val fullPath = File(targetDir, fileName).absolutePath
+        val safeName = File(fileName).name
+        val restoredFile = File(targetDir, safeName)
+        val resolvedPath = if (restoredFile.exists()) restoredFile.absolutePath else obj.optString("filePath", restoredFile.absolutePath)
         return DocumentEntity(
             id = id,
             title = obj.optString("title", "Wiederhergestelltes Dokument"),
             sender = obj.optString("sender", ""),
             fileName = fileName,
-            filePath = obj.optString("filePath", fullPath),
+            filePath = resolvedPath,
             mainCategory = obj.optString("mainCategory", "Allgemein"),
             subCategory = obj.optString("subCategory", "Diverses"),
             mainCategoryId = obj.optString("mainCategoryId", "A01"),
@@ -674,7 +677,7 @@ object DocumentStorageService {
             ocrText = obj.optString("ocrText", ""),
             colorMode = obj.optString("colorMode", "BW"),
             pageCount = obj.optInt("pageCount", 1),
-            fileSizeFormatted = obj.optString("fileSizeFormatted", "${if (File(fullPath).exists()) (File(fullPath).length() / 1024).coerceAtLeast(1) else 10} KB"),
+            fileSizeFormatted = obj.optString("fileSizeFormatted", "${if (File(resolvedPath).exists()) (File(resolvedPath).length() / 1024).coerceAtLeast(1) else 10} KB"),
             isEncrypted = obj.optBoolean("isEncrypted", true),
             isSynced = obj.optBoolean("isSynced", false),
             createdAt = obj.optLong("createdAt", System.currentTimeMillis()),

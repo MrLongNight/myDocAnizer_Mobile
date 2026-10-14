@@ -2333,11 +2333,24 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
     suspend fun queryDocumentAssistantWithFollowUps(
         question: String,
         documents: List<DocumentEntity>,
-        attachedDoc: DocumentEntity? = null
+        attachedDoc: DocumentEntity? = null,
+        documentContextSummary: String = ""
     ): LocalAiChatResult = withContext(Dispatchers.Default) {
         _isGenerating.value = true
         try {
-            LlmToolExecutor().executeAssistantWithFollowUps(question, documents, attachedDoc)
+            val activeModel = getSelectedModel()
+            val modelFile = getModelFile(activeModel.id)
+            
+            if (modelFile.exists() && modelFile.length() > 1024 * 1024) {
+                val reply = llamaCppEngine.executeChatInferenceWithTools(
+                    modelFile = modelFile,
+                    userMessage = question,
+                    documentContextSummary = documentContextSummary
+                )
+                LocalAiChatResult(replyText = reply)
+            } else {
+                LlmToolExecutor().executeAssistantWithFollowUps(question, documents, attachedDoc, documentContextSummary)
+            }
         } finally {
             _isGenerating.value = false
         }

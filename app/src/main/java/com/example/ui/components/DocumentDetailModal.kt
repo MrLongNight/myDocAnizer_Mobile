@@ -98,6 +98,8 @@ fun DocumentDetailModal(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .widthIn(max = 640.dp)
+                .align(Alignment.CenterHorizontally)
                 .padding(horizontal = 24.dp, vertical = 12.dp)
                 .verticalScroll(rememberScrollState())
         ) {

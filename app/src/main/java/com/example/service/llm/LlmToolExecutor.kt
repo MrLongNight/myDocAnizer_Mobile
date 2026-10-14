@@ -158,7 +158,8 @@ class LlmToolExecutor {
     fun executeAssistantWithFollowUps(
         question: String,
         rawDocuments: List<DocumentEntity>,
-        attachedDoc: DocumentEntity? = null
+        attachedDoc: DocumentEntity? = null,
+        documentContextSummary: String = ""
     ): LocalAiChatResult {
         val documents = rawDocuments.sortedByDescending { it.createdAt }.take(30)
         val q = question.trim()

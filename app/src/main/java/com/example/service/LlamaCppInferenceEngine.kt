@@ -166,7 +166,7 @@ Antworte AUSSCHLIESSLICH mit diesem exakten JSON-Schema:
          * GBNF Grammatik für den schnellen First Run (Team 1 Triage ohne Zusatzfelder-Overhead).
          */
         const val TRIAGE_JSON_GBNF: String = """
-root ::= "{" ws "\"_reasoning\":" ws string "," ws "\"absender\":" ws opt_string "," ws "\"dokumententyp\":" ws opt_string "," ws "\"match_keywords\":" ws string_array "," ws "\"kategorie_vorschlag\":" ws opt_string "}" ws
+root ::= "{" ws "\"_reasoning\"" ws ":" ws string "," ws "\"absender\"" ws ":" ws opt_string "," ws "\"dokumententyp\"" ws ":" ws opt_string "," ws "\"match_keywords\"" ws ":" ws string_array "," ws "\"kategorie_vorschlag\"" ws ":" ws opt_string "}" ws
 opt_string ::= string | "null"
 string_array ::= "[" ws (string ("," ws string)*)? ws "]"
 string ::= "\"" ([^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4}))* "\""
@@ -298,12 +298,12 @@ Antworte AUSSCHLIESSLICH mit diesem exakten JSON-Schema:
          * Erlaubt beliebige dynamische Key-Value-Paare im 'globale_zusatzfelder'-Objekt sowie optionale Whitespaces und Typen.
          */
         const val DMS_JSON_GBNF: String = """
-root ::= "{" ws "\"_reasoning\":" ws string "," ws "\"absender\":" ws opt_string "," ws "\"dokumententyp\":" ws opt_string "," ws "\"match_keywords\":" ws string_array "," ws "\"kategorie_vorschlag\":" ws opt_string "," ws "\"vorgeschlagener_pfad\":" ws opt_string "," ws "\"globale_zusatzfelder\":" ws object "}" ws
+root ::= "{" ws "\"_reasoning\"" ws ":" ws string "," ws "\"absender\"" ws ":" ws opt_string "," ws "\"dokumententyp\"" ws ":" ws opt_string "," ws "\"match_keywords\"" ws ":" ws string_array "," ws "\"kategorie_vorschlag\"" ws ":" ws opt_string "," ws "\"vorgeschlagener_pfad\"" ws ":" ws opt_string "," ws "\"globale_zusatzfelder\"" ws ":" ws object "}" ws
 opt_string ::= string | "null"
 string_array ::= "[" ws (string ("," ws string)*)? ws "]"
 object ::= "{" ws (pair ("," ws pair)*)? ws "}"
 pair ::= string ws ":" ws (string | number | "true" | "false" | "null")
-number ::= [0-9]+ ("." [0-9]+)?
+number ::= "-"? [0-9]+ ("." [0-9]+)?
 string ::= "\"" ([^"\\\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4}))* "\""
 ws ::= [ \t\n\r]*
 """
@@ -440,9 +440,9 @@ ws ::= [ \t\n\r]*
             return@withContext createHeuristicFallbackResponse(ocrText)
         }
         val filteredSlice = OcrPreFilterMatrix.extractFirstRunSlice(ocrText)
-        val useTriage = useStrictTriage && whitelistedCustomFields.isEmpty()
+        val useTriage = useStrictTriage || whitelistedCustomFields.isEmpty()
         val systemPrompt = if (useTriage) TRIAGE_SYSTEM_PROMPT else buildSmallModelOptimizedPrompt(whitelistedCustomFields)
-        val targetParams = if (useTriage) params.copy(grammar = TRIAGE_JSON_GBNF) else params
+        val targetParams = if (useTriage) params.copy(maxTokens = 200, grammar = TRIAGE_JSON_GBNF) else params
 
         val rawOutput = executeInference(
             modelFile = modelFile,
@@ -526,6 +526,7 @@ ws ::= [ \t\n\r]*
     ): String = withContext(Dispatchers.Default) {
         val startTime = System.currentTimeMillis()
         val startRam = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
+        val startNativeRam = try { android.os.Debug.getNativeHeapAllocatedSize() } catch (_: Throwable) { 0L }
 
         try {
             if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
@@ -554,8 +555,9 @@ ws ::= [ \t\n\r]*
 
             val endTime = System.currentTimeMillis()
             val endRam = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
+            val endNativeRam = try { android.os.Debug.getNativeHeapAllocatedSize() } catch (_: Throwable) { 0L }
             val latency = (endTime - startTime).coerceAtLeast(1)
-            val ramDeltaMb = ((endRam - startRam) / (1024f * 1024f)).coerceAtLeast(0.1f)
+            val ramDeltaMb = (((endRam + endNativeRam) - (startRam + startNativeRam)) / (1024f * 1024f)).coerceAtLeast(0.1f)
 
             AppAuditLogger.logAiInference(
                 modelId = modelFile.name,
@@ -695,7 +697,8 @@ ws ::= [ \t\n\r]*
         modelFile: File,
         userMessage: String,
         tools: List<AppTool> = AppTool.DEFAULT_TOOLS,
-        systemPrompt: String = LlmToolPromptBuilder.buildInjectedSystemPrompt(tools = tools),
+        documentContextSummary: String = "",
+        systemPrompt: String = LlmToolPromptBuilder.buildInjectedSystemPrompt(tools = tools, documentContextSummary = documentContextSummary),
         params: InferenceParams = InferenceParams(temperature = 0.2f, grammar = null)
     ): String = withContext(Dispatchers.Default) {
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
@@ -854,7 +857,47 @@ ws ::= [ \t\n\r]*
             """.trimIndent()
         }
 
-        // 4. App-Bereiche öffnen
+        // 4. Dashboard Widgets erstellen: "widget", "dashboard", "kachel", "budget-wächter", "monitor" + "erstell", "anleg", "neu", "mach"
+        if ((qLower.contains("widget") || qLower.contains("dashboard") || qLower.contains("kachel") || qLower.contains("budget-wächter") || qLower.contains("monitor")) &&
+            (qLower.contains("erstell") || qLower.contains("anleg") || qLower.contains("neu") || qLower.contains("mach"))) {
+            
+            var title = "Neues Dashboard-Widget"
+            val quoteMatch = Regex("[\"']([^\"']+)[\"']").find(userMessage)
+            if (quoteMatch != null) {
+                title = quoteMatch.groupValues[1].trim()
+            }
+
+            var type = "FOLDER_MONITOR"
+            when {
+                qLower.contains("budget") || qLower.contains("ausgabe") -> type = "BUDGET_LIMIT"
+                qLower.contains("frist") || qLower.contains("termin") || qLower.contains("radar") -> type = "DEADLINE_MONITOR"
+                qLower.contains("notiz") || qLower.contains("merkzettel") -> type = "STICKY_NOTE"
+                qLower.contains("zusatzfeld") || qLower.contains("filter") -> type = "CUSTOM_FIELD_MONITOR"
+                qLower.contains("schnell") || qLower.contains("shortcut") -> type = "QUICK_SHORTCUT"
+            }
+
+            var cat = ""
+            val catMatch = Regex("(?:für|in|ordner|kategorie)\\s+([a-zA-Z0-9äöüÄÖÜ_\\-]+)", RegexOption.IGNORE_CASE).find(userMessage)
+            if (catMatch != null) {
+                cat = catMatch.groupValues[1].trim().replaceFirstChar { it.uppercase() }
+            }
+
+            return """
+                ```json
+                {
+                  "name": "createCustomDashboardWidget",
+                  "arguments": {
+                    "title": "$title",
+                    "widgetType": "$type",
+                    "targetCategory": "$cat",
+                    "colorHex": 4278190080
+                  }
+                }
+                ```
+            """.trimIndent()
+        }
+
+        // 5. App-Bereiche öffnen
         if (qLower.contains("scanner") || qLower.contains("kamera")) {
             return """
                 ```json

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -102,6 +103,7 @@ fun DashboardTemplatesCatalogDialog(
             tonalElevation = 6.dp,
             modifier = Modifier
                 .fillMaxWidth(0.96f)
+                .widthIn(max = 640.dp)
                 .fillMaxHeight(0.88f)
         ) {
             Column(
@@ -627,7 +629,7 @@ fun CreateOrEditCustomWidgetDialog(
     var selectedPeriodScope by remember { mutableStateOf(initialWidget?.periodScope ?: ElementPeriodScope.ALL) }
     var targetCategory by remember { mutableStateOf(initialWidget?.targetCategory ?: (categories.firstOrNull() ?: "Finanzen")) }
     var targetTag by remember { mutableStateOf(initialWidget?.targetTag ?: "#wichtig") }
-    var noteText by remember { mutableStateOf(initialWidget?.noteText ?: "") }
+    var noteText by remember { mutableStateOf(initialWidget?.noteContent ?: "") }
     var targetAmountText by remember { mutableStateOf(if ((initialWidget?.targetAmount ?: 0.0) > 0) initialWidget?.targetAmount.toString() else "500") }
 
     val isEditing = initialWidget != null
@@ -654,6 +656,7 @@ fun CreateOrEditCustomWidgetDialog(
     )
 
     AlertDialog(
+        modifier = Modifier.widthIn(max = 640.dp),
         onDismissRequest = onDismiss,
         title = {
             Row(
@@ -907,7 +910,7 @@ fun CreateOrEditCustomWidgetDialog(
                         periodScope = selectedPeriodScope,
                         targetCategory = targetCategory,
                         targetTag = targetTag,
-                        noteText = noteText,
+                        noteContent = noteText,
                         checklistItems = initialItems,
                         targetAmount = targetAmt,
                         isEnabled = initialWidget?.isEnabled ?: true,

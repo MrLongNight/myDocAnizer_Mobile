@@ -70,6 +70,11 @@ object CloudSyncWorkerService {
         config: CloudSyncConfig = CloudSyncConfig()
     ) = withContext(Dispatchers.IO) {
         try {
+            if (config.isAirGappedStrict) {
+                _syncState.value = SyncState.Error("Air-Gapped Modus aktiv: Jegliche Netzwerk-Kommunikation ist gesperrt.")
+                return@withContext
+            }
+
             if (!config.enableGoogleDrive && !config.enableWebDavNas) {
                 _syncState.value = SyncState.Idle
                 return@withContext
@@ -196,11 +201,15 @@ object CloudSyncWorkerService {
                 }
             }
 
-            _syncState.value = SyncState.Success(
-                uploadedCount = uploadedCount,
-                indexGenerated = indexExists,
-                timestamp = System.currentTimeMillis()
-            )
+            if (lowBattery && pendingDocs.isNotEmpty()) {
+                _syncState.value = SyncState.Error("Metadaten-Index aktualisiert. PDF-Uploads wurden wegen niedrigem Akkustand (< 20 %) pausiert.")
+            } else {
+                _syncState.value = SyncState.Success(
+                    uploadedCount = uploadedCount,
+                    indexGenerated = indexExists,
+                    timestamp = System.currentTimeMillis()
+                )
+            }
         } catch (e: Exception) {
             _syncState.value = SyncState.Error(e.localizedMessage ?: "Sync-Fehler aufgetreten")
         }

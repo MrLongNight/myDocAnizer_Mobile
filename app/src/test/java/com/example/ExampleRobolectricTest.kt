@@ -292,7 +292,7 @@ class ExampleRobolectricTest {
     val updatedWidgets = viewModel.customDashboardWidgets.first()
     assertEquals(2, updatedWidgets[0].checklistItems.size)
     assertEquals(true, updatedWidgets[0].checklistItems[1].isDone)
-    assertEquals("Garantie gilt 24 Monate", updatedWidgets[0].noteText)
+    assertEquals("Garantie gilt 24 Monate", updatedWidgets[0].noteContent)
 
     // 4. Test reordering
     viewModel.moveDashboardWidgetUp("custom_test_1")

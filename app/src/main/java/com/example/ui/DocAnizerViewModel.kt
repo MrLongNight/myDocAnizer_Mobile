@@ -2423,6 +2423,17 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     _chatMessages.value = _chatMessages.value + undoMsg
                     autoSaveIfPersistent()
                 }
+                is LlmUndoAction.DashboardWidgetCreated -> {
+                    db.customDashboardWidgetDao().deleteWidgetById(action.widgetId)
+                    settingsRepo.deleteCustomWidget(action.widgetId)
+                    _lastUndoAction.value = null
+                    val undoMsg = ChatMessage(
+                        text = "↩️ **Aktion rückgängig gemacht:** Das Dashboard-Widget **„${action.widgetTitle}“** wurde wieder entfernt.",
+                        isUser = false
+                    )
+                    _chatMessages.value = _chatMessages.value + undoMsg
+                    autoSaveIfPersistent()
+                }
             }
         }
     }
@@ -2459,9 +2470,17 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
             targetCategory: String,
             targetTag: String,
             numericLimit: Double,
-            colorHex: Long
+            colorHex: Long,
+            targetSubCategory: String,
+            targetCustomFieldName: String,
+            targetCustomFieldValue: String,
+            noteContent: String,
+            iconName: String
         ): String {
-            return createCustomDashboardWidgetFromTool(title, subtitle, widgetType, targetCategory, targetTag, numericLimit, colorHex)
+            return createCustomDashboardWidgetFromTool(
+                title, subtitle, widgetType, targetCategory, targetTag, numericLimit, colorHex,
+                targetSubCategory, targetCustomFieldName, targetCustomFieldValue, noteContent, iconName
+            )
         }
     }
 
@@ -2605,7 +2624,12 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         targetCategory: String,
         targetTag: String,
         numericLimit: Double,
-        colorHex: Long
+        colorHex: Long,
+        targetSubCategory: String = "",
+        targetCustomFieldName: String = "",
+        targetCustomFieldValue: String = "",
+        noteContent: String = "",
+        iconName: String = "analytics"
     ): String {
         val cleanTitle = title.trim().replace("\"", "").replace("'", "").trim()
         if (cleanTitle.isBlank()) return "⚠️ Der Titel des Widgets darf nicht leer sein."
@@ -2616,25 +2640,28 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
             com.example.model.CustomWidgetType.FOLDER_MONITOR
         }
 
+        val widgetId = UUID.randomUUID().toString()
         val widgetEntity = CustomDashboardWidgetEntity(
-            id = UUID.randomUUID().toString(),
+            id = widgetId,
             title = cleanTitle,
             subtitle = subtitle.trim(),
             widgetType = parsedType,
             targetMainCategory = targetCategory.trim(),
-            targetSubCategory = "",
-            targetCustomFieldId = "",
-            targetCustomFieldValue = "",
+            targetSubCategory = targetSubCategory.trim(),
+            targetCustomFieldId = targetCustomFieldName.trim(),
+            targetCustomFieldValue = targetCustomFieldValue.trim(),
             numericLimit = numericLimit,
-            noteContent = "",
+            noteContent = noteContent.trim(),
             colorHex = colorHex,
-            iconName = when(parsedType) {
-                com.example.model.CustomWidgetType.FOLDER_MONITOR -> "folder_open"
-                com.example.model.CustomWidgetType.CUSTOM_FIELD_MONITOR -> "label"
-                com.example.model.CustomWidgetType.DEADLINE_MONITOR -> "event"
-                com.example.model.CustomWidgetType.BUDGET_LIMIT -> "savings"
-                com.example.model.CustomWidgetType.QUICK_SHORTCUT -> "bolt"
-                com.example.model.CustomWidgetType.STICKY_NOTE -> "edit_note"
+            iconName = iconName.trim().ifBlank {
+                when(parsedType) {
+                    com.example.model.CustomWidgetType.FOLDER_MONITOR -> "folder_open"
+                    com.example.model.CustomWidgetType.CUSTOM_FIELD_MONITOR -> "label"
+                    com.example.model.CustomWidgetType.DEADLINE_MONITOR -> "event"
+                    com.example.model.CustomWidgetType.BUDGET_LIMIT -> "savings"
+                    com.example.model.CustomWidgetType.QUICK_SHORTCUT -> "bolt"
+                    com.example.model.CustomWidgetType.STICKY_NOTE -> "edit_note"
+                }
             },
             isEnabled = true,
             position = 0
@@ -2658,11 +2685,20 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
             colorSkin = "MYDOCANIZER",
             periodScope = ElementPeriodScope.ALL,
             targetCategory = targetCategory.trim(),
+            targetSubCategory = targetSubCategory.trim(),
             targetTag = targetTag.trim(),
+            targetCustomFieldId = targetCustomFieldName.trim(),
+            targetCustomFieldValue = targetCustomFieldValue.trim(),
+            noteContent = noteContent.trim(),
             targetAmount = numericLimit,
             isEnabled = true
         )
         settingsRepo.addCustomWidget(customWidget)
+        
+        _lastUndoAction.value = LlmUndoAction.DashboardWidgetCreated(
+            widgetId = widgetId,
+            widgetTitle = cleanTitle
+        )
 
         AppAuditLogger.log(
             category = LogCategory.STORAGE_DMS,
@@ -2685,10 +2721,12 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         autoSaveIfPersistent()
 
         val docs = allDocuments.value
+        val contextSummary = buildDocumentContextSummary(docs)
         val rawResult = llmService.queryDocumentAssistantWithFollowUps(
             question = trimmed,
             documents = docs,
-            attachedDoc = attachedDoc
+            attachedDoc = attachedDoc,
+            documentContextSummary = contextSummary
         )
 
         val routerResult = llmToolRouter.routeResponse(rawResult.replyText)
@@ -2713,6 +2751,24 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         _chatMessages.value = _chatMessages.value + assistantMsg
         autoSaveIfPersistent()
         return routerResult
+    }
+
+    private fun buildDocumentContextSummary(docs: List<DocumentEntity>): String {
+        if (docs.isEmpty()) return "Keine Dokumente im Tresor."
+        
+        val latest = docs.take(30)
+        val categories = docs.map { it.mainCategory }.distinct()
+        val totalAmount = docs.mapNotNull { it.amount }.sum()
+        
+        return buildString {
+            appendLine("Gesamtbestand: ${docs.size} Dokumente")
+            appendLine("Hauptkategorien: ${categories.joinToString(", ")}")
+            appendLine("Gesamtsumme (Beträge): ${String.format("%.2f €", totalAmount)}")
+            appendLine("Zuletzt hinzugefügt (Top 30):")
+            latest.forEach { doc ->
+                appendLine("- ${doc.title} (${doc.sender}, ${doc.mainCategory}, ${doc.amount ?: 0.0} €)")
+            }
+        }
     }
 
     fun sendChatMessage(userText: String, attachedDoc: DocumentEntity? = _selectedChatDocument.value) {

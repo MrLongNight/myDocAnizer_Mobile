@@ -189,7 +189,7 @@ fun NoteMemoWidgetContent(
     onUpdateNote: (String) -> Unit
 ) {
     var isEditingText by remember { mutableStateOf(false) }
-    var tempText by remember(widget.noteText) { mutableStateOf(widget.noteText) }
+    var tempText by remember(widget.noteContent) { mutableStateOf(widget.noteContent) }
 
     if (isEditingText) {
         OutlinedTextField(
@@ -224,9 +224,9 @@ fun NoteMemoWidgetContent(
         ) {
             Column(modifier = Modifier.padding(10.dp)) {
                 Text(
-                    text = if (widget.noteText.isBlank()) "Tippe hier, um eine Notiz zu erfassen..." else widget.noteText,
+                    text = if (widget.noteContent.isBlank()) "Tippe hier, um eine Notiz zu erfassen..." else widget.noteContent,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (widget.noteText.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                    color = if (widget.noteContent.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                 )
             }
         }

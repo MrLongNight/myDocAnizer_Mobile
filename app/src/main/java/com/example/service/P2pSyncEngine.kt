@@ -201,6 +201,14 @@ class P2pSyncEngine(
                 val remoteDeletedAt = if (rDoc.has("deletedAt")) rDoc.getLong("deletedAt") else null
                 val remoteChecksum = rDoc.optString("fileChecksum", "")
                 val remoteFileName = rDoc.optString("fileName", "doc_${remoteId}.pdf")
+                val remoteAmount = if (rDoc.has("amount") && !rDoc.isNull("amount") && rDoc.getDouble("amount") > 0) rDoc.getDouble("amount") else null
+                val remoteContractEndDate = if (rDoc.has("contractEndDate") && !rDoc.isNull("contractEndDate") && rDoc.getLong("contractEndDate") > 0L) rDoc.getLong("contractEndDate") else null
+                val remoteCancellationDeadline = if (rDoc.has("cancellationDeadline") && !rDoc.isNull("cancellationDeadline") && rDoc.getLong("cancellationDeadline") > 0L) rDoc.getLong("cancellationDeadline") else null
+                val remoteReminderDaysBefore = rDoc.optInt("reminderDaysBefore", 14)
+                val remoteHasCalendarReminder = rDoc.optBoolean("hasCalendarReminder", false)
+                val remoteReminderNotes = rDoc.optString("reminderNotes", "")
+                val remoteCustomIcon = rDoc.optString("customIcon", "")
+                val remoteCompanyLogo = rDoc.optString("companyLogo", "")
 
                 remoteDocIdsSeen.add(remoteId)
 
@@ -230,7 +238,15 @@ class P2pSyncEngine(
                                 fileSizeFormatted = remoteFileSize,
                                 isSynced = true,
                                 createdAt = remoteCreated,
-                                isDeleted = false
+                                isDeleted = false,
+                                amount = remoteAmount,
+                                contractEndDate = remoteContractEndDate,
+                                cancellationDeadline = remoteCancellationDeadline,
+                                reminderDaysBefore = remoteReminderDaysBefore,
+                                hasCalendarReminder = remoteHasCalendarReminder,
+                                reminderNotes = remoteReminderNotes,
+                                customIcon = remoteCustomIcon,
+                                companyLogo = remoteCompanyLogo
                             )
                             database.documentDao().insertDocument(newDoc)
                             docsReceived++
@@ -365,7 +381,15 @@ class P2pSyncEngine(
                                     tags = remoteTags,
                                     ocrText = remoteOcr,
                                     fileSizeFormatted = remoteFileSize,
-                                    isSynced = true
+                                    isSynced = true,
+                                    amount = remoteAmount,
+                                    contractEndDate = remoteContractEndDate,
+                                    cancellationDeadline = remoteCancellationDeadline,
+                                    reminderDaysBefore = remoteReminderDaysBefore,
+                                    hasCalendarReminder = remoteHasCalendarReminder,
+                                    reminderNotes = remoteReminderNotes,
+                                    customIcon = remoteCustomIcon,
+                                    companyLogo = remoteCompanyLogo
                                 )
                                 database.documentDao().updateDocument(updatedDoc)
                                 docsReceived++
@@ -474,10 +498,16 @@ class P2pSyncEngine(
                     // Entfernte Version übernehmen
                     val localDoc = database.documentDao().getDocumentById(conflict.docId)
                     if (localDoc != null) {
+                        val downloadedFile = if (peer != null) {
+                            downloadFileFromPeer(peer, conflict.docId, localDoc.fileName, "")
+                        } else null
                         val updated = localDoc.copy(
                             title = conflict.remoteSummary.title,
                             sender = conflict.remoteSummary.sender,
-                            tags = conflict.remoteSummary.tags
+                            mainCategory = conflict.remoteSummary.mainCategory.ifBlank { localDoc.mainCategory },
+                            subCategory = conflict.remoteSummary.subCategory.ifBlank { localDoc.subCategory },
+                            tags = conflict.remoteSummary.tags,
+                            filePath = downloadedFile?.absolutePath ?: localDoc.filePath
                         )
                         database.documentDao().updateDocument(updated)
                     }
@@ -557,7 +587,8 @@ class P2pSyncEngine(
         file: File
     ): Boolean {
         val checksum = P2pSyncSecurityService.calculateFileSha256(file)
-        val url = "http://${peer.ipAddress}:${peer.port}/api/sync/upload_file?docId=${doc.id}&fileName=${doc.fileName}"
+        val encodedFileName = java.net.URLEncoder.encode(doc.fileName, "UTF-8")
+        val url = "http://${peer.ipAddress}:${peer.port}/api/sync/upload_file?docId=${doc.id}&fileName=$encodedFileName"
 
         val reqBody = file.asRequestBody("application/octet-stream".toMediaType())
         val req = Request.Builder()

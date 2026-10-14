@@ -16,7 +16,20 @@ interface ToolActionHandler {
     suspend fun onUpdateDocumentStatus(docId: String, newStatus: String): String
     suspend fun onOpenAppSection(section: String): String
     suspend fun onCreateFolder(folderName: String, parentCategory: String?): String
-    suspend fun onCreateCustomDashboardWidget(title: String, subtitle: String, widgetType: String, targetCategory: String, targetTag: String, numericLimit: Double, colorHex: Long): String
+    suspend fun onCreateCustomDashboardWidget(
+        title: String,
+        subtitle: String,
+        widgetType: String,
+        targetCategory: String,
+        targetTag: String,
+        numericLimit: Double,
+        colorHex: Long,
+        targetSubCategory: String = "",
+        targetCustomFieldName: String = "",
+        targetCustomFieldValue: String = "",
+        noteContent: String = "",
+        iconName: String = "analytics"
+    ): String
 }
 
 /**
@@ -156,6 +169,12 @@ class LlmToolRouter(
                 val targetTag = argsObj?.get("targetTag")?.jsonPrimitive?.contentOrNull ?: ""
                 val numericLimit = argsObj?.get("numericLimit")?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: 0.0
                 val colorHex = argsObj?.get("colorHex")?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0xFF2563EB
+                val targetSubCategory = argsObj?.get("targetSubCategory")?.jsonPrimitive?.contentOrNull ?: ""
+                val targetCustomFieldName = argsObj?.get("targetCustomFieldName")?.jsonPrimitive?.contentOrNull ?: ""
+                val targetCustomFieldValue = argsObj?.get("targetCustomFieldValue")?.jsonPrimitive?.contentOrNull ?: ""
+                val noteContent = argsObj?.get("noteContent")?.jsonPrimitive?.contentOrNull ?: ""
+                val iconName = argsObj?.get("iconName")?.jsonPrimitive?.contentOrNull ?: "analytics"
+
                 if (title.isNotBlank()) {
                     AppToolCall.CreateCustomDashboardWidget(
                         title = title.trim(),
@@ -164,7 +183,12 @@ class LlmToolRouter(
                         targetCategory = targetCategory.trim(),
                         targetTag = targetTag.trim(),
                         numericLimit = numericLimit,
-                        colorHex = colorHex
+                        colorHex = colorHex,
+                        targetSubCategory = targetSubCategory.trim(),
+                        targetCustomFieldName = targetCustomFieldName.trim(),
+                        targetCustomFieldValue = targetCustomFieldValue.trim(),
+                        noteContent = noteContent.trim(),
+                        iconName = iconName.trim()
                     )
                 } else {
                     AppToolCall.Unknown(toolName, argsObj.toString())
@@ -250,6 +274,12 @@ class LlmToolRouter(
                 val targetTag = argsObj?.optString("targetTag", "") ?: ""
                 val numericLimit = argsObj?.optDouble("numericLimit", 0.0) ?: 0.0
                 val colorHex = argsObj?.optLong("colorHex", 0xFF2563EBL) ?: 0xFF2563EBL
+                val targetSubCategory = argsObj?.optString("targetSubCategory", "") ?: ""
+                val targetCustomFieldName = argsObj?.optString("targetCustomFieldName", "") ?: ""
+                val targetCustomFieldValue = argsObj?.optString("targetCustomFieldValue", "") ?: ""
+                val noteContent = argsObj?.optString("noteContent", "") ?: ""
+                val iconName = argsObj?.optString("iconName", "analytics") ?: "analytics"
+
                 if (title.isNotBlank()) {
                     AppToolCall.CreateCustomDashboardWidget(
                         title = title.trim(),
@@ -258,7 +288,12 @@ class LlmToolRouter(
                         targetCategory = targetCategory.trim(),
                         targetTag = targetTag.trim(),
                         numericLimit = numericLimit,
-                        colorHex = colorHex
+                        colorHex = colorHex,
+                        targetSubCategory = targetSubCategory.trim(),
+                        targetCustomFieldName = targetCustomFieldName.trim(),
+                        targetCustomFieldValue = targetCustomFieldValue.trim(),
+                        noteContent = noteContent.trim(),
+                        iconName = iconName.trim()
                     )
                 } else {
                     AppToolCall.Unknown(toolName, argsObj?.toString() ?: "{}")
@@ -276,6 +311,11 @@ class LlmToolRouter(
     fun extractJsonString(raw: String): String? {
         var str = raw.trim()
 
+        // Filter out <think>...</think> blocks if present (for DeepSeek-R1 Distill)
+        if (str.contains("<think>") && str.contains("</think>")) {
+            str = str.substringAfter("</think>").trim()
+        }
+
         if (str.contains("```json")) {
             str = str.substringAfter("```json").substringBefore("```").trim()
         } else if (str.contains("```")) {
@@ -290,7 +330,10 @@ class LlmToolRouter(
         if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
             val candidate = str.substring(firstBrace, lastBrace + 1).trim()
             // Prüfe rudimentär, ob es nach Tool-Call aussieht
-            if (candidate.contains("\"name\"") || candidate.contains("\"tool\"") || candidate.contains("\"filterDocuments\"") || candidate.contains("\"updateDocumentStatus\"")) {
+            if (candidate.contains("\"name\"") || candidate.contains("\"tool\"") || 
+                candidate.contains("\"filterDocuments\"") || candidate.contains("\"updateDocumentStatus\"") ||
+                candidate.contains("\"createCustomDashboardWidget\"") || candidate.contains("\"createFolder\"") || 
+                candidate.contains("\"openAppSection\"")) {
                 return candidate
             }
         }
@@ -401,7 +444,12 @@ class LlmToolRouter(
                     targetCategory = toolCall.targetCategory,
                     targetTag = toolCall.targetTag,
                     numericLimit = toolCall.numericLimit,
-                    colorHex = toolCall.colorHex
+                    colorHex = toolCall.colorHex,
+                    targetSubCategory = toolCall.targetSubCategory,
+                    targetCustomFieldName = toolCall.targetCustomFieldName,
+                    targetCustomFieldValue = toolCall.targetCustomFieldValue,
+                    noteContent = toolCall.noteContent,
+                    iconName = toolCall.iconName
                 ) ?: "Smartes Dashboard-Element ‚${toolCall.title}‘ wurde erfolgreich erstellt!"
 
                 LlmRouterResult.ToolCallExecuted(

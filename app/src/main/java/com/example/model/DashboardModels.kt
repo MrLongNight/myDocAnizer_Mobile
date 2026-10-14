@@ -114,8 +114,11 @@ data class CustomDashboardWidget(
     val colorSkin: String = "MYDOCANIZER", // MYDOCANIZER, BLUE, EMERALD, AMBER, ROSE, PURPLE, SLATE
     val periodScope: ElementPeriodScope = ElementPeriodScope.ALL, // Element-spezifischer Zeitraum!
     val targetCategory: String = "",
+    val targetSubCategory: String = "",
     val targetTag: String = "",
-    val noteText: String = "",
+    val targetCustomFieldId: String = "",
+    val targetCustomFieldValue: String = "",
+    val noteContent: String = "",
     val checklistItems: List<ChecklistItem> = emptyList(),
     val targetAmount: Double = 0.0,
     val isEnabled: Boolean = true,
@@ -131,8 +134,11 @@ data class CustomDashboardWidget(
         put("colorSkin", colorSkin)
         put("periodScope", periodScope.name)
         put("targetCategory", targetCategory)
+        put("targetSubCategory", targetSubCategory)
         put("targetTag", targetTag)
-        put("noteText", noteText)
+        put("targetCustomFieldId", targetCustomFieldId)
+        put("targetCustomFieldValue", targetCustomFieldValue)
+        put("noteContent", noteContent)
         val itemsArray = JSONArray()
         checklistItems.forEach { itemsArray.put(it.toJson()) }
         put("checklistItems", itemsArray)
@@ -178,8 +184,11 @@ data class CustomDashboardWidget(
                 colorSkin = json.optString("colorSkin", "MYDOCANIZER"),
                 periodScope = scope,
                 targetCategory = json.optString("targetCategory", ""),
+                targetSubCategory = json.optString("targetSubCategory", ""),
                 targetTag = json.optString("targetTag", ""),
-                noteText = json.optString("noteText", ""),
+                targetCustomFieldId = json.optString("targetCustomFieldId", ""),
+                targetCustomFieldValue = json.optString("targetCustomFieldValue", ""),
+                noteContent = json.optString("noteContent", ""),
                 checklistItems = items,
                 targetAmount = json.optDouble("targetAmount", 0.0),
                 isEnabled = json.optBoolean("isEnabled", true),
