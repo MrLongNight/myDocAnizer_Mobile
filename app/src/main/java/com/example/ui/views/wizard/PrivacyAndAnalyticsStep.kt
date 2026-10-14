@@ -53,13 +53,13 @@ fun StepPrivacyAndAnalytics(viewModel: DocAnizerViewModel) {
             }
             Column {
                 Text(
-                    text = "Vielen Dank für dein Vertrauen!",
+                    text = "Datenschutz & Privatsphäre",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "Transparenz & Selbstbestimmung aus Überzeugung",
+                    text = "100% On-Device & Zero-Cloud: Deine Daten gehören dir",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

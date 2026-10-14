@@ -80,7 +80,8 @@ enum class VaultFactorType {
     PASSWORD,
     KEYFILE,
     PASSWORD_AND_KEYFILE,
-    PASSWORD_AND_TOTP;
+    PASSWORD_AND_TOTP,
+    PASSKEY;
 
     fun getDisplayName(): String = when (this) {
         NONE -> "Kein Faktor (Unverschlüsselt)"
@@ -88,6 +89,7 @@ enum class VaultFactorType {
         KEYFILE -> "Schlüsseldatei (.key)"
         PASSWORD_AND_KEYFILE -> "Master-Passwort + Schlüsseldatei"
         PASSWORD_AND_TOTP -> "Master-Passwort + Authenticator-App (TOTP)"
+        PASSKEY -> "Passkey (Google Password Manager / FIDO2)"
     }
 }
 

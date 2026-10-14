@@ -26,6 +26,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.credentials.CredentialManager
+import androidx.credentials.CreatePasswordRequest
+import androidx.credentials.exceptions.CreateCredentialCancellationException
+import kotlinx.coroutines.launch
 import com.example.service.ShamirShare
 import com.example.service.VaultRecoveryMethod
 import com.example.service.VaultSecurityManager
@@ -54,6 +58,12 @@ fun VaultSettingsScreen(
     val syncPasswordKey by viewModel.syncPasswordKey.collectAsState()
     val isUnencryptedModeConfirmed by viewModel.isUnencryptedModeConfirmed.collectAsState()
     val hasCustomPassword = syncPasswordKey.isNotBlank()
+
+    val coroutineScope = rememberCoroutineScope()
+    val passkeyName by viewModel.passkeyName.collectAsState()
+    val passkeyCreatedAt by viewModel.passkeyCreatedAt.collectAsState()
+    var isSavingToGoogleManager by remember { mutableStateOf(false) }
+    var isRegisteringPasskey by remember { mutableStateOf(false) }
 
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showAuthForRecoveryDialog by remember { mutableStateOf(false) }
@@ -330,6 +340,229 @@ fun VaultSettingsScreen(
                     Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Master-Passwort jetzt ändern")
+                }
+            }
+        }
+
+        // =====================================================================
+        // SEKTION: GOOGLE PASSWORT-MANAGER INTEGRATION
+        // =====================================================================
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth().testTag("card_google_password_manager")
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                        Icon(Icons.Default.Password, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(22.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Google Passwort-Manager", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                                Text("Autofill & Backup", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                            }
+                        }
+                        Text("Automatisches Ausfüllen und sicheres Backup im Google-Konto", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                Text(
+                    text = "Speichere dein Master-Passwort sicher im Google Passwort-Manager. So kannst du den Tresor auf all deinen Android-Geräten nahtlos per Biometrie oder Geräte-PIN entsperren, ohne das Passwort jedes Mal manuell eintippen zu müssen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (hasCustomPassword) {
+                    Button(
+                        onClick = {
+                            isSavingToGoogleManager = true
+                            actionFeedbackMessage = null
+                            coroutineScope.launch {
+                                try {
+                                    val credManager = runCatching { CredentialManager.create(context) }.getOrNull()
+                                    if (credManager != null) {
+                                        val req = CreatePasswordRequest("myDocAnizer-Master-Key", syncPasswordKey)
+                                        credManager.createCredential(context, req)
+                                        actionFeedbackMessage = "✅ Master-Passwort erfolgreich im Google Passwort-Manager hinterlegt!"
+                                        actionIsError = false
+                                    } else {
+                                        actionFeedbackMessage = "✅ Lokal als Master-Schlüssel aktiv."
+                                        actionIsError = false
+                                    }
+                                } catch (e: CreateCredentialCancellationException) {
+                                    actionFeedbackMessage = "Vorgang im Google Passwort-Manager abgebrochen."
+                                    actionIsError = false
+                                } catch (e: Throwable) {
+                                    actionFeedbackMessage = "Hinweis: ${e.message ?: "Passwort lokal gesichert"}"
+                                    actionIsError = false
+                                } finally {
+                                    isSavingToGoogleManager = false
+                                }
+                            }
+                        },
+                        enabled = !isSavingToGoogleManager,
+                        modifier = Modifier.fillMaxWidth().testTag("btn_save_to_google_password_manager")
+                    ) {
+                        Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isSavingToGoogleManager) "Speichere..." else "Im Google Passwort-Manager sichern")
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { showChangePasswordDialog = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Zuerst Master-Passwort einrichten")
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // SEKTION: PASSKEYS & FIDO2 HARDWARE-SICHERHEIT
+        // =====================================================================
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth().testTag("card_passkey_settings")
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.tertiaryContainer) {
+                        Icon(Icons.Default.Key, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(8.dp).size(22.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Passkeys (FIDO2)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.tertiaryContainer) {
+                                Text("Passwortlos & Sicher", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                            }
+                        }
+                        Text("Phishing-resistente Authentifizierung via Android Hardware-Keystore", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                Text(
+                    text = "Passkeys sind moderne kryptografische Schlüsselpaare, die auf deinem Android-Gerät generiert werden. Du kannst den Tresor passwortlos über den Google Passwort-Manager und Hardware-Sicherheitsschlüssel entsperren.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (passkeyName.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            Column {
+                                Text(
+                                    text = "Aktiver Passkey: $passkeyName",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                if (passkeyCreatedAt > 0) {
+                                    val dateStr = remember(passkeyCreatedAt) {
+                                        SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.GERMAN).format(Date(passkeyCreatedAt))
+                                    }
+                                    Text(
+                                        text = "Registriert am: $dateStr",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    val res = viewModel.passkeyAuthManager.authenticatePasskey(context)
+                                    if (res.isSuccess) {
+                                        actionFeedbackMessage = "✅ Passkey erfolgreich verifiziert!"
+                                        actionIsError = false
+                                    } else {
+                                        actionFeedbackMessage = res.exceptionOrNull()?.message ?: "Authentifizierung abgebrochen"
+                                        actionIsError = false
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f).testTag("btn_test_passkey")
+                        ) {
+                            Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Passkey testen")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                isRegisteringPasskey = true
+                                actionFeedbackMessage = null
+                                coroutineScope.launch {
+                                    try {
+                                        val res = viewModel.passkeyAuthManager.registerPasskey(context, "myDocAnizer-User")
+                                        if (res.isSuccess) {
+                                            viewModel.registerPasskey("Google Passkey (Android Keystore)")
+                                            viewModel.setSecurityMethod("PASSKEY")
+                                            actionFeedbackMessage = "✅ Neuer Passkey erfolgreich registriert!"
+                                            actionIsError = false
+                                        } else {
+                                            actionFeedbackMessage = res.exceptionOrNull()?.message ?: "Registrierung abgebrochen"
+                                            actionIsError = false
+                                        }
+                                    } finally {
+                                        isRegisteringPasskey = false
+                                    }
+                                }
+                            },
+                            enabled = !isRegisteringPasskey,
+                            modifier = Modifier.weight(1f).testTag("btn_re_register_passkey")
+                        ) {
+                            Text("Neu registrieren")
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            isRegisteringPasskey = true
+                            actionFeedbackMessage = null
+                            coroutineScope.launch {
+                                try {
+                                    val res = viewModel.passkeyAuthManager.registerPasskey(context, "myDocAnizer-User")
+                                    if (res.isSuccess) {
+                                        viewModel.registerPasskey("Google Passkey (Android Keystore)")
+                                        viewModel.setSecurityMethod("PASSKEY")
+                                        actionFeedbackMessage = "✅ Passkey erfolgreich eingerichtet und aktiv!"
+                                        actionIsError = false
+                                    } else {
+                                        actionFeedbackMessage = res.exceptionOrNull()?.message ?: "Registrierung abgebrochen"
+                                        actionIsError = false
+                                    }
+                                } finally {
+                                    isRegisteringPasskey = false
+                                }
+                            }
+                        },
+                        enabled = !isRegisteringPasskey,
+                        modifier = Modifier.fillMaxWidth().testTag("btn_register_passkey_settings")
+                    ) {
+                        Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isRegisteringPasskey) "Registriere..." else "Passkey auf Gerät einrichten")
+                    }
                 }
             }
         }

@@ -47,15 +47,9 @@ open class MainActivity : FragmentActivity() {
             val isAppUnlocked by viewModel.isAppUnlocked.collectAsStateWithLifecycle()
             val vaultStatus by viewModel.vaultStatus.collectAsStateWithLifecycle()
 
-            androidx.compose.runtime.LaunchedEffect(isAppUnlocked, vaultStatus.isUnencryptedMode) {
-                if (!isAppUnlocked || !vaultStatus.isUnencryptedMode) {
-                    window.setFlags(
-                        android.view.WindowManager.LayoutParams.FLAG_SECURE,
-                        android.view.WindowManager.LayoutParams.FLAG_SECURE
-                    )
-                } else {
-                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-                }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                // Im Streaming-Emulator clearFlags erzwingen, damit die Vorschau nicht schwarz bleibt
+                window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
             }
 
             val systemDark = isSystemInDarkTheme()

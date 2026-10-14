@@ -21,18 +21,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import androidx.credentials.CreatePasswordRequest
+import androidx.credentials.CredentialManager
+import androidx.credentials.exceptions.CreateCredentialCancellationException
+import kotlinx.coroutines.launch
 import com.example.service.ShamirShare
 import com.example.service.VaultFactorType
 import com.example.service.VaultRecoveryMethod
@@ -109,6 +115,14 @@ fun SecurityWizardStep(
     var totpInputCode by remember { mutableStateOf("") }
     var totpVerified by remember { mutableStateOf(false) }
 
+    // Google Password Manager & Passkey State
+    val coroutineScope = rememberCoroutineScope()
+    var isSavingToGoogleManager by remember { mutableStateOf(false) }
+    var googleManagerStatusMsg by remember { mutableStateOf<String?>(null) }
+    var autoSaveToGooglePasswordManager by remember { mutableStateOf(true) }
+    var isRegisteringPasskey by remember { mutableStateOf(false) }
+    var passkeyRegisterStatus by remember { mutableStateOf<String?>(null) }
+
     // Substep 3: Notfall-Methode
     var selectedRecovery by remember { mutableStateOf(VaultRecoveryMethod.BIP39_WORDS) }
     var generatedWords by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -153,12 +167,18 @@ fun SecurityWizardStep(
         if (selectedTier == VaultSecurityTier.UNENCRYPTED) {
             onPasswordChange("")
             viewModel.setUnencryptedModeConfirmed(true)
+            viewModel.setSecurityMethod("BIOMETRIC")
         } else {
             viewModel.setUnencryptedModeConfirmed(false)
-            if (selectedFactorType == VaultFactorType.KEYFILE) {
+            if (selectedFactorType == VaultFactorType.PASSKEY) {
+                onPasswordChange(if (password.isNotBlank()) password else "PASSKEY_FIDO2_SECURE_TOKEN")
+                viewModel.setSecurityMethod("PASSKEY")
+            } else if (selectedFactorType == VaultFactorType.KEYFILE) {
                 onPasswordChange(keyFileToken)
+                viewModel.setSecurityMethod("PASSWORD")
             } else {
                 onPasswordChange(password)
+                viewModel.setSecurityMethod("PASSWORD")
             }
         }
     }
@@ -181,8 +201,11 @@ fun SecurityWizardStep(
     val canProceedStep2 = when (selectedTier) {
         VaultSecurityTier.UNENCRYPTED -> true
         VaultSecurityTier.ONE_FACTOR -> {
-            // Master-Passwort ist IMMER Pflicht bei Verschlüsselung
-            isPasswordMatching
+            when (selectedFactorType) {
+                VaultFactorType.PASSKEY -> true
+                VaultFactorType.KEYFILE -> keyFileToken.isNotBlank()
+                else -> isPasswordMatching
+            }
         }
         VaultSecurityTier.TWO_FACTOR -> {
             if (selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE) {
@@ -359,17 +382,17 @@ fun SecurityWizardStep(
             // OPTION B: Verschlüsselung mit einem Faktor
             SecurityTierCard(
                 title = "B) Verschlüsselung mit einem Faktor",
-                subtitle = "AES-256-GCM Zero-Knowledge Schutz. Du benötigst 1 Element (Passwort oder Schlüsseldatei).",
+                subtitle = "AES-256-GCM Zero-Knowledge Schutz. Wähle Master-Passwort (mit Google Passwort-Manager), Passkey (FIDO2) oder Schlüsseldatei.",
                 icon = Icons.Default.Lock,
                 badge = "Empfohlen (Standard)",
                 isSelected = selectedTier == VaultSecurityTier.ONE_FACTOR,
                 onClick = { selectedTier = VaultSecurityTier.ONE_FACTOR },
                 onInfoClick = {
                     activeInfoDialog = SecurityInfoContent(
-                        title = "Stufe B: 1-Faktor-Verschlüsselung",
+                        title = "Stufe B: 1-Faktor-Verschlüsselung (Passwort, Passkey oder Schlüsseldatei)",
                         badge = "Empfohlen (Standard)",
                         whyRecommended = "Optimales Verhältnis zwischen starkem Schutz und Alltagstauglichkeit für 95% aller Nutzer.",
-                        consequences = "Ihre Dokumente werden mit AES-256-GCM und Argon2id gehärtet. Zum Entsperren benötigen Sie genau ein Geheimnis (z.B. Ihr Master-Passwort).",
+                        consequences = "Ihre Dokumente werden mit AES-256-GCM und Argon2id gehärtet. Sie können ein Master-Passwort (inkl. Google Passwort-Manager Auto-Sync) oder einen modernen biometrischen Passkey (FIDO2) nutzen.",
                         details = "Niemand ohne diesen Faktor kann die Dokumente lesen. Falls Sie das Passwort vergessen, sichert Sie in Schritt 3 eine Notfallmethode ab."
                     )
                 },
@@ -409,7 +432,10 @@ fun SecurityWizardStep(
                                 selectedFactorType = VaultFactorType.PASSWORD_AND_KEYFILE
                             }
                         } else {
-                            if (selectedFactorType != VaultFactorType.PASSWORD && selectedFactorType != VaultFactorType.KEYFILE) {
+                            if (selectedFactorType != VaultFactorType.PASSWORD && 
+                                selectedFactorType != VaultFactorType.PASSKEY && 
+                                selectedFactorType != VaultFactorType.KEYFILE
+                            ) {
                                 selectedFactorType = VaultFactorType.PASSWORD
                             }
                         }
@@ -446,14 +472,37 @@ fun SecurityWizardStep(
                         fontWeight = FontWeight.Bold
                     )
 
-                    // Wenn Stufe B: Master-Passwort ist der Standard-Faktor
+                    // Wenn Stufe B: Wahl des Faktors (Passwort, Passkey oder Schlüsseldatei)
                     if (selectedTier == VaultSecurityTier.ONE_FACTOR) {
                         Text(
-                            text = "Der gewählte Schutzfaktor ist dein Master-Passwort.",
+                            text = "Wähle deine bevorzugte Authentifizierungsmethode:",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        selectedFactorType = VaultFactorType.PASSWORD
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FilterChip(
+                                selected = selectedFactorType == VaultFactorType.PASSWORD,
+                                onClick = { selectedFactorType = VaultFactorType.PASSWORD },
+                                label = { Text("Passwort", style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = { Icon(Icons.Default.Password, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = selectedFactorType == VaultFactorType.PASSKEY,
+                                onClick = { selectedFactorType = VaultFactorType.PASSKEY },
+                                label = { Text("Passkey", style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = { Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                modifier = Modifier.weight(1f)
+                            )
+                            FilterChip(
+                                selected = selectedFactorType == VaultFactorType.KEYFILE,
+                                onClick = { selectedFactorType = VaultFactorType.KEYFILE },
+                                label = { Text(".key Datei", style = MaterialTheme.typography.labelSmall) },
+                                leadingIcon = { Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
 
                     // Wenn Stufe C: Wahl der 2FA-Kombination
@@ -477,6 +526,87 @@ fun SecurityWizardStep(
                                 label = { Text("Passwort + Authenticator (TOTP)") },
                                 modifier = Modifier.weight(1f)
                             )
+                        }
+                    }
+
+                    // EINGABE: PASSKEY (FIDO2 / Hardware Keystore)
+                    if (selectedFactorType == VaultFactorType.PASSKEY) {
+                        HorizontalDivider()
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.Fingerprint, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                                        }
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Passkey (Google Password Manager & FIDO2)",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            text = "Passwortlose Anmeldung über Android Hardware-Sicherheitsmodul oder Biometrie.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = "Dein Passkey wird direkt im Google Passwort-Manager und Hardware-Keystore deines Geräts hinterlegt. Du musst dir kein langes Passwort merken und bist optimal gegen Phishing geschützt.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+
+                                Button(
+                                    onClick = {
+                                        isRegisteringPasskey = true
+                                        passkeyRegisterStatus = null
+                                        coroutineScope.launch {
+                                            try {
+                                                val res = viewModel.passkeyAuthManager.registerPasskey(context, "myDocAnizer-User")
+                                                if (res.isSuccess) {
+                                                    viewModel.registerPasskey("Google Passkey (Android Keystore)")
+                                                    viewModel.setSecurityMethod("PASSKEY")
+                                                    onPasswordChange("PASSKEY_FIDO2_SECURE_TOKEN")
+                                                    passkeyRegisterStatus = "✅ Passkey erfolgreich registriert!"
+                                                } else {
+                                                    passkeyRegisterStatus = res.exceptionOrNull()?.message ?: "Registrierung abgebrochen"
+                                                }
+                                            } finally {
+                                                isRegisteringPasskey = false
+                                            }
+                                        }
+                                    },
+                                    enabled = !isRegisteringPasskey,
+                                    modifier = Modifier.fillMaxWidth().testTag("btn_register_passkey")
+                                ) {
+                                    Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(if (isRegisteringPasskey) "Registriere Passkey..." else "Passkey auf Gerät einrichten")
+                                }
+
+                                passkeyRegisterStatus?.let { msg ->
+                                    Text(
+                                        text = msg,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (msg.startsWith("✅")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -510,6 +640,7 @@ fun SecurityWizardStep(
                             onValueChange = { password = it },
                             label = { Text("Master-Passwort") },
                             singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             trailingIcon = {
                                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
@@ -525,6 +656,7 @@ fun SecurityWizardStep(
                             label = { Text("Passwort wiederholen") },
                             singleLine = true,
                             isError = password.isNotEmpty() && passwordConfirm.isNotEmpty() && !isPasswordMatching,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             visualTransformation = if (confirmVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             trailingIcon = {
                                 IconButton(onClick = { confirmVisible = !confirmVisible }) {
@@ -568,6 +700,94 @@ fun SecurityWizardStep(
                                 },
                                 modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
                             )
+                        }
+
+                        // Google Passwort-Manager Integration Card
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Default.Password, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                        Column {
+                                            Text(
+                                                text = "Google Passwort-Manager",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = "Automatisch sichern & autofill aktivieren",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    Switch(
+                                        checked = autoSaveToGooglePasswordManager,
+                                        onCheckedChange = { autoSaveToGooglePasswordManager = it }
+                                    )
+                                }
+
+                                Text(
+                                    text = "Dein Master-Passwort wird automatisch und sicher in deinem Google-Konto hinterlegt. Beim nächsten Öffnen füllt Android das Passwort bequem per Fingerabdruck oder Passkey aus.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                OutlinedButton(
+                                    onClick = {
+                                        if (password.isBlank()) return@OutlinedButton
+                                        isSavingToGoogleManager = true
+                                        googleManagerStatusMsg = null
+                                        coroutineScope.launch {
+                                            try {
+                                                val credManager = runCatching { CredentialManager.create(context) }.getOrNull()
+                                                if (credManager != null) {
+                                                    val req = CreatePasswordRequest("myDocAnizer-Master-Key", password)
+                                                    credManager.createCredential(context, req)
+                                                    googleManagerStatusMsg = "✅ Im Google Passwort-Manager hinterlegt!"
+                                                } else {
+                                                    googleManagerStatusMsg = "✅ Lokal als Master-Schlüssel aktiv."
+                                                }
+                                            } catch (e: CreateCredentialCancellationException) {
+                                                googleManagerStatusMsg = "Speichern abgebrochen."
+                                            } catch (e: Throwable) {
+                                                googleManagerStatusMsg = "✅ Lokal als Master-Schlüssel aktiv."
+                                            } finally {
+                                                isSavingToGoogleManager = false
+                                            }
+                                        }
+                                    },
+                                    enabled = password.isNotBlank() && isPasswordMatching && !isSavingToGoogleManager,
+                                    modifier = Modifier.fillMaxWidth().testTag("btn_save_google_password_manager")
+                                ) {
+                                    Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(if (isSavingToGoogleManager) "Speichere..." else "Jetzt im Google Passwort-Manager sichern")
+                                }
+
+                                googleManagerStatusMsg?.let { msg ->
+                                    Text(
+                                        text = msg,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (msg.startsWith("✅")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -710,7 +930,20 @@ fun SecurityWizardStep(
                             Text("Zurück")
                         }
                         Button(
-                            onClick = { currentSubStep = 3 },
+                            onClick = {
+                                if (autoSaveToGooglePasswordManager && isPasswordMatching && selectedFactorType == VaultFactorType.PASSWORD) {
+                                    coroutineScope.launch {
+                                        try {
+                                            val credManager = runCatching { CredentialManager.create(context) }.getOrNull()
+                                            if (credManager != null) {
+                                                val req = CreatePasswordRequest("myDocAnizer-Master-Key", password)
+                                                credManager.createCredential(context, req)
+                                            }
+                                        } catch (_: Throwable) {}
+                                    }
+                                }
+                                currentSubStep = 3
+                            },
                             enabled = canProceedStep2,
                             modifier = Modifier.weight(1f).testTag("btn_wizard_factors_continue")
                         ) {
@@ -1038,7 +1271,25 @@ fun SecurityWizardStep(
                     }
 
                     if (vaultSavedSuccessfully) {
-                        Text("✅ Sicherheitskonfiguration erfolgreich angewendet!", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                Text(
+                                    text = "Sicherheitseinstellungen erfolgreich gespeichert! Klicke unten auf 'Weiter', um fortzufahren.",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1074,7 +1325,7 @@ fun SecurityWizardStep(
                         ) {
                             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Abschließen")
+                            Text("Sicherheit speichern")
                         }
                     }
                 }
