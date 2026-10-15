@@ -39,17 +39,29 @@ fun AppearanceSettingsTab(
     ) {
         // Helligkeitsmodus
         Card(
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(10.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "Anzeigemodus (Helligkeit):",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Palette,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Anzeigemodus (Helligkeit):",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -58,22 +70,25 @@ fun AppearanceSettingsTab(
                     FilterChip(
                         selected = themeMode == "DARK",
                         onClick = { viewModel.setThemeMode("DARK") },
-                        label = { Text("Dunkel") },
-                        leadingIcon = { Icon(Icons.Default.DarkMode, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                        label = { Text("Dunkel", fontSize = 11.sp) },
+                        leadingIcon = { Icon(Icons.Default.DarkMode, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                        modifier = Modifier.weight(1f)
                     )
 
                     FilterChip(
                         selected = themeMode == "LIGHT",
                         onClick = { viewModel.setThemeMode("LIGHT") },
-                        label = { Text("Hell") },
-                        leadingIcon = { Icon(Icons.Default.LightMode, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                        label = { Text("Hell", fontSize = 11.sp) },
+                        leadingIcon = { Icon(Icons.Default.LightMode, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                        modifier = Modifier.weight(1f)
                     )
 
                     FilterChip(
                         selected = themeMode == "SYSTEM",
                         onClick = { viewModel.setThemeMode("SYSTEM") },
-                        label = { Text("System") },
-                        leadingIcon = { Icon(Icons.Default.SettingsBrightness, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                        label = { Text("System", fontSize = 11.sp) },
+                        leadingIcon = { Icon(Icons.Default.SettingsBrightness, contentDescription = null, modifier = Modifier.size(14.dp)) },
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -168,6 +183,59 @@ fun AppearanceSettingsTab(
                             }
                         }
                     }
+                }
+            }
+        }
+        // AI Agent Button Einstellungen
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Psychology,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("KI-Assistent Button anzeigen", style = MaterialTheme.typography.titleSmall)
+                        Text("Deaktiviere diesen Button, wenn du ihn nicht benötigst.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    val isEnabled by viewModel.enableAiAgentFab.collectAsState()
+                    Switch(
+                        checked = isEnabled,
+                        onCheckedChange = { viewModel.setEnableAiAgentFab(it) }
+                    )
+                }
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Animation,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("KI-Button Animation", style = MaterialTheme.typography.titleSmall)
+                        Text("Aktiviere das Pulsieren des Buttons.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    val isAnimEnabled by viewModel.enableAiAgentAnimation.collectAsState()
+                    Switch(
+                        checked = isAnimEnabled,
+                        onCheckedChange = { viewModel.setEnableAiAgentAnimation(it) }
+                    )
                 }
             }
         }

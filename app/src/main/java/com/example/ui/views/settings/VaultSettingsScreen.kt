@@ -31,8 +31,10 @@ import androidx.credentials.CreatePasswordRequest
 import androidx.credentials.exceptions.CreateCredentialCancellationException
 import kotlinx.coroutines.launch
 import com.example.service.ShamirShare
+import com.example.service.VaultFactorType
 import com.example.service.VaultRecoveryMethod
 import com.example.service.VaultSecurityManager
+import com.example.service.VaultSecurityTier
 import com.example.service.VaultStatus
 import com.example.ui.DocAnizerViewModel
 import java.io.File
@@ -287,6 +289,103 @@ fun VaultSettingsScreen(
                     Column(horizontalAlignment = Alignment.End) {
                         Text("Recovery-Status:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(vaultStatus.recoveryStatusLabel, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+
+        // Aktive Faktoren Übersicht Card
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth().testTag("card_active_factors_summary")
+        ) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+                        Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(6.dp).size(18.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Konfigurierte Sicherheitsfaktoren im Dokumenten Tresor", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = when (vaultStatus.securityTier) {
+                                VaultSecurityTier.TWO_FACTOR -> "Stufe C: 2-Faktor-Authentifizierung (2FA) aktiv"
+                                VaultSecurityTier.ONE_FACTOR -> "Stufe B: 1-Faktor-Verschlüsselung aktiv"
+                                VaultSecurityTier.UNENCRYPTED -> "Stufe A: Unverschlüsselter Modus"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // Faktor Status Items
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Master-Passwort Status
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, if (hasCustomPassword) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(
+                                imageVector = if (hasCustomPassword) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                contentDescription = null,
+                                tint = if (hasCustomPassword) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Faktor 1: Master-Passwort (Argon2id)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                Text(if (hasCustomPassword) "Eingerichtet & Zero-Knowledge aktiv" else "Nicht vergeben (Unverschlüsselt)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+
+                    // Passkey Status
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, if (passkeyName.isNotBlank()) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(
+                                imageVector = if (passkeyName.isNotBlank()) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                contentDescription = null,
+                                tint = if (passkeyName.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Passkey (FIDO2 Hardware KeyStore)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                Text(if (passkeyName.isNotBlank()) "Registriert: $passkeyName" else "Kein Passkey registriert", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+
+                    // Biometrie 2FA Status
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, if (vaultStatus.biometric2FaEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(
+                                imageVector = if (vaultStatus.biometric2FaEnabled) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                contentDescription = null,
+                                tint = if (vaultStatus.biometric2FaEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("2. Faktor via Biometrie (Android KeyStore)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                Text(if (vaultStatus.biometric2FaEnabled) "Aktiv für automatische Entsperrung" else "Inaktiv", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
                 }
             }

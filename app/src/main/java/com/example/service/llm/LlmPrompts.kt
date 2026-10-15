@@ -176,7 +176,7 @@ object LlmPrompts {
             lower.contains("aok") -> return "AOK"
             lower.contains("sparkasse") -> return "Sparkasse"
             lower.contains("volksbank") || lower.contains("raiffeisenbank") -> return "Volksbank"
-            lower.contains("ing") -> return "ING"
+            lower.contains("ing-diba") || lower.contains("ing diba") || Regex("(^|[^a-zäöüß])ing([^a-zäöüß]|$)", RegexOption.IGNORE_CASE).containsMatchIn(lower) -> return "ING"
             lower.contains("dkb") -> return "DKB"
             lower.contains("commerzbank") -> return "Commerzbank"
             lower.contains("deutsche bank") -> return "Deutsche Bank"

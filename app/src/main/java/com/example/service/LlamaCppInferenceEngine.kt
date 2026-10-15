@@ -22,18 +22,21 @@ enum class DepartmentTeam(val id: String, val displayName: String, val shortName
     companion object {
         fun dispatch(docTypeOrText: String?): DepartmentTeam {
             val t = (docTypeOrText ?: "").lowercase().trim()
+            val isExplicitInvoiceOrTax = t.contains("rechnung") || t.contains("quittung") ||
+                t.contains("kassenbon") || t.contains("steuerbescheid") ||
+                t.contains("gehaltsabrechnung") || t.contains("lohnabrechnung") || t.contains("kontoauszug")
+            val isExplicitContract = t.contains("vertrag") || t.contains("police") ||
+                t.contains("versicherungsschein") || t.contains("kündigung") ||
+                t.contains("mitgliedschaft") || t.contains("leasing") || t.contains("miet") ||
+                t.contains("vereinbarung") || t.contains("haftpflicht")
             return when {
-                t.contains("rechnung") || t.contains("beleg") || t.contains("quittung") ||
-                t.contains("kassenbon") || t.contains("gehalt") || t.contains("entgelt") ||
-                t.contains("lohn") || t.contains("steuer") || t.contains("finanz") ||
-                t.contains("auszug") || t.contains("gutschrift") || t.contains("abschlag") ||
-                t.contains("strom") || t.contains("gas") || t.contains("energie") -> FINANCE
-
-                t.contains("vertrag") || t.contains("police") || t.contains("versicherung") ||
-                t.contains("kündigung") || t.contains("mitglied") || t.contains("abo") ||
-                t.contains("leasing") || t.contains("miet") || t.contains("vereinbarung") ||
-                t.contains("haftpflicht") || t.contains("kfz") -> CONTRACTS
-
+                isExplicitContract && !isExplicitInvoiceOrTax -> CONTRACTS
+                isExplicitInvoiceOrTax || t.contains("beleg") || t.contains("gehalt") ||
+                t.contains("entgelt") || t.contains("lohn") || t.contains("steuer") ||
+                t.contains("finanz") || t.contains("auszug") || t.contains("gutschrift") ||
+                t.contains("abschlag") || t.contains("strom") || t.contains("gas") ||
+                t.contains("energie") -> FINANCE
+                isExplicitContract || t.contains("versicherung") || t.contains("abo") || t.contains("kfz") -> CONTRACTS
                 else -> ADMINISTRATION
             }
         }

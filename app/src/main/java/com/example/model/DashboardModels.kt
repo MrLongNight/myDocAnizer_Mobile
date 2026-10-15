@@ -82,12 +82,18 @@ enum class CustomDashboardWidgetType(val label: String, val description: String,
 data class ChecklistItem(
     val id: String = UUID.randomUUID().toString(),
     val text: String,
-    val isDone: Boolean = false
+    val isDone: Boolean = false,
+    val linkedDocId: Long? = null,
+    val linkedDocTitle: String? = null,
+    val dueDate: Long? = null
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
         put("text", text)
         put("isDone", isDone)
+        if (linkedDocId != null) put("linkedDocId", linkedDocId)
+        if (!linkedDocTitle.isNullOrBlank()) put("linkedDocTitle", linkedDocTitle)
+        if (dueDate != null) put("dueDate", dueDate)
     }
 
     companion object {
@@ -95,7 +101,10 @@ data class ChecklistItem(
             return ChecklistItem(
                 id = json.optString("id", UUID.randomUUID().toString()),
                 text = json.optString("text", ""),
-                isDone = json.optBoolean("isDone", false)
+                isDone = json.optBoolean("isDone", false),
+                linkedDocId = if (json.has("linkedDocId")) json.optLong("linkedDocId") else null,
+                linkedDocTitle = if (json.has("linkedDocTitle")) json.optString("linkedDocTitle") else null,
+                dueDate = if (json.has("dueDate")) json.optLong("dueDate") else null
             )
         }
     }

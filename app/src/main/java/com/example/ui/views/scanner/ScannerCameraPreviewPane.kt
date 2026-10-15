@@ -25,6 +25,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -81,6 +84,8 @@ fun ScannerCameraPreviewPane(
     onReportElementBounds: ((step: Int, bounds: TourElementBounds) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    var isDocumentDetected by remember { mutableStateOf(true) }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -99,7 +104,10 @@ fun ScannerCameraPreviewPane(
                     }
                     .testTag("camera_preview_surface"),
                 flashOption = flashOption,
-                onFrameAnalysis = onFrameAnalysis,
+                onFrameAnalysis = { analysis ->
+                    isDocumentDetected = analysis.isDocumentDetected
+                    onFrameAnalysis(analysis)
+                },
                 onImageCaptureCreated = onImageCaptureCreated,
                 onCameraAvailableChanged = onCameraAvailableChanged
             )
@@ -177,18 +185,78 @@ fun ScannerCameraPreviewPane(
             val padV = size.height * 0.12f
             val boxWidth = size.width - (padH * 2)
             val boxHeight = size.height - (padV * 2) - 40f
-            val bracketLen = 42f
-            val strokeW = 4.5f
-            val cornerColor = Color(0xFF38BDF8)
-            // 4 Eck-Klammern (je 2 Schenkel)
-            drawLine(cornerColor, Offset(padH, padV), Offset(padH + bracketLen, padV), strokeW)
-            drawLine(cornerColor, Offset(padH, padV), Offset(padH, padV + bracketLen), strokeW)
-            drawLine(cornerColor, Offset(padH + boxWidth, padV), Offset(padH + boxWidth - bracketLen, padV), strokeW)
-            drawLine(cornerColor, Offset(padH + boxWidth, padV), Offset(padH + boxWidth, padV + bracketLen), strokeW)
-            drawLine(cornerColor, Offset(padH, padV + boxHeight), Offset(padH + bracketLen, padV + boxHeight), strokeW)
-            drawLine(cornerColor, Offset(padH, padV + boxHeight), Offset(padH, padV + boxHeight - bracketLen), strokeW)
-            drawLine(cornerColor, Offset(padH + boxWidth, padV + boxHeight), Offset(padH + boxWidth - bracketLen, padV + boxHeight), strokeW)
-            drawLine(cornerColor, Offset(padH + boxWidth, padV + boxHeight), Offset(padH + boxWidth, padV + boxHeight - bracketLen), strokeW)
+            val cornerRadius = 28f
+            val cornerColor = if (isDocumentDetected && isPhoneInWaage) Color(0xFF10B981) else if (isDocumentDetected) Color(0xFF38BDF8) else Color(0xFF64748B)
+            val strokeW = if (isDocumentDetected) 3.5f else 2.5f
+
+            // Dokumentenrahmen mit abgerundeten Bézier-Ecken
+            val docFramePath = Path().apply {
+                // Top edge
+                moveTo(padH + cornerRadius, padV)
+                lineTo(padH + boxWidth - cornerRadius, padV)
+                // Top-Right Bézier corner
+                quadraticTo(padH + boxWidth, padV, padH + boxWidth, padV + cornerRadius)
+                // Right edge
+                lineTo(padH + boxWidth, padV + boxHeight - cornerRadius)
+                // Bottom-Right Bézier corner
+                quadraticTo(padH + boxWidth, padV + boxHeight, padH + boxWidth - cornerRadius, padV + boxHeight)
+                // Bottom edge
+                lineTo(padH + cornerRadius, padV + boxHeight)
+                // Bottom-Left Bézier corner
+                quadraticTo(padH, padV + boxHeight, padH, padV + boxHeight - cornerRadius)
+                // Left edge
+                lineTo(padH, padV + cornerRadius)
+                // Top-Left Bézier corner
+                quadraticTo(padH, padV, padH + cornerRadius, padV)
+                close()
+            }
+
+            // Subtile Flächenfüllung bei erkanntem Dokument
+            if (isDocumentDetected) {
+                drawPath(
+                    path = docFramePath,
+                    color = cornerColor.copy(alpha = 0.08f)
+                )
+            }
+
+            // Äußerer Glüh-Effekt
+            drawPath(
+                path = docFramePath,
+                color = cornerColor.copy(alpha = 0.35f),
+                style = Stroke(width = strokeW + 4f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+
+            // Haupt-Rahmenlinie
+            drawPath(
+                path = docFramePath,
+                color = cornerColor,
+                style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+
+            // 4 Bézier-Eckpunkte mit visuellen Ankerpunkten hervorheben
+            val corners = listOf(
+                Offset(padH, padV),
+                Offset(padH + boxWidth, padV),
+                Offset(padH + boxWidth, padV + boxHeight),
+                Offset(padH, padV + boxHeight)
+            )
+            corners.forEach { pt ->
+                drawCircle(
+                    color = cornerColor.copy(alpha = 0.4f),
+                    radius = 9f,
+                    center = pt
+                )
+                drawCircle(
+                    color = Color.White,
+                    radius = 5.5f,
+                    center = pt
+                )
+                drawCircle(
+                    color = cornerColor,
+                    radius = 3.5f,
+                    center = pt
+                )
+            }
             // Laser
             val currentLaserY = padV + (boxHeight * laserProgress)
             drawLine(

@@ -15,6 +15,7 @@ import com.example.service.llm.LlmPrompts
 import com.example.service.llm.LlmToolExecutor
 import com.example.service.llm.CustomFieldHarmonizer
 import com.example.data.AppDatabase
+import android.os.PowerManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +27,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
@@ -248,17 +252,21 @@ class LlmService(private val context: Context) {
                         it.name.contains(model.id, ignoreCase = true) 
                     }
 
+                    val isJobActive = activeDownloadJobs[model.id]?.isActive == true
                     if (foundFile != null && foundFile.exists()) {
                         linkedCount++
                         model.copy(
                             isDownloaded = true,
                             localFileSizeBytes = foundFile.length(),
-                            downloadProgress = 1.0f
+                            downloadProgress = 1.0f,
+                            isDownloading = false
                         )
                     } else {
                         model.copy(
                             isDownloaded = isModelPhysicallyOnDisk(model.fileName),
-                            localFileSizeBytes = getModelDiskSize(model.fileName)
+                            localFileSizeBytes = getModelDiskSize(model.fileName),
+                            isDownloading = if (isJobActive) true else model.isDownloading,
+                            downloadProgress = if (isJobActive) model.downloadProgress else if (isModelPhysicallyOnDisk(model.fileName)) 1.0f else model.downloadProgress
                         )
                     }
                 }
@@ -907,6 +915,9 @@ class LlmService(private val context: Context) {
 
     private val _availableModels = MutableStateFlow(createInitialModels(_deviceHardware.value))
     val availableModels: StateFlow<List<HuggingFaceModelInfo>> = _availableModels.asStateFlow()
+    val activeDownloadingModel: StateFlow<HuggingFaceModelInfo?> = _availableModels.map { list ->
+        list.firstOrNull { it.isDownloading }
+    }.stateIn(downloadScope, SharingStarted.Eagerly, null)
 
     private val _isCheckingNewModels = MutableStateFlow(false)
     val isCheckingNewModels: StateFlow<Boolean> = _isCheckingNewModels.asStateFlow()
@@ -943,10 +954,13 @@ class LlmService(private val context: Context) {
             currentModels.map {
                 val diskSize = getModelDiskSize(it.fileName)
                 val onDisk = diskSize > 1024 * 1024
+                val isJobActive = activeDownloadJobs[it.id]?.isActive == true
                 it.copy(
                     compatibilityLevel = calculateCompatibility(it.recommendedRamGb, hw),
                     isDownloaded = onDisk,
-                    localFileSizeBytes = diskSize
+                    localFileSizeBytes = diskSize,
+                    isDownloading = if (isJobActive) true else it.isDownloading,
+                    downloadProgress = if (isJobActive) it.downloadProgress else if (onDisk) 1.0f else it.downloadProgress
                 )
             }
         }
@@ -1010,6 +1024,12 @@ class LlmService(private val context: Context) {
         if (existingJob != null && existingJob.isActive) {
             return existingJob
         }
+        AppAuditLogger.log(
+            category = LogCategory.AI_INFERENCE,
+            tag = "ModelManager",
+            message = "Benutzer hat Hintergrund-Download für Modell '$modelId' gestartet",
+            details = "Modell-ID: $modelId"
+        )
         val job = downloadScope.launch {
             executeDownload(modelId, onProgress)
         }
@@ -1064,176 +1084,215 @@ class LlmService(private val context: Context) {
         val destFile = File(safeDir, fileName)
         val tempFile = File(safeDir, "${fileName}.part")
 
-        val existingBytes = if (tempFile.exists()) tempFile.length() else 0L
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val wakeLock = try {
+            powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "myDocAnizer:LlmModelDownload")?.apply {
+                acquire(60 * 60 * 1000L)
+            }
+        } catch (_: Throwable) { null }
 
-        _availableModels.value = _availableModels.value.map {
-            if (it.id == modelId) it.copy(
-                isDownloading = true,
-                downloadProgress = if (targetModel.downloadSizeMb > 0 && existingBytes > 0) {
-                    (existingBytes.toFloat() / (targetModel.downloadSizeMb * 1024L * 1024L)).coerceIn(0f, 0.99f)
-                } else 0f,
-                downloadedBytes = existingBytes
-            ) else it
-        }
-
-        AppAuditLogger.log(
-            category = LogCategory.AI_INFERENCE,
-            tag = "ModelManager",
-            message = "Starte Download von '${targetModel.name}'",
-            details = "URL: ${targetModel.downloadUrl} | Ziel: ${destFile.absolutePath} | Bisher geladen: $existingBytes Bytes"
-        )
+        var retryCount = 0
+        val maxRetries = 5
+        var downloadSuccess = false
 
         try {
-            val requestBuilder = Request.Builder()
-                .url(targetModel.downloadUrl)
-                .header("User-Agent", "myDocAnizer-Mobile/2.0.0 (Android; GGUF Downloader)")
+            while (!downloadSuccess && retryCount < maxRetries && kotlinx.coroutines.currentCoroutineContext().isActive) {
+                try {
+                    val existingBytes = if (tempFile.exists()) tempFile.length() else 0L
 
-            if (existingBytes > 0) {
-                requestBuilder.header("Range", "bytes=$existingBytes-")
-            }
-
-            val request = requestBuilder.build()
-
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful && response.code != 416) {
-                    throw IOException("Server-Antwort: HTTP ${response.code} ${response.message}")
-                }
-
-                // Falls 416 Range Not Satisfiable: Teildatei möglicherweise bereits vollständig
-                if (response.code == 416) {
-                    val expectedMinBytes = (targetModel.downloadSizeMb * 1024L * 1024L * 0.9).toLong()
-                    if (existingBytes >= expectedMinBytes && existingBytes > 1024) {
-                        if (destFile.exists()) destFile.delete()
-                        tempFile.renameTo(destFile)
-                        _availableModels.value = _availableModels.value.map {
+                    _availableModels.update { currentList ->
+                        currentList.map {
                             if (it.id == modelId) it.copy(
-                                isDownloading = false,
-                                isDownloaded = true,
-                                downloadProgress = 1.0f,
-                                localFileSizeBytes = destFile.length()
+                                isDownloading = true,
+                                downloadProgress = if (targetModel.downloadSizeMb > 0 && existingBytes > 0) {
+                                    (existingBytes.toFloat() / (targetModel.downloadSizeMb * 1024L * 1024L)).coerceIn(0f, 0.99f)
+                                } else it.downloadProgress,
+                                downloadedBytes = existingBytes
                             ) else it
                         }
-                        return@withContext
-                    } else {
-                        try { tempFile.delete() } catch (_: Throwable) {}
-                        throw IOException("HTTP 416: Ungültiger Download-Bereich, Teildatei zurückgesetzt")
                     }
-                }
 
-                val body = response.body ?: throw IOException("Leere Server-Antwort von HuggingFace")
-                val isPartial = response.code == 206
-                val contentLength = body.contentLength()
-                val totalBytes = if (isPartial && contentLength > 0) {
-                    existingBytes + contentLength
-                } else if (contentLength > 0) {
-                    contentLength
-                } else {
-                    targetModel.downloadSizeMb * 1024L * 1024L
-                }
-
-                var bytesRead = if (isPartial) existingBytes else 0L
-
-                java.io.FileOutputStream(tempFile, isPartial).use { output ->
-                    body.byteStream().use { input ->
-                        val buffer = ByteArray(64 * 1024)
-                        var read: Int
-                        var lastProgressUpdate = 0L
-
-                        while (input.read(buffer).also { read = it } != -1) {
-                            if (!kotlinx.coroutines.currentCoroutineContext().isActive) {
-                                throw CancellationException("Download abgebrochen oder pausiert")
-                            }
-                            output.write(buffer, 0, read)
-                            bytesRead += read
-
-                            val now = System.currentTimeMillis()
-                            if (now - lastProgressUpdate > 250L || bytesRead == totalBytes) {
-                                lastProgressUpdate = now
-                                val progress = if (totalBytes > 0) (bytesRead.toFloat() / totalBytes).coerceIn(0f, 1f) else 0.5f
-                                onProgress(progress)
-
-                                _availableModels.value = _availableModels.value.map {
-                                    if (it.id == modelId) it.copy(
-                                        downloadProgress = progress,
-                                        downloadedBytes = bytesRead,
-                                        totalBytes = totalBytes
-                                    ) else it
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // GGUF-Signatur verifizieren (Magic Bytes: 'G', 'G', 'U', 'F')
-                if (tempFile.length() >= 4) {
-                    val header = ByteArray(4)
-                    tempFile.inputStream().use { it.read(header) }
-                    val isGguf = header[0] == 0x47.toByte() && header[1] == 0x47.toByte() &&
-                                 header[2] == 0x55.toByte() && header[3] == 0x46.toByte()
                     AppAuditLogger.log(
                         category = LogCategory.AI_INFERENCE,
                         tag = "ModelManager",
-                        message = if (isGguf) "GGUF-Signatur erfolgreich verifiziert" else "Warnung: Datei hat keine standardisierte GGUF-Signatur",
-                        details = "Größe: ${tempFile.length()} Bytes (${tempFile.length() / (1024 * 1024)} MB)"
+                        message = "Starte/Fortsetze Download von '${targetModel.name}' (Versuch ${retryCount + 1}/$maxRetries)",
+                        details = "URL: ${targetModel.downloadUrl} | Ziel: ${destFile.absolutePath} | Bisher geladen: $existingBytes Bytes"
                     )
-                }
 
-                if (destFile.exists()) destFile.delete()
-                tempFile.renameTo(destFile)
+                    val requestBuilder = Request.Builder()
+                        .url(targetModel.downloadUrl)
+                        .header("User-Agent", "myDocAnizer-Mobile/2.0.0 (Android; GGUF Downloader)")
 
-                // Kopie im persistenten öffentlichen Download-Ordner anlegen (falls möglich)
-                try {
-                    val publicDownloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                    if (publicDownloads != null) {
-                        val persistentFolder = File(publicDownloads, "myDocAnizer_Models")
-                        if (persistentFolder.exists() || persistentFolder.mkdirs()) {
-                            val persistentBackup = File(persistentFolder, destFile.name)
-                            destFile.copyTo(persistentBackup, overwrite = true)
+                    if (existingBytes > 0) {
+                        requestBuilder.header("Range", "bytes=$existingBytes-")
+                    }
+
+                    val request = requestBuilder.build()
+
+                    httpClient.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful && response.code != 416) {
+                            throw IOException("Server-Antwort: HTTP ${response.code} ${response.message}")
+                        }
+
+                        // Falls 416 Range Not Satisfiable: Teildatei möglicherweise bereits vollständig
+                        if (response.code == 416) {
+                            val expectedMinBytes = (targetModel.downloadSizeMb * 1024L * 1024L * 0.9).toLong()
+                            if (existingBytes >= expectedMinBytes && existingBytes > 1024) {
+                                if (destFile.exists()) destFile.delete()
+                                tempFile.renameTo(destFile)
+                                _availableModels.update { currentList ->
+                                    currentList.map {
+                                        if (it.id == modelId) it.copy(
+                                            isDownloading = false,
+                                            isDownloaded = true,
+                                            downloadProgress = 1.0f,
+                                            localFileSizeBytes = destFile.length()
+                                        ) else it
+                                    }
+                                }
+                                downloadSuccess = true
+                                return@withContext
+                            } else {
+                                try { tempFile.delete() } catch (_: Throwable) {}
+                                throw IOException("HTTP 416: Ungültiger Download-Bereich, Teildatei zurückgesetzt")
+                            }
+                        }
+
+                        val body = response.body ?: throw IOException("Leere Server-Antwort von HuggingFace")
+                        val isPartial = response.code == 206
+                        val contentLength = body.contentLength()
+                        val totalBytes = if (isPartial && contentLength > 0) {
+                            existingBytes + contentLength
+                        } else if (contentLength > 0) {
+                            contentLength
+                        } else {
+                            targetModel.downloadSizeMb * 1024L * 1024L
+                        }
+
+                        var bytesRead = if (isPartial) existingBytes else 0L
+
+                        java.io.FileOutputStream(tempFile, isPartial).use { output ->
+                            body.byteStream().use { input ->
+                                val buffer = ByteArray(64 * 1024)
+                                var read: Int
+                                var lastProgressUpdate = 0L
+
+                                while (input.read(buffer).also { read = it } != -1) {
+                                    if (!kotlinx.coroutines.currentCoroutineContext().isActive) {
+                                        throw CancellationException("Download abgebrochen oder pausiert")
+                                    }
+                                    output.write(buffer, 0, read)
+                                    bytesRead += read
+
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastProgressUpdate > 300L || bytesRead == totalBytes) {
+                                        lastProgressUpdate = now
+                                        val progress = if (totalBytes > 0) (bytesRead.toFloat() / totalBytes).coerceIn(0f, 1f) else 0.5f
+                                        onProgress(progress)
+
+                                        _availableModels.update { currentList ->
+                                            currentList.map {
+                                                if (it.id == modelId) it.copy(
+                                                    isDownloading = true,
+                                                    downloadProgress = progress,
+                                                    downloadedBytes = bytesRead,
+                                                    totalBytes = totalBytes
+                                                ) else it
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // GGUF-Signatur verifizieren
+                        if (tempFile.length() >= 4) {
+                            val header = ByteArray(4)
+                            tempFile.inputStream().use { it.read(header) }
+                            val isGguf = header[0] == 0x47.toByte() && header[1] == 0x47.toByte() &&
+                                         header[2] == 0x55.toByte() && header[3] == 0x46.toByte()
+                            AppAuditLogger.log(
+                                category = LogCategory.AI_INFERENCE,
+                                tag = "ModelManager",
+                                message = if (isGguf) "GGUF-Signatur erfolgreich verifiziert" else "Warnung: Keine GGUF-Signatur",
+                                details = "Größe: ${tempFile.length()} Bytes"
+                            )
+                        }
+
+                        if (destFile.exists()) destFile.delete()
+                        tempFile.renameTo(destFile)
+
+                        // Kopie im persistenten öffentlichen Download-Ordner anlegen
+                        try {
+                            val publicDownloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                            if (publicDownloads != null) {
+                                val persistentFolder = File(publicDownloads, "myDocAnizer_Models")
+                                if (persistentFolder.exists() || persistentFolder.mkdirs()) {
+                                    val persistentBackup = File(persistentFolder, destFile.name)
+                                    destFile.copyTo(persistentBackup, overwrite = true)
+                                }
+                            }
+                        } catch (_: Throwable) {}
+
+                        _availableModels.update { currentList ->
+                            currentList.map {
+                                if (it.id == modelId) it.copy(
+                                    isDownloading = false,
+                                    isDownloaded = true,
+                                    downloadProgress = 1.0f,
+                                    localFileSizeBytes = destFile.length()
+                                ) else it
+                            }
+                        }
+
+                        downloadSuccess = true
+                        AppAuditLogger.log(
+                            category = LogCategory.AI_INFERENCE,
+                            tag = "ModelManager",
+                            message = "Download von '${targetModel.name}' erfolgreich abgeschlossen",
+                            details = "Gespeichert auf Gerät: ${destFile.absolutePath}"
+                        )
+                    }
+                } catch (c: CancellationException) {
+                    _availableModels.update { currentList ->
+                        currentList.map {
+                            if (it.id == modelId) it.copy(isDownloading = false) else it
                         }
                     }
-                } catch (_: Throwable) {}
-
-                _availableModels.value = _availableModels.value.map {
-                    if (it.id == modelId) it.copy(
-                        isDownloading = false,
-                        isDownloaded = true,
-                        downloadProgress = 1.0f,
-                        localFileSizeBytes = destFile.length()
-                    ) else it
+                    AppAuditLogger.log(
+                        category = LogCategory.AI_INFERENCE,
+                        tag = "ModelManager",
+                        message = "Download von '${targetModel.name}' pausiert/abgebrochen",
+                        details = "Teildatei: ${tempFile.length()} Bytes"
+                    )
+                    break
+                } catch (e: Throwable) {
+                    retryCount++
+                    AppAuditLogger.log(
+                        category = LogCategory.AI_INFERENCE,
+                        tag = "ModelManager",
+                        message = "Unterbrechung bei '${targetModel.name}': ${e.message}. Versuch $retryCount/$maxRetries...",
+                        details = e.stackTraceToString().take(300),
+                        isError = true
+                    )
+                    if (retryCount < maxRetries && kotlinx.coroutines.currentCoroutineContext().isActive) {
+                        kotlinx.coroutines.delay(1500L)
+                    } else {
+                        _availableModels.update { currentList ->
+                            currentList.map {
+                                if (it.id == modelId) it.copy(isDownloading = false) else it
+                            }
+                        }
+                    }
                 }
-
-                AppAuditLogger.log(
-                    category = LogCategory.AI_INFERENCE,
-                    tag = "ModelManager",
-                    message = "Download von '${targetModel.name}' erfolgreich abgeschlossen",
-                    details = "Gespeichert auf Gerät: ${destFile.absolutePath} (${destFile.length() / (1024 * 1024)} MB)"
-                )
             }
-        } catch (c: CancellationException) {
-            // Teildatei (.part) wird NICHT gelöscht, damit der Download später nahtlos fortgesetzt werden kann
-            _availableModels.value = _availableModels.value.map {
-                if (it.id == modelId) it.copy(isDownloading = false) else it
-            }
-            AppAuditLogger.log(
-                category = LogCategory.AI_INFERENCE,
-                tag = "ModelManager",
-                message = "Download von '${targetModel.name}' pausiert oder abgebrochen (Fortschritt beibehalten)",
-                details = "Vorhandene Teildatei: ${tempFile.length()} Bytes"
-            )
-        } catch (e: Throwable) {
-            // Teildatei beibehalten für HTTP-Range Wiederaufnahme
-            _availableModels.value = _availableModels.value.map {
-                if (it.id == modelId) it.copy(isDownloading = false) else it
-            }
-            AppAuditLogger.log(
-                category = LogCategory.AI_INFERENCE,
-                tag = "ModelManager",
-                message = "Netzwerkunterbrechung beim Modell-Download von '${targetModel.name}': ${e.message}",
-                details = e.stackTraceToString().take(300),
-                isError = true
-            )
         } finally {
             activeDownloadJobs.remove(modelId)
+            try {
+                if (wakeLock?.isHeld == true) {
+                    wakeLock.release()
+                }
+            } catch (_: Throwable) {}
         }
     }
 
@@ -2321,6 +2380,12 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
     ): String = withContext(Dispatchers.Default) {
         _isGenerating.value = true
         try {
+            AppAuditLogger.log(
+                category = LogCategory.AI_INFERENCE,
+                tag = "DocumentAssistant",
+                message = "Dokumenten-Assistent wird abgefragt",
+                details = "Frage: $question | Dokumente: ${documents.size}"
+            )
             LlmToolExecutor().executeDocumentAssistant(question, documents)
         } finally {
             _isGenerating.value = false
@@ -2340,6 +2405,13 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
         try {
             val activeModel = getSelectedModel()
             val modelFile = getModelFile(activeModel.id)
+            
+            AppAuditLogger.log(
+                category = LogCategory.AI_INFERENCE,
+                tag = "Chatbot",
+                message = "KI-Chatbot wird abgefragt (${activeModel.name})",
+                details = "Frage: $question | Modell: ${activeModel.id} | Kontext: ${documentContextSummary.length} Zeichen"
+            )
             
             if (modelFile.exists() && modelFile.length() > 1024 * 1024) {
                 val reply = llamaCppEngine.executeChatInferenceWithTools(

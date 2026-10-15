@@ -24,6 +24,8 @@ import com.example.ui.components.LocalAiAgentIcon
 import com.example.ui.components.TourElementBounds
 import com.example.ui.components.TourShapeType
 import com.example.ui.views.MainNavigationTab
+import com.example.ui.DocAnizerViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun MainBottomBar(
@@ -37,8 +39,12 @@ fun MainBottomBar(
     activeTourStep: Int? = null,
     onTourElementClicked: ((Int) -> Unit)? = null,
     onReportElementBounds: ((step: Int, bounds: TourElementBounds) -> Unit)? = null,
+    viewModel: DocAnizerViewModel,
     modifier: Modifier = Modifier
 ) {
+    val enableAiAgentFab by viewModel.enableAiAgentFab.collectAsStateWithLifecycle()
+    val enableAiAgentAnimation by viewModel.enableAiAgentAnimation.collectAsStateWithLifecycle()
+    
     val fabRotation by animateFloatAsState(
         targetValue = if (isFabExpanded) 135f else 0f,
         animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioMediumBouncy),
@@ -49,6 +55,19 @@ fun MainBottomBar(
         targetValue = if (isFabExpanded) 1.15f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioHighBouncy),
         label = "fab_scale"
+    )
+
+    // Invertierte Bewegung für den AI-Agent Button (dreht in entgegengesetzte Richtung -135° und skaliert subtil zurück)
+    val aiFabRotation by animateFloatAsState(
+        targetValue = if (enableAiAgentAnimation && isFabExpanded) -135f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "ai_fab_rotation"
+    )
+
+    val aiFabScale by animateFloatAsState(
+        targetValue = if (enableAiAgentAnimation && isFabExpanded) 0.85f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioHighBouncy),
+        label = "ai_fab_scale"
     )
 
     val infiniteTransition = rememberInfiniteTransition(label = "fab_pulse_transition")
@@ -130,6 +149,7 @@ fun MainBottomBar(
                     colors = navItemColors,
                     modifier = Modifier
                         .weight(1.25f)
+                        .padding(horizontal = 12.dp)
                         .onGloballyPositioned { coords ->
                             val bounds = coords.boundsInRoot()
                             val elemBounds = TourElementBounds(
@@ -176,6 +196,7 @@ fun MainBottomBar(
                     colors = navItemColors,
                     modifier = Modifier
                         .weight(1.1f)
+                        .padding(horizontal = 12.dp)
                         .onGloballyPositioned { coords ->
                             val bounds = coords.boundsInRoot()
                             val elemBounds = TourElementBounds(
@@ -230,6 +251,7 @@ fun MainBottomBar(
                     colors = navItemColors,
                     modifier = Modifier
                         .weight(1.25f)
+                        .padding(horizontal = 12.dp)
                         .testTag("nav_item_batch_inbox")
                 )
             }
@@ -246,46 +268,62 @@ fun MainBottomBar(
 
                 // Left FAB: Chatbot (Tour Schritt 7)
                 val isStepAiActive = activeTourStep == 7
-                Box(
-                    modifier = Modifier
-                        .weight(0.85f)
-                        .offset(y = (-18).dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    FloatingActionButton(
-                        onClick = {
-                            if (isStepAiActive) onTourElementClicked?.invoke(7)
-                            else onOpenAiChatDrawer()
-                        },
-                        containerColor = MaterialTheme.colorScheme.secondary,
-                        contentColor = MaterialTheme.colorScheme.onSecondary,
-                        shape = CircleShape,
-                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
+                if (enableAiAgentFab) {
+                    val aiFabScale by animateFloatAsState(
+                        targetValue = if (isFabExpanded) 0.9f else 1f, // Invertiert (kleiner beim Öffnen)
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                        label = "ai_fab_scale"
+                    )
+                    Box(
                         modifier = Modifier
-                            .size(60.dp)
-                            .onGloballyPositioned { coords ->
-                                val bounds = coords.boundsInRoot()
-                                val elemBounds = TourElementBounds(
-                                    centerX = bounds.center.x,
-                                    centerY = bounds.center.y,
-                                    widthPx = bounds.width,
-                                    heightPx = bounds.height,
-                                    shapeType = TourShapeType.CIRCLE
-                                )
-                                onReportElementBounds?.invoke(7, elemBounds)
-                            }
-                            .testTag("main_chatbot_fab")
+                            .weight(0.85f)
+                            .offset(y = (-18).dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
+                        FloatingActionButton(
+                            onClick = {
+                                if (isStepAiActive) onTourElementClicked?.invoke(7)
+                                else onOpenAiChatDrawer()
+                            },
+                            containerColor = MaterialTheme.colorScheme.secondary,
+                            contentColor = MaterialTheme.colorScheme.onSecondary,
+                            shape = CircleShape,
+                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp, pressedElevation = 10.dp),
+                            modifier = Modifier
+                                .size(60.dp)
+                                .graphicsLayer {
+                                    scaleX = aiFabScale
+                                    scaleY = aiFabScale
+                                    rotationZ = aiFabRotation
+                                }
+                                .onGloballyPositioned { coords ->
+                                    if (isStepAiActive) {
+                                        val bounds = coords.boundsInRoot()
+                                        val elemBounds = TourElementBounds(
+                                            centerX = bounds.center.x,
+                                            centerY = bounds.center.y,
+                                            widthPx = bounds.width,
+                                            heightPx = bounds.height,
+                                            shapeType = TourShapeType.CIRCLE
+                                        )
+                                        onReportElementBounds?.invoke(7, elemBounds)
+                                    }
+                                }
+                                .testTag("main_chatbot_fab")
                         ) {
-                            LocalAiAgentIcon(
-                                modifier = Modifier.size(38.dp),
-                                tint = MaterialTheme.colorScheme.onSecondary
-                            )
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                LocalAiAgentIcon(
+                                    modifier = Modifier.size(38.dp),
+                                    tint = MaterialTheme.colorScheme.onSecondary
+                                )
+                            }
                         }
                     }
+                } else {
+                    Spacer(modifier = Modifier.weight(0.85f))
                 }
 
                 Spacer(modifier = Modifier.weight(1.1f))

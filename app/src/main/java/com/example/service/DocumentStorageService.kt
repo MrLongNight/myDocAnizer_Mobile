@@ -322,11 +322,21 @@ object DocumentStorageService {
             val bgPaint = Paint().apply { color = Color.WHITE }
             canvas.drawRect(0f, 0f, pageWidth.toFloat(), pageHeight.toFloat(), bgPaint)
 
-            // Bitmap einpassen
+            // Bitmap einpassen mit ensureSoftwareBitmap und seitenverhältnis-erhaltender Skalierung & Zentrierung
+            val safeBmp = ImageProcessingService.ensureSoftwareBitmap(bitmap)
             val margin = 20f
-            val destRect = RectF(margin, margin + 28f, pageWidth - margin, pageHeight - margin - 28f)
+            val availW = pageWidth - 2 * margin
+            val availH = pageHeight - 2 * margin - 56f
+            val bmpW = safeBmp.width.toFloat().coerceAtLeast(1f)
+            val bmpH = safeBmp.height.toFloat().coerceAtLeast(1f)
+            val scale = minOf(availW / bmpW, availH / bmpH)
+            val drawW = bmpW * scale
+            val drawH = bmpH * scale
+            val left = margin + (availW - drawW) / 2f
+            val top = margin + 28f + (availH - drawH) / 2f
+            val destRect = RectF(left, top, left + drawW, top + drawH)
             val paint = Paint(Paint.FILTER_BITMAP_FLAG)
-            canvas.drawBitmap(bitmap, null, destRect, paint)
+            canvas.drawBitmap(safeBmp, null, destRect, paint)
 
             // Kopfzeile mit Metadaten
             val headerPaint = Paint().apply {

@@ -417,6 +417,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
 
     // On-Device LLM Modelle & Hardware-Telemetrie
     val availableModels: StateFlow<List<HuggingFaceModelInfo>> = llmService.availableModels
+    val activeDownloadingModel: StateFlow<HuggingFaceModelInfo?> = llmService.activeDownloadingModel
     val isGeneratingAi: StateFlow<Boolean> = llmService.isGenerating
     val deviceHardwareInfo: StateFlow<com.example.model.DeviceHardwareInfo> = llmService.deviceHardware
     val llmInferenceConfig: StateFlow<com.example.model.LlmInferenceConfig> = settingsRepo.llmInferenceConfig
@@ -1919,11 +1920,6 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         if (amt.isNotBlank()) cf["Rechnungsbetrag"] = amt
                         if (invNo.isNotBlank()) cf["Rechnungsnummer"] = invNo
                         if (dt.isNotBlank()) cf["Belegdatum"] = dt
-                        if (cf.isEmpty()) {
-                            cf["Rechnungsbetrag"] = "122,93 €"
-                            cf["Rechnungsnummer"] = "INV-2026-01"
-                            cf["Belegdatum"] = "12.10.2026"
-                        }
                         cf
                     }
 
@@ -1980,6 +1976,206 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             } catch (e: Exception) {
                 Log.e("DocAnizerViewModel", "Fehler in saveSinglePageBulk: ${e.message}", e)
+                _isProcessingScan.value = false
+            }
+        }
+    }
+
+    data class BackgroundTriageResult(
+        val ocrText: String,
+        val matchedRule: com.example.model.DocRule?,
+        val suggestedRule: com.example.model.DocRule?,
+        val isColor: Boolean
+    )
+
+    private var backgroundTriageJob: kotlinx.coroutines.Job? = null
+    private val _backgroundTriageResult = MutableStateFlow<BackgroundTriageResult?>(null)
+    val backgroundTriageResult: StateFlow<BackgroundTriageResult?> = _backgroundTriageResult.asStateFlow()
+
+    /**
+     * Startet sofortige OCR- und Regel-/KI-Analyse im Hintergrund direkt bei Fotoaufnahme,
+     * damit der Nutzer während der Zuschnitt- und Optimierungsvorschau keinerlei Wartezeit hat.
+     */
+    fun startBackgroundScanTriage(bitmap: Bitmap) {
+        backgroundTriageJob?.cancel()
+        _backgroundTriageResult.value = null
+        val snapshotBmp = bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: bitmap
+        backgroundTriageJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val preferredMode = if (scannerSettings.value.scanMode == "AUTO") {
+                    pdfSettings.value.defaultColorMode
+                } else {
+                    if (_isColorMode.value) "COLOR" else "BW"
+                }
+                val (processed, isColor) = ImageProcessingService.processDocumentAdaptive(
+                    src = snapshotBmp,
+                    preferredMode = preferredMode
+                )
+                val ocrText = OcrService.recognizeText(processed, "", "")
+                val matchedRule = ruleRepo.matchRule(ocrText)
+                val suggestedRule: com.example.model.DocRule? = if (matchedRule == null) {
+                    val aiClass = llmService.classifyDocumentText(ocrText)
+                    val smartKeywords = if (aiClass.smartKeywords.isNotEmpty()) {
+                        aiClass.smartKeywords
+                    } else {
+                        ocrText.lowercase()
+                            .replace(Regex("[^a-zäöüß0-9\\s]"), " ")
+                            .split(Regex("\\s+"))
+                            .filter { it.length in 5..20 }
+                            .distinct()
+                            .take(4)
+                            .ifEmpty { listOf(aiClass.sender.lowercase()) }
+                    }
+                    val (suggestedIcon, suggestedLogo) = com.example.ui.components.detectSuggestedLogoAndIcon(aiClass.sender, ocrText, aiClass.mainCategoryId)
+                    val cleanSender = aiClass.sender.trim().takeIf { it.isNotBlank() && it != "null" }
+                    val cleanType = aiClass.docType.trim().takeIf { it.isNotBlank() && it != "null" }
+                    val ruleName = when {
+                        cleanSender != null && cleanType != null -> "$cleanSender $cleanType"
+                        cleanSender != null -> "$cleanSender Dokument"
+                        cleanType != null -> "$cleanType Ablage"
+                        aiClass.title.isNotBlank() -> aiClass.title
+                        else -> "Neues Dokument"
+                    }
+                    val targetPath = aiClass.suggestedFolderPath.ifBlank {
+                        val snd = cleanSender ?: "Dokumente"
+                        val typ = cleanType ?: "Allgemein"
+                        when (settingsRepo.folderStrategy.value) {
+                            com.example.model.FolderStrategy.BY_SENDER -> "$snd/$typ"
+                            com.example.model.FolderStrategy.BY_CATEGORY -> "${aiClass.mainCategoryId}/$typ"
+                            com.example.model.FolderStrategy.CHRONOLOGICAL -> "2026/$typ"
+                            com.example.model.FolderStrategy.FLAT -> "Dokumente"
+                        }
+                    }
+                    val evaluatedCustomFields = if (aiClass.customFields.isNotEmpty()) {
+                        aiClass.customFields
+                    } else {
+                        val cf = mutableMapOf<String, String>()
+                        val amt = com.example.service.llm.LlmPrompts.extractAmountFromText(ocrText)
+                        val invNo = com.example.service.llm.LlmPrompts.extractInvoiceNumber(ocrText)
+                        val dt = com.example.service.llm.LlmPrompts.extractDocumentDateFromText(ocrText)
+                        if (amt.isNotBlank()) cf["Rechnungsbetrag"] = amt
+                        if (invNo.isNotBlank()) cf["Rechnungsnummer"] = invNo
+                        if (dt.isNotBlank()) cf["Belegdatum"] = dt
+                        cf
+                    }
+                    com.example.model.DocRule(
+                        name = ruleName,
+                        matchKeywords = smartKeywords,
+                        targetMainCategoryId = aiClass.mainCategoryId,
+                        targetSubCategoryId = aiClass.subCategoryId,
+                        targetDocType = aiClass.docType,
+                        detectedSender = aiClass.sender,
+                        targetFolderPath = targetPath,
+                        targetTags = aiClass.tags,
+                        isEnabled = true,
+                        isAiGenerated = true,
+                        targetIcon = suggestedIcon,
+                        targetLogo = suggestedLogo,
+                        targetCustomFields = evaluatedCustomFields
+                    )
+                } else null
+
+                _backgroundTriageResult.value = BackgroundTriageResult(
+                    ocrText = ocrText,
+                    matchedRule = matchedRule,
+                    suggestedRule = suggestedRule,
+                    isColor = isColor
+                )
+            } catch (e: Exception) {
+                Log.e("DocAnizerViewModel", "Hintergrund-Triage Ausnahme: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Finalisiert das Dokument nach Zuschnitt und Optimierung:
+     * Greift auf die bereits im Hintergrund berechnete KI-Triage zu (Zero Latency!).
+     */
+    fun finalizeScanWithOptimizedBitmap(
+        finalBitmap: Bitmap,
+        onComplete: ((DocumentEntity) -> Unit)? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isProcessingScan.value = true
+            try {
+                backgroundTriageJob?.join()
+                val triage = _backgroundTriageResult.value
+
+                val ocrText = triage?.ocrText ?: OcrService.recognizeText(finalBitmap, "", "")
+                val isColor = triage?.isColor ?: true
+                val matchedRule = triage?.matchedRule ?: ruleRepo.matchRule(ocrText)
+
+                if (matchedRule != null) {
+                    saveProcessedBitmapWithRule(
+                        bitmap = finalBitmap,
+                        ocrText = ocrText,
+                        rule = matchedRule,
+                        isColor = isColor,
+                        onComplete = onComplete
+                    )
+                } else {
+                    val suggestedRule = triage?.suggestedRule ?: run {
+                        val aiClass = llmService.classifyDocumentText(ocrText)
+                        val cleanSender = aiClass.sender.trim().takeIf { it.isNotBlank() && it != "null" }
+                        val cleanType = aiClass.docType.trim().takeIf { it.isNotBlank() && it != "null" }
+                        val ruleName = when {
+                            cleanSender != null && cleanType != null -> "$cleanSender $cleanType"
+                            cleanSender != null -> "$cleanSender Dokument"
+                            cleanType != null -> "$cleanType Ablage"
+                            else -> "Neues Dokument"
+                        }
+                        val (suggestedIcon, suggestedLogo) = com.example.ui.components.detectSuggestedLogoAndIcon(aiClass.sender, ocrText, aiClass.mainCategoryId)
+                        com.example.model.DocRule(
+                            name = ruleName,
+                            matchKeywords = listOf(cleanSender?.lowercase() ?: "dokument"),
+                            targetMainCategoryId = aiClass.mainCategoryId,
+                            targetSubCategoryId = aiClass.subCategoryId,
+                            targetDocType = aiClass.docType,
+                            detectedSender = aiClass.sender,
+                            targetFolderPath = "Dokumente",
+                            targetTags = aiClass.tags,
+                            isEnabled = true,
+                            isAiGenerated = true,
+                            targetIcon = suggestedIcon,
+                            targetLogo = suggestedLogo,
+                            targetCustomFields = emptyMap()
+                        )
+                    }
+
+                    _isProcessingScan.value = false
+                    dmsManager.setPendingRuleSuggestion(com.example.model.PendingRuleSuggestion(
+                        bitmap = finalBitmap,
+                        ocrText = ocrText,
+                        suggestedRule = suggestedRule,
+                        onSingleUseOnly = { finalRule ->
+                            dmsManager.clearPendingRuleSuggestion()
+                            saveProcessedBitmapWithRule(
+                                bitmap = finalBitmap,
+                                ocrText = ocrText,
+                                rule = finalRule,
+                                isColor = isColor,
+                                onComplete = onComplete
+                            )
+                        },
+                        onSaveAsPermanentRule = { permanentRule ->
+                            addDocRule(permanentRule)
+                            dmsManager.clearPendingRuleSuggestion()
+                            saveProcessedBitmapWithRule(
+                                bitmap = finalBitmap,
+                                ocrText = ocrText,
+                                rule = permanentRule,
+                                isColor = isColor,
+                                onComplete = onComplete
+                            )
+                        },
+                        onDismiss = {
+                            dmsManager.clearPendingRuleSuggestion()
+                        }
+                    ))
+                }
+            } catch (e: Exception) {
+                Log.e("DocAnizerViewModel", "Fehler bei finalizeScanWithOptimizedBitmap: ${e.message}", e)
+            } finally {
                 _isProcessingScan.value = false
             }
         }
@@ -2249,6 +2445,12 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     fun setChatbotPureSwipeGestures(enabled: Boolean) {
         settingsRepo.setChatbotPureSwipeGestures(enabled)
     }
+    
+    val enableAiAgentFab: StateFlow<Boolean> = settingsRepo.enableAiAgentFab
+    fun setEnableAiAgentFab(enabled: Boolean) = settingsRepo.setEnableAiAgentFab(enabled)
+
+    val enableAiAgentAnimation: StateFlow<Boolean> = settingsRepo.enableAiAgentAnimation
+    fun setEnableAiAgentAnimation(enabled: Boolean) = settingsRepo.setEnableAiAgentAnimation(enabled)
 
     // Reiner Gesten-Modus (Immersive Fullscreen: Bottom-Bar & symmetrische FABs ausblenden)
     val isGestureModeEnabled: StateFlow<Boolean> = settingsRepo.isGestureModeEnabled

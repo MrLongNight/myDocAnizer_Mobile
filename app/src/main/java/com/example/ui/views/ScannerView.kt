@@ -187,6 +187,10 @@ fun ScannerView(
     var isQualityCheckModeActive by remember { mutableStateOf(false) }
     var pendingCheckBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
+    // Interaktiver Zuschnitt & Optimierungsvorschau Zustand
+    var capturedRawBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var croppedPerspectiveBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
     // Funktion zum Ausführen des eigentlichen Bildabzugs
     val executeCapture: () -> Unit = {
         hasCapturedCurrentDocument = true
@@ -206,6 +210,10 @@ fun ScannerView(
             if (isQualityCheckModeActive) {
                 // Vorab-Qualitätsprüfung anzeigen
                 pendingCheckBitmap = bmp
+            } else if (scannerSettings.enableCropPreview && !isBatchModeActive) {
+                // Parallele Hintergrund-KI-Verarbeitung sofort starten (Zero Latency)
+                viewModel.startBackgroundScanTriage(bmp)
+                capturedRawBitmap = bmp
             } else {
                 if (isBatchModeActive) {
                     // Neuer Stapel-Puffer Modus: Sofort in die Inbox (entkoppelt für schnellen Stativscan)
@@ -287,15 +295,13 @@ fun ScannerView(
             hasCapturedCurrentDocument = false
             motionDetectedAfterCapture = false
             if (showFirstStepsTour && currentTourStep == 4) {
-                viewModel.triggerSampleScanForTour()
                 viewModel.setTourStep(5)
+            }
+            if (scannerSettings.triggerMode == "COUNTDOWN") {
+                isCountdownRunning = true
+                countdownValue = scannerSettings.countdownSeconds
             } else {
-                if (scannerSettings.triggerMode == "COUNTDOWN") {
-                    isCountdownRunning = true
-                    countdownValue = scannerSettings.countdownSeconds
-                } else {
-                    executeCapture()
-                }
+                executeCapture()
             }
         }
     }
@@ -621,6 +627,47 @@ fun ScannerView(
                 pendingCheckBitmap = null
                 hasCapturedCurrentDocument = false
                 autoDetectProgress = 0f
+            }
+        )
+    }
+
+    BackHandler(enabled = croppedPerspectiveBitmap != null || capturedRawBitmap != null) {
+        if (croppedPerspectiveBitmap != null) {
+            croppedPerspectiveBitmap = null
+        } else if (capturedRawBitmap != null) {
+            capturedRawBitmap = null
+            hasCapturedCurrentDocument = false
+            autoDetectProgress = 0f
+        }
+    }
+
+    croppedPerspectiveBitmap?.let { warpedBmp ->
+        com.example.ui.views.scanner.DocumentOptimizationPreviewScreen(
+            croppedBitmap = warpedBmp,
+            onBackToCrop = {
+                croppedPerspectiveBitmap = null
+            },
+            onConfirmFinalDocument = { finalBmp ->
+                capturedRawBitmap = null
+                croppedPerspectiveBitmap = null
+                if (scannerSettings.isBulkMode || isAutoMode) {
+                    viewModel.finalizeScanWithOptimizedBitmap(finalBmp)
+                } else {
+                    viewModel.addPage(finalBmp)
+                }
+            }
+        )
+    } ?: capturedRawBitmap?.let { rawBmp ->
+        com.example.ui.views.scanner.DocumentCropScreen(
+            capturedBitmap = rawBmp,
+            onCancel = {
+                capturedRawBitmap = null
+                hasCapturedCurrentDocument = false
+                autoDetectProgress = 0f
+            },
+            onConfirmCrop = { corners ->
+                val warped = com.example.service.ImageProcessingService.cropAndWarpPerspective(rawBmp, corners)
+                croppedPerspectiveBitmap = warped
             }
         )
     }

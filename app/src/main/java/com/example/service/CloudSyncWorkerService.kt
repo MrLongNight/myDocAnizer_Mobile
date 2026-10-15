@@ -120,7 +120,8 @@ object CloudSyncWorkerService {
                 
                 val originalPdf = File(doc.filePath)
                 if (originalPdf.exists()) {
-                    val encryptedBlob = File(context.cacheDir, "${doc.fileName}.enc")
+                    val safeFileName = File(doc.fileName).name
+                    val encryptedBlob = File(context.cacheDir, "${doc.id}_${safeFileName}.enc")
                     try {
                         DocumentStorageService.encryptFile(originalPdf, encryptedBlob, userPasswordKey)
 
@@ -172,27 +173,43 @@ object CloudSyncWorkerService {
             val encryptedIndex = DocumentStorageService.buildEncryptedIndex(context, allDocuments, userPasswordKey)
             val indexExists = encryptedIndex.exists()
 
+            var indexUploadSuccess = true
             try {
                 // Step 3: Payload upload to Google Drive and/or NAS WebDAV
                 if (encryptedIndex.exists()) {
+                    var anyIndexTargetAttempted = false
+                    var anyIndexTargetSucceeded = false
+
                     if (config.enableWebDavNas && config.webDavUrl.isNotBlank()) {
+                        anyIndexTargetAttempted = true
                         _syncState.value = SyncState.Syncing("Übertrage doc_index.enc an WebDAV/NAS...")
-                        WebDavClient.uploadFile(
+                        val webDavIndexRes = WebDavClient.uploadFile(
                             url = config.webDavUrl,
                             user = config.webDavUsername,
                             pass = config.webDavPassword,
                             remoteFileName = "doc_index.enc",
                             localFile = encryptedIndex
                         )
+                        if (webDavIndexRes.isSuccess) {
+                            anyIndexTargetSucceeded = true
+                        }
                     }
 
                     if (config.enableGoogleDrive && config.googleDriveConnected && config.googleDriveAccessToken.isNotBlank()) {
+                        anyIndexTargetAttempted = true
                         _syncState.value = SyncState.Syncing("Übertrage doc_index.enc an Google Drive...")
-                        GoogleDriveClient.uploadEncryptedFile(
+                        val driveIndexRes = GoogleDriveClient.uploadEncryptedFile(
                             accessToken = config.googleDriveAccessToken,
                             file = encryptedIndex,
                             remoteName = "doc_index.enc"
                         )
+                        if (driveIndexRes.isSuccess) {
+                            anyIndexTargetSucceeded = true
+                        }
+                    }
+
+                    if (anyIndexTargetAttempted && !anyIndexTargetSucceeded) {
+                        indexUploadSuccess = false
                     }
                 }
             } finally {
@@ -201,7 +218,9 @@ object CloudSyncWorkerService {
                 }
             }
 
-            if (lowBattery && pendingDocs.isNotEmpty()) {
+            if (!indexUploadSuccess) {
+                _syncState.value = SyncState.Error("Upload des Backup-Index fehlgeschlagen. Bitte Zugangsdaten/Verbindung prüfen.")
+            } else if (lowBattery && pendingDocs.isNotEmpty()) {
                 _syncState.value = SyncState.Error("Metadaten-Index aktualisiert. PDF-Uploads wurden wegen niedrigem Akkustand (< 20 %) pausiert.")
             } else {
                 _syncState.value = SyncState.Success(

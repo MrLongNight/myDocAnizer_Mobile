@@ -24,20 +24,50 @@ class SyncManager(
     val p2pLocalDeviceName: StateFlow<String> = p2pSyncManager.localDeviceName
 
     fun setP2pDeviceName(name: String) = p2pSyncManager.setLocalDeviceName(name)
-    fun startP2pServer() = p2pSyncManager.startServer()
+    fun startP2pServer() {
+        com.example.service.AppAuditLogger.log(
+            category = com.example.service.LogCategory.P2P_SYNC,
+            tag = "SyncManager",
+            message = "WLAN-Sync-Server wird gestartet...",
+            details = "Gerät ist nun im lokalen Netzwerk für Zweitgeräte sichtbar."
+        )
+        p2pSyncManager.startServer()
+    }
     fun stopP2pServer() = p2pSyncManager.stopServer()
     fun startP2pHostPairingMode(): String = p2pSyncManager.startHostPairingMode()
     fun stopP2pHostPairingMode() = p2pSyncManager.stopHostPairingMode()
     fun authorizeP2pPairingRequest(requestId: String, allow: Boolean) = p2pSyncManager.authorizePairingRequest(requestId, allow)
     
     fun pairWithP2pDevice(ip: String, port: Int = 8765, pin: String, onResult: (Result<PairingResult>) -> Unit) {
+        com.example.service.AppAuditLogger.log(
+            category = com.example.service.LogCategory.P2P_SYNC,
+            tag = "SyncManager",
+            message = "Kopplungsversuch mit Gegenstelle $ip:$port",
+            details = "Verschlüsselter Handshake wird eingeleitet."
+        )
         scope.launch {
             val res = p2pSyncManager.pairWithRemoteDevice(ip, port, pin)
+            res.onSuccess { result ->
+                if (result is PairingResult.Success) {
+                    com.example.service.AppAuditLogger.log(
+                        category = com.example.service.LogCategory.P2P_SYNC,
+                        tag = "SyncManager",
+                        message = "Kopplung mit '${result.device.name}' erfolgreich!",
+                        details = "Geräte-ID: ${result.device.id}"
+                    )
+                }
+            }
             onResult(res)
         }
     }
 
     fun syncWithP2pDevice(device: PairedDevice, onResult: (Result<P2pSyncLog>) -> Unit = {}) {
+        com.example.service.AppAuditLogger.log(
+            category = com.example.service.LogCategory.P2P_SYNC,
+            tag = "SyncManager",
+            message = "Manueller Sync mit '${device.name}' gestartet.",
+            details = "Abgleich der Dokumenten-Indizes..."
+        )
         scope.launch {
             val res = p2pSyncManager.syncWithDevice(device)
             onResult(res)

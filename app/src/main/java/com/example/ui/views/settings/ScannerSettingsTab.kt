@@ -27,8 +27,9 @@ fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
     var isHardwareExpanded by remember { mutableStateOf(false) }
     var isFlashExpanded by remember { mutableStateOf(false) }
     var isFeedbackExpanded by remember { mutableStateOf(false) }
+    var isCropPreviewExpanded by remember { mutableStateOf(false) }
 
-    val allExpanded = isModeExpanded && isTripodExpanded && isTriggerExpanded && isHardwareExpanded && isFlashExpanded && isFeedbackExpanded
+    val allExpanded = isModeExpanded && isTripodExpanded && isTriggerExpanded && isHardwareExpanded && isFlashExpanded && isFeedbackExpanded && isCropPreviewExpanded
 
     Column(
         modifier = Modifier
@@ -51,6 +52,7 @@ fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
                     isHardwareExpanded = nextState
                     isFlashExpanded = nextState
                     isFeedbackExpanded = nextState
+                    isCropPreviewExpanded = nextState
                 }
             ) {
                 Text(
@@ -94,6 +96,41 @@ fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
                         onClick = { viewModel.updateScannerSettings(scannerSettings.copy(scanMode = "MANUAL")) },
                         label = { Text("⚙️ Manuell") },
                         leadingIcon = { Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    )
+                }
+            }
+        }
+
+        // 1b. Dokumenten-Vorschau & Zuschnitt
+        CollapsibleSettingsCard(
+            title = "Dokumenten-Vorschau & Zuschnitt",
+            subtitle = if (scannerSettings.enableCropPreview) "Aktiv (Eckpunkt-Korrektur mit Lupe & Filter)" else "Deaktiviert (Sofort-Ablage)",
+            icon = Icons.Default.Crop,
+            isExpanded = isCropPreviewExpanded,
+            onToggle = { isCropPreviewExpanded = !isCropPreviewExpanded }
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "📐 Interaktive Vorschau & Zuschnitt",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Ermöglicht nach der Aufnahme das pixelgenaue Ausrichten der 4 Ecken mit Lupe sowie eine Filter-Vorschau (Auto / S/W / Farbe). Währenddessen analysiert die KI das Dokument bereits im Hintergrund.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Switch(
+                        checked = scannerSettings.enableCropPreview,
+                        onCheckedChange = { viewModel.updateScannerSettings(scannerSettings.copy(enableCropPreview = it)) }
                     )
                 }
             }

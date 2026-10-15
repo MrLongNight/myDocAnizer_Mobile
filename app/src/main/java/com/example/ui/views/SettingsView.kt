@@ -1,5 +1,6 @@
 package com.example.ui.views
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +20,7 @@ import com.example.model.AppViewLevel
 import com.example.ui.DocAnizerViewModel
 import com.example.ui.views.settings.*
 
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 data class SettingsTabItem(val title: String, val icon: ImageVector)
@@ -149,57 +151,77 @@ fun SettingsView(
             .background(MaterialTheme.colorScheme.background)
             .testTag("settings_view")
     ) {
+        // Schlanke, perfekt formatierte Leiste für den Anzeigemodus
         Surface(
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            shape = RoundedCornerShape(12.dp)
+                .padding(horizontal = 12.dp, vertical = 2.dp),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Ansichtsebene: ${appViewLevel.title}",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Tune,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(15.dp)
                     )
                     Text(
-                        text = when (appViewLevel) {
-                            AppViewLevel.STANDARD -> "Kompakt (4 Kern-Tabs) • Nur wichtigste Optionen"
-                            AppViewLevel.ADVANCED -> "Erweitert (7 Tabs) • Regeln, Zusatzfelder & KI Agent"
-                            AppViewLevel.EXPERT -> "Experte (10 Tabs) • Dual-Sync & Entwickler-Tools"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Ansicht: ${when (appViewLevel) {
+                            AppViewLevel.STANDARD -> "Standard (4 Tabs)"
+                            AppViewLevel.ADVANCED -> "Erweitert (7 Tabs)"
+                            AppViewLevel.EXPERT -> "Experte (10 Tabs)"
+                        }}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
-                SingleChoiceSegmentedButtonRow {
-                    SegmentedButton(
-                        selected = appViewLevel == AppViewLevel.STANDARD,
-                        onClick = { viewModel.setAppViewLevel(AppViewLevel.STANDARD) },
-                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
-                    ) {
-                        Text("Standard", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                    SegmentedButton(
-                        selected = appViewLevel == AppViewLevel.ADVANCED,
-                        onClick = { viewModel.setAppViewLevel(AppViewLevel.ADVANCED) },
-                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
-                    ) {
-                        Text("Erweitert", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                    SegmentedButton(
-                        selected = appViewLevel == AppViewLevel.EXPERT,
-                        onClick = { viewModel.setAppViewLevel(AppViewLevel.EXPERT) },
-                        shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
-                    ) {
-                        Text("Experte", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(
+                        AppViewLevel.STANDARD to "Basis",
+                        AppViewLevel.ADVANCED to "Erweitert",
+                        AppViewLevel.EXPERT to "Experte"
+                    ).forEach { (level, label) ->
+                        val isSelected = appViewLevel == level
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                            border = BorderStroke(
+                                width = if (isSelected) 1.dp else 0.5.dp,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            ),
+                            onClick = { viewModel.setAppViewLevel(level) },
+                            modifier = Modifier.height(26.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }

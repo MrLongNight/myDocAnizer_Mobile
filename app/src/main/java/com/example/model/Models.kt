@@ -539,7 +539,8 @@ data class ScannerSettings(
     val flashMode: String = "OFF", // "OFF", "FLASH", "TORCH"
     val sheetChangeSensitivity: String = "MEDIUM", // "LOW", "MEDIUM", "HIGH"
     val soundProfile: String = "SUCCESS_BEEP", // "CLICK", "SUCCESS_BEEP", "CHIME", "MUTE"
-    val enableVibration: Boolean = false // Optionales haptisches Feedback, standardmäßig AUS
+    val enableVibration: Boolean = false, // Optionales haptisches Feedback, standardmäßig AUS
+    val enableCropPreview: Boolean = true // Interaktive Eckpunkt-Korrektur & Optimierungsvorschau nach Aufnahme
 )
 
 data class PendingRuleSuggestion(

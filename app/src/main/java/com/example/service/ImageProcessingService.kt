@@ -6,7 +6,7 @@ import kotlinx.coroutines.withContext
 
 object ImageProcessingService {
 
-    private fun ensureSoftwareBitmap(src: Bitmap): Bitmap {
+    internal fun ensureSoftwareBitmap(src: Bitmap): Bitmap {
         return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && src.config == Bitmap.Config.HARDWARE) {
             src.copy(Bitmap.Config.ARGB_8888, false) ?: src
         } else {
@@ -151,8 +151,9 @@ object ImageProcessingService {
     fun straightenBitmap(src: Bitmap, angle: Float): Bitmap {
         if (Math.abs(angle) < 0.1f) return src
         return try {
+            val workingSrc = ensureSoftwareBitmap(src)
             val matrix = Matrix().apply { postRotate(angle) }
-            Bitmap.createBitmap(src, 0, 0, src.width, src.height, matrix, true)
+            Bitmap.createBitmap(workingSrc, 0, 0, workingSrc.width, workingSrc.height, matrix, true)
         } catch (_: Throwable) {
             src
         }
@@ -199,7 +200,8 @@ object ImageProcessingService {
      * in ein planes, rechteckiges Dokumentbild.
      */
     fun cropAndWarpPerspective(src: Bitmap, corners: List<PointF>): Bitmap {
-        if (corners.size != 4) return autoCropDocument(src)
+        val workingSrc = ensureSoftwareBitmap(src)
+        if (corners.size != 4) return autoCropDocument(workingSrc)
         return try {
             val tl = corners[0]
             val tr = corners[1]
@@ -233,11 +235,126 @@ object ImageProcessingService {
             val resultBitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(resultBitmap)
             val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
-            canvas.drawBitmap(src, matrix, paint)
+            canvas.drawBitmap(workingSrc, matrix, paint)
 
             resultBitmap
         } catch (_: Throwable) {
-            autoCropDocument(src)
+            autoCropDocument(workingSrc)
+        }
+    }
+
+    enum class DocumentFilterMode(val label: String) {
+        AUTO("Auto"),
+        BW_CLEAN("S/W Bereinigt"),
+        COLOR_ENHANCE("Farbe"),
+        ORIGINAL("Original")
+    }
+
+    /**
+     * Ermittelt automatisch die 4 Eckpunkte eines Dokuments [TL, TR, BR, BL] im Bild.
+     * Bei unklaren Konturen wird ein sicherer Randabstand von 8% als Basis verwendet.
+     */
+    fun detectDocumentCorners(bitmap: Bitmap): List<PointF> {
+        val w = bitmap.width.toFloat()
+        val h = bitmap.height.toFloat()
+        return try {
+            val workingSrc = ensureSoftwareBitmap(bitmap)
+            val scale = 0.1f
+            val smallW = (w * scale).toInt().coerceAtLeast(10)
+            val smallH = (h * scale).toInt().coerceAtLeast(10)
+            val small = Bitmap.createScaledBitmap(workingSrc, smallW, smallH, false)
+
+            var minX = smallW
+            var maxX = 0
+            var minY = smallH
+            var maxY = 0
+
+            for (y in 0 until smallH) {
+                for (x in 0 until smallW) {
+                    val pixel = small.getPixel(x, y)
+                    val r = Color.red(pixel)
+                    val g = Color.green(pixel)
+                    val b = Color.blue(pixel)
+                    val luma = 0.299 * r + 0.587 * g + 0.114 * b
+                    if (luma > 135) {
+                        if (x < minX) minX = x
+                        if (x > maxX) maxX = x
+                        if (y < minY) minY = y
+                        if (y > maxY) maxY = y
+                    }
+                }
+            }
+            small.recycle()
+
+            val detectedW = maxX - minX
+            val detectedH = maxY - minY
+            if (detectedW > smallW * 0.35f && detectedH > smallH * 0.35f) {
+                val pad = (12f / scale).coerceAtLeast(0f)
+                val left = ((minX / scale) - pad).coerceIn(0f, w)
+                val top = ((minY / scale) - pad).coerceIn(0f, h)
+                val right = ((maxX / scale) + pad).coerceIn(0f, w)
+                val bottom = ((maxY / scale) + pad).coerceIn(0f, h)
+                listOf(
+                    PointF(left, top),
+                    PointF(right, top),
+                    PointF(right, bottom),
+                    PointF(left, bottom)
+                )
+            } else {
+                getDefaultCorners(w, h)
+            }
+        } catch (_: Throwable) {
+            getDefaultCorners(w, h)
+        }
+    }
+
+    fun getDefaultCorners(width: Float, height: Float, marginFraction: Float = 0.08f): List<PointF> {
+        val mx = width * marginFraction
+        val my = height * marginFraction
+        return listOf(
+            PointF(mx, my),
+            PointF(width - mx, my),
+            PointF(width - mx, height - my),
+            PointF(mx, height - my)
+        )
+    }
+
+    /**
+     * Rotiert ein Bitmap um exakt den übergebenen Winkel (z.B. 90f, -90f).
+     */
+    fun rotateBitmap(src: Bitmap, degrees: Float): Bitmap {
+        if (Math.abs(degrees) < 0.1f) return src
+        return try {
+            val workingSrc = ensureSoftwareBitmap(src)
+            val matrix = Matrix().apply { postRotate(degrees) }
+            Bitmap.createBitmap(workingSrc, 0, 0, workingSrc.width, workingSrc.height, matrix, true)
+        } catch (_: Throwable) {
+            src
+        }
+    }
+
+    /**
+     * Wendet den ausgewählten Dokumenten-Optimierungsfilter an.
+     */
+    suspend fun applyDocumentFilter(bitmap: Bitmap, mode: DocumentFilterMode): Bitmap = withContext(Dispatchers.Default) {
+        when (mode) {
+            DocumentFilterMode.AUTO -> {
+                val analysis = analyzeImage(bitmap)
+                if (analysis.isRecommendedBw) {
+                    convertToOptimizedBw(bitmap, contrast = 1.85f, brightnessOffset = -55f, cleanBackgroundWhite = true)
+                } else {
+                    enhanceColor(bitmap, contrast = 1.15f, brightnessOffset = -10f)
+                }
+            }
+            DocumentFilterMode.BW_CLEAN -> {
+                convertToOptimizedBw(bitmap, contrast = 1.9f, brightnessOffset = -60f, cleanBackgroundWhite = true)
+            }
+            DocumentFilterMode.COLOR_ENHANCE -> {
+                enhanceColor(bitmap, contrast = 1.2f, brightnessOffset = -8f)
+            }
+            DocumentFilterMode.ORIGINAL -> {
+                bitmap
+            }
         }
     }
 
@@ -307,7 +424,7 @@ object ImageProcessingService {
                 val cropW = origMaxX - origMinX
                 val cropH = origMaxY - origMinY
                 if (cropW > 100 && cropH > 100 && cropW < width && cropH < height) {
-                    return Bitmap.createBitmap(src, origMinX, origMinY, cropW, cropH)
+                    return Bitmap.createBitmap(workingSrc, origMinX, origMinY, cropW, cropH)
                 }
             }
         } catch (_: Exception) {

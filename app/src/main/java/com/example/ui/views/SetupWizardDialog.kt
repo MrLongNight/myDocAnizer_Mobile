@@ -385,7 +385,7 @@ fun SetupWizardDialog(
                         ) {
                             Text(
                                 if (isLastStep) {
-                                    if (isManualReconfig) "Konfiguration speichern" else "Einrichtung abschließen & Tour starten"
+                                    if (isManualReconfig) "Speichern" else "Fertig & Tour starten"
                                 } else if (safeStepIndex == 0) {
                                     "Einrichtung starten"
                                 } else "Weiter"

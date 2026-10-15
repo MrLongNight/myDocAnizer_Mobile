@@ -140,6 +140,7 @@ fun MainScreen(
             },
             bottomBar = {
                 com.example.ui.navigation.MainBottomBar(
+                    viewModel = viewModel,
                     currentTab = currentTab,
                     isGestureModeEnabled = isGestureModeEnabled,
                     batchQueueSize = batchQueue.size,
@@ -206,15 +207,17 @@ fun MainScreen(
                         }
                     },
                     onReportElementBounds = { step, bounds ->
-                        val existing = tourTargetBounds[step]
-                        if (existing == null ||
-                            kotlin.math.abs(existing.centerX - bounds.centerX) > 0.5f ||
-                            kotlin.math.abs(existing.centerY - bounds.centerY) > 0.5f ||
-                            kotlin.math.abs(existing.widthPx - bounds.widthPx) > 0.5f ||
-                            kotlin.math.abs(existing.heightPx - bounds.heightPx) > 0.5f ||
-                            existing.shapeType != bounds.shapeType
-                        ) {
-                            tourTargetBounds[step] = bounds
+                        if (showFirstStepsTour) {
+                            val existing = tourTargetBounds[step]
+                            if (existing == null ||
+                                kotlin.math.abs(existing.centerX - bounds.centerX) > 0.5f ||
+                                kotlin.math.abs(existing.centerY - bounds.centerY) > 0.5f ||
+                                kotlin.math.abs(existing.widthPx - bounds.widthPx) > 0.5f ||
+                                kotlin.math.abs(existing.heightPx - bounds.heightPx) > 0.5f ||
+                                existing.shapeType != bounds.shapeType
+                            ) {
+                                tourTargetBounds[step] = bounds
+                            }
                         }
                     }
                 )
@@ -223,6 +226,7 @@ fun MainScreen(
             val pendingUsbSyncWarning by viewModel.pendingUsbSyncWarning.collectAsStateWithLifecycle()
             val backupSyncHealth by viewModel.backupSyncHealth.collectAsStateWithLifecycle()
             val isSyncHealthWarningDismissed by viewModel.isSyncHealthWarningDismissed.collectAsStateWithLifecycle()
+            val activeDownload by viewModel.activeDownloadingModel.collectAsStateWithLifecycle()
 
             val showSyncWarning = pendingUsbSyncWarning != null || (backupSyncHealth.totalConfiguredLocations > 0 && backupSyncHealth.hasWarnings && !isSyncHealthWarningDismissed)
             val displayWarningMsg = pendingUsbSyncWarning ?: run {
@@ -239,6 +243,61 @@ fun MainScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
+                // Globaler LLM Hintergrund-Download-Banner (bleibt aktiv beim Wechseln aller Screens)
+                AnimatedVisibility(
+                    visible = activeDownload != null,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    activeDownload?.let { downloading ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = RoundedCornerShape(0.dp),
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    currentTab = MainNavigationTab.SETTINGS
+                                    viewModel.setTargetSettingsSubTab(2)
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    progress = { downloading.downloadProgress },
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "📥 KI-Modell Download läuft im Hintergrund: ${downloading.name}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${(downloading.downloadProgress * 100).toInt()}% • ${(downloading.downloadedBytes / (1024 * 1024))} MB / ${downloading.downloadSizeMb} MB • Tippen für KI-Einstellungen",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { viewModel.cancelDownload(downloading.id) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Pausieren", modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        }
+                    }
+                }
                 AnimatedVisibility(
                     visible = showSyncWarning,
                     enter = fadeIn() + expandVertically(),
@@ -508,8 +567,11 @@ fun MainScreen(
                         viewModel.dismissManualConfigWizard()
                     } else {
                         viewModel.setWizardCompleted(true)
+                        // Tour nur starten, wenn sie nicht im Wizard explizit übersprungen wurde
+                        if (!viewModel.isFirstStepsTourCompleted.value) {
+                            viewModel.startFirstStepsTour()
+                        }
                     }
-                    viewModel.startFirstStepsTour()
                 }
             )
         }

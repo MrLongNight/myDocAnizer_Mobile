@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
@@ -228,8 +229,9 @@ fun SecurityWizardStep(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .padding(8.dp)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         // Kopfbereich
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -321,31 +323,32 @@ fun SecurityWizardStep(
         if (currentSubStep == 1) {
             // Didaktischer Info-Banner
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f))
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))
             ) {
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
                         Icons.Default.Shield,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Warum wird Verschlüsselung empfohlen?",
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                         Text(
-                            text = "Ihre Dokumente enthalten sensible Finanz-, Steuer- und Identitätsdaten. Mit AES-256-GCM bleiben diese selbst bei Geräteverlust oder unberechtigten Lesezugriffen absolut geschützt.",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "Ihre Dokumente enthalten Finanz- & Steuerdaten. AES-256-GCM schützt sie vor unberechtigtem Zugriff.",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
                         )
                     }
@@ -361,7 +364,7 @@ fun SecurityWizardStep(
             // OPTION A: Keine Verschlüsselung
             SecurityTierCard(
                 title = "A) Keine Verschlüsselung",
-                subtitle = "Dateien im Klartext auf dem Speicher. Kein Passwort nötig, aber null Schutz bei Fremdzugriff.",
+                subtitle = "Dateien im Klartext auf dem Speicher. Kein Passwort nötig, null Fremdzugriffsschutz.",
                 icon = Icons.Default.LockOpen,
                 badge = "Ungeschützt",
                 isSelected = selectedTier == VaultSecurityTier.UNENCRYPTED,
@@ -381,10 +384,10 @@ fun SecurityWizardStep(
 
             // OPTION B: Verschlüsselung mit einem Faktor
             SecurityTierCard(
-                title = "B) Verschlüsselung mit einem Faktor",
-                subtitle = "AES-256-GCM Zero-Knowledge Schutz. Wähle Master-Passwort (mit Google Passwort-Manager), Passkey (FIDO2) oder Schlüsseldatei.",
+                title = "B) 1-Faktor-Verschlüsselung",
+                subtitle = "AES-256-GCM Schutz via Master-Passwort, Google Passwort-Manager, Passkey oder Datei.",
                 icon = Icons.Default.Lock,
-                badge = "Empfohlen (Standard)",
+                badge = "Empfohlen",
                 isSelected = selectedTier == VaultSecurityTier.ONE_FACTOR,
                 onClick = { selectedTier = VaultSecurityTier.ONE_FACTOR },
                 onInfoClick = {
@@ -401,10 +404,10 @@ fun SecurityWizardStep(
 
             // OPTION C: Verschlüsselung mit zwei Faktoren
             SecurityTierCard(
-                title = "C) Verschlüsselung mit zwei Faktoren (2FA)",
-                subtitle = "Höchste Sicherheit nach Banken-Standard. Es werden zwingend ZWEI Faktoren zum Entsperren benötigt.",
+                title = "C) 2-Faktor Schutz (2FA)",
+                subtitle = "Zwei Faktoren zwingend: Master-Passwort + Schlüsseldatei (.key) oder TOTP Authenticator.",
                 icon = Icons.Default.VpnKey,
-                badge = "Maximaler Schutz",
+                badge = "2FA Höchste Stufe",
                 isSelected = selectedTier == VaultSecurityTier.TWO_FACTOR,
                 onClick = { selectedTier = VaultSecurityTier.TWO_FACTOR },
                 onInfoClick = {
@@ -464,7 +467,7 @@ fun SecurityWizardStep(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         text = if (selectedTier == VaultSecurityTier.TWO_FACTOR) "2. Zwei-Faktor-Methoden konfigurieren"
                         else "2. Zugangsfaktor konfigurieren",
@@ -475,32 +478,40 @@ fun SecurityWizardStep(
                     // Wenn Stufe B: Wahl des Faktors (Passwort, Passkey oder Schlüsseldatei)
                     if (selectedTier == VaultSecurityTier.ONE_FACTOR) {
                         Text(
-                            text = "Wähle deine bevorzugte Authentifizierungsmethode:",
+                            text = "Wähle deinen primären Zugangs-Faktor:",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            FilterChip(
-                                selected = selectedFactorType == VaultFactorType.PASSWORD,
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FactorOptionCard(
+                                title = "Master-Passwort",
+                                subtitle = "Argon2id gehärteter Wissensfaktor mit Google Passwort-Manager Auto-Fill & Sync",
+                                icon = Icons.Default.Password,
+                                badge = "Klassisch",
+                                isSelected = selectedFactorType == VaultFactorType.PASSWORD,
                                 onClick = { selectedFactorType = VaultFactorType.PASSWORD },
-                                label = { Text("Passwort", style = MaterialTheme.typography.labelSmall) },
-                                leadingIcon = { Icon(Icons.Default.Password, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                modifier = Modifier.weight(1f)
+                                tag = "factor_card_password"
                             )
-                            FilterChip(
-                                selected = selectedFactorType == VaultFactorType.PASSKEY,
+
+                            FactorOptionCard(
+                                title = "Passkey (FIDO2)",
+                                subtitle = "Passwortlose Anmeldung via Android Hardware-Keystore & Biometrie / Geräte-PIN",
+                                icon = Icons.Default.Fingerprint,
+                                badge = "Modern (Empfohlen)",
+                                isSelected = selectedFactorType == VaultFactorType.PASSKEY,
                                 onClick = { selectedFactorType = VaultFactorType.PASSKEY },
-                                label = { Text("Passkey", style = MaterialTheme.typography.labelSmall) },
-                                leadingIcon = { Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                modifier = Modifier.weight(1f)
+                                tag = "factor_card_passkey"
                             )
-                            FilterChip(
-                                selected = selectedFactorType == VaultFactorType.KEYFILE,
+
+                            FactorOptionCard(
+                                title = "Digitale Schlüsseldatei (.key)",
+                                subtitle = "Kryptografischer Besitzfaktor als lokale Datei auf USB/Gerätespeicher",
+                                icon = Icons.Default.Key,
+                                badge = "Offline Datei",
+                                isSelected = selectedFactorType == VaultFactorType.KEYFILE,
                                 onClick = { selectedFactorType = VaultFactorType.KEYFILE },
-                                label = { Text(".key Datei", style = MaterialTheme.typography.labelSmall) },
-                                leadingIcon = { Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                modifier = Modifier.weight(1f)
+                                tag = "factor_card_keyfile"
                             )
                         }
                     }
@@ -513,18 +524,25 @@ fun SecurityWizardStep(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE,
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FactorOptionCard(
+                                title = "Passwort + Schlüsseldatei (.key)",
+                                subtitle = "Sicherheit durch Wissen (Master-Passwort) UND Besitz (digitale Schlüsseldatei)",
+                                icon = Icons.Default.Key,
+                                badge = "2-Faktor Besitz",
+                                isSelected = selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE,
                                 onClick = { selectedFactorType = VaultFactorType.PASSWORD_AND_KEYFILE },
-                                label = { Text("Passwort + Schlüsseldatei") },
-                                modifier = Modifier.weight(1f)
+                                tag = "factor_card_pass_keyfile"
                             )
-                            FilterChip(
-                                selected = selectedFactorType == VaultFactorType.PASSWORD_AND_TOTP,
+
+                            FactorOptionCard(
+                                title = "Passwort + Authenticator-App (TOTP)",
+                                subtitle = "Sicherheit durch Wissen (Master-Passwort) UND dynamischen 6-stelligen Einmalcode",
+                                icon = Icons.Default.QrCode,
+                                badge = "2FA Authenticator",
+                                isSelected = selectedFactorType == VaultFactorType.PASSWORD_AND_TOTP,
                                 onClick = { selectedFactorType = VaultFactorType.PASSWORD_AND_TOTP },
-                                label = { Text("Passwort + Authenticator (TOTP)") },
-                                modifier = Modifier.weight(1f)
+                                tag = "factor_card_pass_totp"
                             )
                         }
                     }
@@ -1427,19 +1445,19 @@ private fun SecurityTierCard(
     tag: String
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = if (isSelected) {
-            if (isWarning) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
-            else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            if (isWarning) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+            else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
         } else {
             MaterialTheme.colorScheme.surface
         },
         border = BorderStroke(
-            if (isSelected) 2.dp else 1.dp,
+            if (isSelected) 1.dp else 0.5.dp,
             if (isSelected) {
                 if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
             } else {
-                MaterialTheme.colorScheme.outlineVariant
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
             }
         ),
         modifier = Modifier
@@ -1448,9 +1466,9 @@ private fun SecurityTierCard(
             .testTag(tag)
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(
                 shape = CircleShape,
@@ -1459,40 +1477,63 @@ private fun SecurityTierCard(
                 } else {
                     MaterialTheme.colorScheme.surfaceVariant
                 },
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(24.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
                         tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (isWarning) MaterialTheme.colorScheme.error.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                    ) {
-                        Text(
-                            text = badge,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                        )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (badge.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (isWarning) MaterialTheme.colorScheme.error.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                text = badge,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false,
+                                color = if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
-                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
-            IconButton(onClick = onInfoClick) {
-                Icon(Icons.Default.Info, contentDescription = "Information zu $title", tint = MaterialTheme.colorScheme.primary)
+            IconButton(onClick = onInfoClick, modifier = Modifier.size(24.dp)) {
+                Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
             }
 
             RadioButton(
@@ -1500,7 +1541,8 @@ private fun SecurityTierCard(
                 onClick = onClick,
                 colors = RadioButtonDefaults.colors(
                     selectedColor = if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                )
+                ),
+                modifier = Modifier.size(24.dp)
             )
         }
     }
@@ -1522,19 +1564,19 @@ private fun RecoveryCardWithInfo(
     tag: String
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(8.dp),
         color = if (isSelected) {
-            if (isWarning) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
-            else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+            if (isWarning) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+            else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
         } else {
             MaterialTheme.colorScheme.surface
         },
         border = BorderStroke(
-            if (isSelected) 2.dp else 1.dp,
+            if (isSelected) 1.dp else 0.5.dp,
             if (isSelected) {
                 if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
             } else {
-                MaterialTheme.colorScheme.outlineVariant
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
             }
         ),
         modifier = Modifier
@@ -1543,9 +1585,9 @@ private fun RecoveryCardWithInfo(
             .testTag(tag)
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Surface(
                 shape = CircleShape,
@@ -1554,40 +1596,63 @@ private fun RecoveryCardWithInfo(
                 } else {
                     MaterialTheme.colorScheme.surfaceVariant
                 },
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.size(20.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
                         tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(12.dp)
                     )
                 }
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (isWarning) MaterialTheme.colorScheme.error.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                    ) {
-                        Text(
-                            text = badge,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                        )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (badge.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (isWarning) MaterialTheme.colorScheme.error.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                text = badge,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false,
+                                color = if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 2.dp, vertical = 0.dp)
+                            )
+                        }
                     }
                 }
-                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    lineHeight = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
-            IconButton(onClick = onInfoClick) {
-                Icon(Icons.Default.Info, contentDescription = "Information zu $title", tint = MaterialTheme.colorScheme.primary)
+            IconButton(onClick = onInfoClick, modifier = Modifier.size(20.dp)) {
+                Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
             }
 
             RadioButton(
@@ -1595,8 +1660,114 @@ private fun RecoveryCardWithInfo(
                 onClick = onClick,
                 colors = RadioButtonDefaults.colors(
                     selectedColor = if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                )
+                ),
+                modifier = Modifier.size(18.dp)
             )
         }
     }
 }
+
+/**
+ * Wiederverwendbare Karte zur Auswahl eines Zugangs- oder Sicherheitsfaktors.
+ */
+@Composable
+private fun FactorOptionCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    badge: String? = null,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    tag: String
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        border = BorderStroke(
+            width = if (isSelected) 1.dp else 0.5.dp,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .testTag(tag)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(20.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    badge?.let { b ->
+                        if (b.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                            ) {
+                                Text(
+                                    text = b,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 2.dp, vertical = 0.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    lineHeight = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            RadioButton(
+                selected = isSelected,
+                onClick = onClick,
+                colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+

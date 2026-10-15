@@ -445,6 +445,24 @@ class SettingsRepository(context: Context) {
         _chatbotPureSwipeGestures.value = enabled
     }
 
+    // Chatbot: FAB Aktivierung
+    private val _enableAiAgentFab = MutableStateFlow(prefs.getBoolean("enable_ai_agent_fab", true))
+    val enableAiAgentFab: StateFlow<Boolean> = _enableAiAgentFab.asStateFlow()
+
+    fun setEnableAiAgentFab(enabled: Boolean) {
+        prefs.edit().putBoolean("enable_ai_agent_fab", enabled).apply()
+        _enableAiAgentFab.value = enabled
+    }
+
+    // Chatbot: FAB Animation Aktivierung
+    private val _enableAiAgentAnimation = MutableStateFlow(prefs.getBoolean("enable_ai_agent_animation", true))
+    val enableAiAgentAnimation: StateFlow<Boolean> = _enableAiAgentAnimation.asStateFlow()
+
+    fun setEnableAiAgentAnimation(enabled: Boolean) {
+        prefs.edit().putBoolean("enable_ai_agent_animation", enabled).apply()
+        _enableAiAgentAnimation.value = enabled
+    }
+
     // Reiner Gesten-Modus (Immersive Fullscreen: Bottom-Bar & symmetrische FABs ausblenden, reine Wischzonen mit systemGestureExclusion)
     private val _isGestureModeEnabled = MutableStateFlow(prefs.getBoolean("app_gesture_mode_enabled", false))
     val isGestureModeEnabled: StateFlow<Boolean> = _isGestureModeEnabled.asStateFlow()
@@ -561,7 +579,8 @@ class SettingsRepository(context: Context) {
             flashMode = prefs.getString("scanner_flash_mode", "OFF") ?: "OFF",
             sheetChangeSensitivity = prefs.getString("scanner_sheet_sensitivity", "MEDIUM") ?: "MEDIUM",
             soundProfile = prefs.getString("scanner_sound_profile", "SUCCESS_BEEP") ?: "SUCCESS_BEEP",
-            enableVibration = prefs.getBoolean("scanner_enable_vibration", false)
+            enableVibration = prefs.getBoolean("scanner_enable_vibration", false),
+            enableCropPreview = prefs.getBoolean("scanner_enable_crop_preview", true)
         )
     )
     val scannerSettings: StateFlow<ScannerSettings> = _scannerSettings.asStateFlow()
@@ -583,6 +602,7 @@ class SettingsRepository(context: Context) {
             .putString("scanner_sheet_sensitivity", settings.sheetChangeSensitivity)
             .putString("scanner_sound_profile", settings.soundProfile)
             .putBoolean("scanner_enable_vibration", settings.enableVibration)
+            .putBoolean("scanner_enable_crop_preview", settings.enableCropPreview)
             .apply()
         _scannerSettings.value = settings
     }

@@ -215,6 +215,12 @@ class DmsManager(
                 fileSizeFormatted = "${targetPdfFile.length() / 1024} KB"
             )
             documentDao.insertDocument(docEntity)
+            com.example.service.AppAuditLogger.log(
+                category = com.example.service.LogCategory.STORAGE_DMS,
+                tag = "DmsManager",
+                message = "Dokument '${docEntity.title}' (${docEntity.sender}) erfolgreich im Tresor abgelegt.",
+                details = "Pfad: ${docEntity.filePath} | Typ: ${docEntity.docType} | Seiten: ${docEntity.pageCount}"
+            )
             onDocSaved()
             removeBatchItem(item.id)
             return docEntity
@@ -272,6 +278,12 @@ class DmsManager(
     fun renameMainFolder(oldName: String, newName: String) {
         val cleanNewName = newName.trim()
         if (cleanNewName.isBlank() || oldName == cleanNewName) return
+        com.example.service.AppAuditLogger.log(
+            category = com.example.service.LogCategory.STORAGE_DMS,
+            tag = "DmsManager",
+            message = "Hauptordner '$oldName' wurde in '$cleanNewName' umbenannt.",
+            details = "Alle verknüpften Dokumente werden aktualisiert."
+        )
         settingsRepo.renameMainFolder(oldName, cleanNewName)
         scope.launch(Dispatchers.IO) {
             val docs = documentDao.getAllDocuments().first()
@@ -284,6 +296,12 @@ class DmsManager(
     fun renameSubFolder(mainCatName: String, oldSubName: String, newSubName: String) {
         val cleanNewSubName = newSubName.trim()
         if (cleanNewSubName.isBlank() || oldSubName == cleanNewSubName) return
+        com.example.service.AppAuditLogger.log(
+            category = com.example.service.LogCategory.STORAGE_DMS,
+            tag = "DmsManager",
+            message = "Unterordner '$oldSubName' in '$mainCatName' wurde in '$cleanNewSubName' umbenannt.",
+            details = "Betroffene Dokumente werden im Hintergrund aktualisiert."
+        )
         settingsRepo.renameSubFolder(mainCatName, oldSubName, cleanNewSubName)
         scope.launch(Dispatchers.IO) {
             val docs = documentDao.getAllDocuments().first()
@@ -297,6 +315,12 @@ class DmsManager(
     }
 
     fun deleteMainFolder(mainCatName: String, deleteDocuments: Boolean = false) {
+        com.example.service.AppAuditLogger.log(
+            category = com.example.service.LogCategory.STORAGE_DMS,
+            tag = "DmsManager",
+            message = "Hauptordner '$mainCatName' wird gelöscht (Inkl. Dokumente: $deleteDocuments).",
+            details = "Aktion vom Benutzer ausgelöst."
+        )
         scope.launch(Dispatchers.IO) {
             val docs = documentDao.getAllDocuments().first()
             val docsToDelete = docs.filter { it.mainCategory.equals(mainCatName, ignoreCase = true) }
@@ -411,6 +435,12 @@ class DmsManager(
     val docRules: StateFlow<List<DocRule>> = ruleRepo.rules
 
     fun addDocRule(rule: DocRule) {
+        com.example.service.AppAuditLogger.log(
+            category = com.example.service.LogCategory.RULE_ENGINE,
+            tag = "DmsManager",
+            message = "Neue Schlagwort-Regel '${rule.name}' wird erstellt.",
+            details = "Ziel-Typ: ${rule.targetDocType} | Schlagwörter: ${rule.matchKeywords.joinToString()}"
+        )
         scope.launch(Dispatchers.IO) {
             val existingFields = customFieldDao.getAllCustomFieldsList()
             val harmonization = CustomFieldHarmonizer.harmonizeFields(rule.targetCustomFields, existingFields)
