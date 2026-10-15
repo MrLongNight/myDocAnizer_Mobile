@@ -187,9 +187,11 @@ fun ScannerView(
     var isQualityCheckModeActive by remember { mutableStateOf(false) }
     var pendingCheckBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
-    // Interaktiver Zuschnitt & Optimierungsvorschau Zustand
+    // Interaktive Dokumentenprüfung & Ecken-Justierung in einer einzigen Ansicht
     var capturedRawBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var croppedPerspectiveBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var preScanSecondsRemaining by remember { mutableIntStateOf(0) }
+    var isPreScanActive by remember { mutableStateOf(false) }
+    var postScanSecondsRemaining by remember { mutableIntStateOf(0) }
 
     // Funktion zum Ausführen des eigentlichen Bildabzugs
     val executeCapture: () -> Unit = {
@@ -326,72 +328,35 @@ fun ScannerView(
         }
     }
 
-    // 1. Automatische Erkennung des Blattwechsels:
-    // Nachdem ein Blatt gescannt wurde, wartet das System darauf, dass das gescannte Blatt entfernt
-    // und das nächste Dokument im Scanbereich platziert wird.
-    // Ein Blattwechsel liegt vor, wenn:
-    // - Das Dokument kurzzeitig nicht mehr im Bild ist (!frameAnalysis.isDocumentDetected)
-    // - ODER signifikante Bewegung (Hand/Papierwechsel) gemessen wird.
-    // Sobald das neue Blatt ruhig im Bild liegt, schaltet das System sofort wieder für den nächsten Auto-Scan frei!
-    LaunchedEffect(
-        hasCapturedCurrentDocument,
-        frameAnalysis.motionScore,
-        xyMagnitude,
-        isPhoneInWaage,
-        isSharpnessOptimal,
-        frameAnalysis.isDocumentDetected,
-        scannerSettings.toolsInfoOnly,
-        scannerSettings.sheetChangeSensitivity,
-        isCameraHardwareAvailable
-    ) {
-        if (hasCapturedCurrentDocument) {
-            val motionThreshold = when (scannerSettings.sheetChangeSensitivity) {
-                "HIGH" -> 3.5f
-                "LOW" -> 7.5f
-                else -> 5.0f
+    // 1. Stativ-Vorlaufzeit: Vorlaufzeit VOR Erkennungsstart (0s = sofort aktiv, bis 60s)
+    LaunchedEffect(scannerSettings.scanMode, scannerSettings.tripodAutoScan, scannerSettings.preScanDelaySeconds) {
+        val isAuto = scannerSettings.scanMode == "AUTO" &&
+            (scannerSettings.tripodAutoScan || scannerSettings.triggerMode == "AUTO_DETECT")
+        if (isAuto && scannerSettings.preScanDelaySeconds > 0) {
+            isPreScanActive = true
+            preScanSecondsRemaining = scannerSettings.preScanDelaySeconds
+            while (preScanSecondsRemaining > 0) {
+                kotlinx.coroutines.delay(1000L)
+                preScanSecondsRemaining--
             }
-
-            // Schritt 1: Wurde das alte Blatt weggenommen oder bewegt?
-            if (!frameAnalysis.isDocumentDetected || frameAnalysis.motionScore > motionThreshold || xyMagnitude > 0.65f) {
-                motionDetectedAfterCapture = true
-            }
-
-            // Schritt 2: Liegt das neue Blatt ruhig im Scanbereich?
-            if (motionDetectedAfterCapture) {
-                val isCalm = frameAnalysis.motionScore < (motionThreshold - 1.0f).coerceAtLeast(2.0f) && xyMagnitude < 0.5f
-                val isDocReady = frameAnalysis.isDocumentDetected && (scannerSettings.toolsInfoOnly || (isPhoneInWaage && isSharpnessOptimal))
-
-                if (isCalm && isDocReady) {
-                    val postDelay = (scannerSettings.postScanDelaySeconds * 1000L).coerceIn(1000L, 60000L)
-                    kotlinx.coroutines.delay(postDelay)
-                    hasCapturedCurrentDocument = false
-                    motionDetectedAfterCapture = false
-                }
-            }
-
-            // Schritt 3: Im Emulator oder bei Kamera-Simulation nach eingestellter Nachlaufzeit automatisch freigeben
-            if (!isCameraHardwareAvailable) {
-                val postDelay = (scannerSettings.postScanDelaySeconds * 1000L).coerceIn(1000L, 60000L)
-                kotlinx.coroutines.delay(postDelay)
-                hasCapturedCurrentDocument = false
-                motionDetectedAfterCapture = false
-            }
+            isPreScanActive = false
+        } else {
+            isPreScanActive = false
+            preScanSecondsRemaining = 0
         }
     }
 
     // 2. Automatischer Scan-Ablauf:
-    // Startet VOLLAUTOMATISCH, wenn ein neues Dokument ruhig und scharf im Scanbereich liegt (oder sofort bei Info-Only),
-    // und STOPPT nach dem Auslösen sofort solange, bis wieder ein neues Dokument platziert wurde!
+    // Löst zügig aus, sobald ein Dokument erkannt und ruhig/scharf im Bild ist (kein 5s langes Stillhalten erforderlich!)
     LaunchedEffect(
-        scannerSettings.triggerMode,
-        scannerSettings.tripodAutoScan,
-        scannerSettings.preScanDelaySeconds,
-        scannerSettings.postScanDelaySeconds,
-        scannerSettings.scanMode,
-        scannerSettings.toolsInfoOnly,
+        isPreScanActive,
         hasCapturedCurrentDocument,
         isProcessing,
         isCountdownRunning,
+        scannerSettings.scanMode,
+        scannerSettings.tripodAutoScan,
+        scannerSettings.triggerMode,
+        scannerSettings.toolsInfoOnly,
         isPhoneInWaage,
         isSharpnessOptimal,
         frameAnalysis.isDocumentDetected
@@ -399,38 +364,59 @@ fun ScannerView(
         val isTripodOrAuto = scannerSettings.scanMode == "AUTO" &&
             (scannerSettings.tripodAutoScan || scannerSettings.triggerMode == "AUTO_DETECT")
 
-        // Nur starten wenn Auto-Scan aktiv, noch KEIN Blatt erfasst wurde und keine Verarbeitung läuft
-        if (isTripodOrAuto && !hasCapturedCurrentDocument && !isProcessing && !isCountdownRunning) {
+        if (isTripodOrAuto && !isPreScanActive && !hasCapturedCurrentDocument && !isProcessing && !isCountdownRunning) {
             val isReady = frameAnalysis.isDocumentDetected && (scannerSettings.toolsInfoOnly || (isPhoneInWaage && isSharpnessOptimal))
-            if (!isReady) {
-                autoDetectProgress = 0f
-                return@LaunchedEffect
-            }
-
-            val detectionDelay = (scannerSettings.preScanDelaySeconds * 1000L).coerceIn(1000L, 60000L)
-            val steps = (scannerSettings.preScanDelaySeconds * 10).coerceIn(10, 100)
-            val stepTime = (detectionDelay / steps)
-
-            autoDetectProgress = 0f
-            for (i in 1..steps) {
-                kotlinx.coroutines.delay(stepTime)
-                // Bei Verwackeln, Verkippen oder Entfernen des Blatts abbrechen (außer bei Info-Only)
-                val checkCondition = frameAnalysis.isDocumentDetected && (scannerSettings.toolsInfoOnly || (isPhoneInWaage && isSharpnessOptimal))
-                if (!checkCondition) {
+            if (isReady) {
+                autoDetectProgress = 0.5f
+                kotlinx.coroutines.delay(250L) // Kurze Stabilisierung für sauberen Fokus
+                val stillReady = frameAnalysis.isDocumentDetected && (scannerSettings.toolsInfoOnly || (isPhoneInWaage && isSharpnessOptimal))
+                if (stillReady) {
+                    autoDetectProgress = 1.0f
+                    executeCapture()
+                    hasCapturedCurrentDocument = true
+                    motionDetectedAfterCapture = false
                     autoDetectProgress = 0f
-                    return@LaunchedEffect
+                } else {
+                    autoDetectProgress = 0f
                 }
-                autoDetectProgress = i / steps.toFloat()
+            } else {
+                autoDetectProgress = 0f
             }
-
-            // Automatisch auslösen!
-            executeCapture()
-            // Scan SOFORT stoppen und auf nächstes Blatt warten
-            hasCapturedCurrentDocument = true
-            motionDetectedAfterCapture = false
-            autoDetectProgress = 0f
         } else {
             autoDetectProgress = 0f
+        }
+    }
+
+    // 3. Pausenzeit NACH dem Scan (Blattwechsel-Zeitfenster, 0s = sofort bis 60s):
+    // Gibt dem Nutzer Zeit, die Seite umzublättern oder das nächste Dokument aufzulegen,
+    // bevor die Erkennung wieder aktiv wird.
+    LaunchedEffect(
+        hasCapturedCurrentDocument,
+        scannerSettings.postScanDelaySeconds,
+        frameAnalysis.motionScore,
+        frameAnalysis.isDocumentDetected,
+        isCameraHardwareAvailable
+    ) {
+        if (hasCapturedCurrentDocument) {
+            val postSec = scannerSettings.postScanDelaySeconds.coerceAtLeast(0)
+            if (postSec > 0) {
+                postScanSecondsRemaining = postSec
+                while (postScanSecondsRemaining > 0) {
+                    kotlinx.coroutines.delay(1000L)
+                    postScanSecondsRemaining--
+                }
+            } else {
+                postScanSecondsRemaining = 0
+            }
+
+            // Bei Hardware-Kamera und 0s Pause: kurzes Entprellen für Blattwechsel
+            if (isCameraHardwareAvailable && postSec == 0) {
+                kotlinx.coroutines.delay(300L)
+            }
+            hasCapturedCurrentDocument = false
+            motionDetectedAfterCapture = false
+        } else {
+            postScanSecondsRemaining = 0
         }
     }
 
@@ -562,6 +548,8 @@ fun ScannerView(
             motionDetectedAfterCapture = false
         },
         autoDetectProgress = autoDetectProgress,
+        preScanSecondsRemaining = preScanSecondsRemaining,
+        postScanSecondsRemaining = postScanSecondsRemaining,
         scannerSettings = scannerSettings,
         lastBulkSavedDoc = lastBulkSavedDoc,
         scanErrorMessage = scanErrorMessage,
@@ -631,43 +619,27 @@ fun ScannerView(
         )
     }
 
-    BackHandler(enabled = croppedPerspectiveBitmap != null || capturedRawBitmap != null) {
-        if (croppedPerspectiveBitmap != null) {
-            croppedPerspectiveBitmap = null
-        } else if (capturedRawBitmap != null) {
-            capturedRawBitmap = null
-            hasCapturedCurrentDocument = false
-            autoDetectProgress = 0f
-        }
+    BackHandler(enabled = capturedRawBitmap != null) {
+        capturedRawBitmap = null
+        hasCapturedCurrentDocument = false
+        autoDetectProgress = 0f
     }
 
-    croppedPerspectiveBitmap?.let { warpedBmp ->
-        com.example.ui.views.scanner.DocumentOptimizationPreviewScreen(
-            croppedBitmap = warpedBmp,
-            onBackToCrop = {
-                croppedPerspectiveBitmap = null
-            },
-            onConfirmFinalDocument = { finalBmp ->
-                capturedRawBitmap = null
-                croppedPerspectiveBitmap = null
-                if (scannerSettings.isBulkMode || isAutoMode) {
-                    viewModel.finalizeScanWithOptimizedBitmap(finalBmp)
-                } else {
-                    viewModel.addPage(finalBmp)
-                }
-            }
-        )
-    } ?: capturedRawBitmap?.let { rawBmp ->
-        com.example.ui.views.scanner.DocumentCropScreen(
+    capturedRawBitmap?.let { rawBmp ->
+        com.example.ui.views.scanner.DocumentReviewAndCropScreen(
             capturedBitmap = rawBmp,
             onCancel = {
                 capturedRawBitmap = null
                 hasCapturedCurrentDocument = false
                 autoDetectProgress = 0f
             },
-            onConfirmCrop = { corners ->
-                val warped = com.example.service.ImageProcessingService.cropAndWarpPerspective(rawBmp, corners)
-                croppedPerspectiveBitmap = warped
+            onConfirmFinalDocument = { finalBmp ->
+                capturedRawBitmap = null
+                if (scannerSettings.isBulkMode || isAutoMode) {
+                    viewModel.finalizeScanWithOptimizedBitmap(finalBmp)
+                } else {
+                    viewModel.addPage(finalBmp)
+                }
             }
         )
     }

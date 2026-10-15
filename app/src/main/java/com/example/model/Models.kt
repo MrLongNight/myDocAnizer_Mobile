@@ -532,9 +532,9 @@ data class ScannerSettings(
     val enableHardwareButtons: Boolean = true, // Lautstärketasten als Auslöser (nur bei manuellem Modus wirksam)
     val defaultTemplateId: String = "", // Bevorzugte Vorlage für Auto-Scan
     val tripodAutoScan: Boolean = true, // Automatische Dokumentenerkennung & Auto-Scan
-    val preScanDelaySeconds: Int = 2, // Verzögerung vor Scan nach Erkennung (1 - 60s)
-    val postScanDelaySeconds: Int = 3, // Wartezeit nach Scan bis Erkennung wieder aktiv (1 - 60s)
-    val autoScanDelayMs: Long = 2000L, // Backwards compatibility ms
+    val preScanDelaySeconds: Int = 0, // Vorlaufzeit vor Erkennungsstart (0 - 60s)
+    val postScanDelaySeconds: Int = 2, // Pausenzeit nach Scan bis nächste Erkennung aktiv (0 - 60s)
+    val autoScanDelayMs: Long = 0L, // Backwards compatibility ms
     val toolsInfoOnly: Boolean = true, // Scan-Tools (Wasserwaage, Schärfe, etc.) nur informativ (kein Blocker)
     val flashMode: String = "OFF", // "OFF", "FLASH", "TORCH"
     val sheetChangeSensitivity: String = "MEDIUM", // "LOW", "MEDIUM", "HIGH"

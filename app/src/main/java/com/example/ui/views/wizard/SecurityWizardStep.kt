@@ -84,21 +84,12 @@ fun SecurityWizardStep(
     // Teilschritt 1..4
     var currentSubStep by remember { mutableIntStateOf(1) }
 
-    // Substep 1: Grundstufe
-    var selectedTier by remember {
-        mutableStateOf(
-            if (viewModel.isUnencryptedModeConfirmed.value) VaultSecurityTier.UNENCRYPTED
-            else VaultSecurityTier.ONE_FACTOR
-        )
-    }
+    // Substep 1: Grundstufe - Keine Default-Vorauswahl bei den 3 Betriebsarten
+    var selectedTier by remember { mutableStateOf<VaultSecurityTier?>(null) }
 
     // Substep 2: Faktoren-Wahl
     var selectedFactorType by remember {
-        mutableStateOf(
-            if (selectedTier == VaultSecurityTier.TWO_FACTOR) VaultFactorType.PASSWORD_AND_KEYFILE
-            else if (selectedTier == VaultSecurityTier.UNENCRYPTED) VaultFactorType.NONE
-            else VaultFactorType.PASSWORD
-        )
+        mutableStateOf(VaultFactorType.PASSWORD)
     }
 
     // Passwort State
@@ -169,7 +160,7 @@ fun SecurityWizardStep(
             onPasswordChange("")
             viewModel.setUnencryptedModeConfirmed(true)
             viewModel.setSecurityMethod("BIOMETRIC")
-        } else {
+        } else if (selectedTier != null) {
             viewModel.setUnencryptedModeConfirmed(false)
             if (selectedFactorType == VaultFactorType.PASSKEY) {
                 onPasswordChange(if (password.isNotBlank()) password else "PASSKEY_FIDO2_SECURE_TOKEN")
@@ -215,6 +206,7 @@ fun SecurityWizardStep(
                 isPasswordMatching && (totpVerified || totpInputCode.length == 6)
             } else isPasswordMatching
         }
+        null -> false
     }
 
     // Kann Substep 3 fortfahren?
@@ -426,11 +418,12 @@ fun SecurityWizardStep(
 
             Button(
                 onClick = {
-                    if (selectedTier == VaultSecurityTier.UNENCRYPTED) {
+                    val tier = selectedTier ?: return@Button
+                    if (tier == VaultSecurityTier.UNENCRYPTED) {
                         showUnencryptedWarningDialog = true
                     } else {
                         // Passende Faktorenart für nächsten Schritt vorwählen
-                        if (selectedTier == VaultSecurityTier.TWO_FACTOR) {
+                        if (tier == VaultSecurityTier.TWO_FACTOR) {
                             if (selectedFactorType != VaultFactorType.PASSWORD_AND_KEYFILE && selectedFactorType != VaultFactorType.PASSWORD_AND_TOTP) {
                                 selectedFactorType = VaultFactorType.PASSWORD_AND_KEYFILE
                             }
@@ -445,13 +438,17 @@ fun SecurityWizardStep(
                         currentSubStep = 2
                     }
                 },
+                enabled = selectedTier != null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("btn_wizard_tier_continue")
             ) {
                 Text(
-                    if (selectedTier == VaultSecurityTier.UNENCRYPTED) "Unverschlüsselt fortfahren"
-                    else "Auswahl bestätigen & Faktoren einrichten"
+                    when (selectedTier) {
+                        null -> "Bitte eine Betriebsart auswählen"
+                        VaultSecurityTier.UNENCRYPTED -> "Unverschlüsselt fortfahren"
+                        else -> "Auswahl bestätigen & Faktoren einrichten"
+                    }
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -1281,7 +1278,7 @@ fun SecurityWizardStep(
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Übersicht deiner Konfiguration:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            Text("• Stufe: ${selectedTier.getDisplayName()}", style = MaterialTheme.typography.bodySmall)
+                            Text("• Stufe: ${selectedTier?.getDisplayName() ?: "Nicht gewählt"}", style = MaterialTheme.typography.bodySmall)
                             Text("• Faktoren: ${selectedFactorType.getDisplayName()}", style = MaterialTheme.typography.bodySmall)
                             Text("• Notfall-Schutz: ${selectedRecovery.getDisplayName()}", style = MaterialTheme.typography.bodySmall)
                             Text("• Biometrie: ${if (isBiometricActive) "Aktiviert (Fingerabdruck/Face)" else "Deaktiviert"}", style = MaterialTheme.typography.bodySmall)
@@ -1329,7 +1326,7 @@ fun SecurityWizardStep(
                                         enableBiometrics = isBiometricActive,
                                         recoveryMethod = selectedRecovery,
                                         bip39Words = if (selectedRecovery == VaultRecoveryMethod.BIP39_WORDS) generatedWords else null,
-                                        securityTier = selectedTier,
+                                        securityTier = selectedTier ?: VaultSecurityTier.ONE_FACTOR,
                                         factorType = selectedFactorType,
                                         totpSecret = if (selectedFactorType == VaultFactorType.PASSWORD_AND_TOTP) totpSecret else null,
                                         keyFileToken = if (selectedFactorType == VaultFactorType.KEYFILE || selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE) keyFileToken else null,

@@ -66,6 +66,8 @@ fun ScannerCameraPreviewPane(
     hasCapturedCurrentDocument: Boolean,
     onResetCapturedDocument: () -> Unit,
     autoDetectProgress: Float,
+    preScanSecondsRemaining: Int = 0,
+    postScanSecondsRemaining: Int = 0,
     scannerSettings: ScannerSettings,
     lastBulkSavedDoc: DocumentEntity?,
     scanErrorMessage: String?,
@@ -612,6 +614,58 @@ fun ScannerCameraPreviewPane(
                             )
                         }
                     }
+                } else if (preScanSecondsRemaining > 0) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.HourglassTop,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "⏱️ Stativ-Vorlauf: Dokument-Erkennung startet in ${preScanSecondsRemaining}s...",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                } else if (postScanSecondsRemaining > 0) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PauseCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "🔄 Pausenzeit für Blattwechsel (${postScanSecondsRemaining}s)...",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
                 } else if (autoDetectProgress > 0f) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
@@ -631,7 +685,7 @@ fun ScannerCameraPreviewPane(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "⚡ Dokument erkannt • Scannt automatisch...",
+                                text = "⚡ Dokument erkannt • Scannt...",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer

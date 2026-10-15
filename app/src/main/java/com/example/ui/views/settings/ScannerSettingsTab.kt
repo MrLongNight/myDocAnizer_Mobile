@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.ui.DocAnizerViewModel
 import com.example.ui.components.CollapsibleSettingsCard
 
@@ -178,13 +179,21 @@ fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Column {
+                                Text(
+                                    text = "⏱️ Vorlaufzeit vor Erkennungsstart:",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Zeit bis die automatische Erkennung nach dem Start beginnt (0s = sofort)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp
+                                )
+                            }
                             Text(
-                                text = "⏱️ Vorlaufzeit vor Auslösung (nach Erkennung):",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "${scannerSettings.preScanDelaySeconds} s",
+                                text = if (scannerSettings.preScanDelaySeconds == 0) "Sofort (0s)" else "${scannerSettings.preScanDelaySeconds} s",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -193,11 +202,11 @@ fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
                         Slider(
                             value = scannerSettings.preScanDelaySeconds.toFloat(),
                             onValueChange = { newVal ->
-                                val sec = newVal.toInt().coerceIn(1, 60)
+                                val sec = newVal.toInt().coerceIn(0, 60)
                                 viewModel.updateScannerSettings(scannerSettings.copy(preScanDelaySeconds = sec, autoScanDelayMs = sec * 1000L))
                             },
-                            valueRange = 1f..60f,
-                            steps = 58,
+                            valueRange = 0f..60f,
+                            steps = 59,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -208,13 +217,21 @@ fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Column {
+                                Text(
+                                    text = "🔄 Pausenzeit nach Scan (Blattwechsel):",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Pausendauer bis die Erkennung für das nächste Dokument wieder aktiv ist",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp
+                                )
+                            }
                             Text(
-                                text = "🔄 Nachlaufzeit bis Wiederaktivierung:",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "${scannerSettings.postScanDelaySeconds} s",
+                                text = if (scannerSettings.postScanDelaySeconds == 0) "Sofort (0s)" else "${scannerSettings.postScanDelaySeconds} s",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -223,11 +240,11 @@ fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
                         Slider(
                             value = scannerSettings.postScanDelaySeconds.toFloat(),
                             onValueChange = { newVal ->
-                                val sec = newVal.toInt().coerceIn(1, 60)
+                                val sec = newVal.toInt().coerceIn(0, 60)
                                 viewModel.updateScannerSettings(scannerSettings.copy(postScanDelaySeconds = sec))
                             },
-                            valueRange = 1f..60f,
-                            steps = 58,
+                            valueRange = 0f..60f,
+                            steps = 59,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }

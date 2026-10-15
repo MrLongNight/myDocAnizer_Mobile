@@ -358,6 +358,47 @@ object ImageProcessingService {
         }
     }
 
+    data class DocumentOptimizationConfig(
+        val isEnabled: Boolean = true,
+        val isColorMode: Boolean = false,
+        val contrast: Float = 1.8f,
+        val brightnessOffset: Float = -55f,
+        val cleanBackgroundWhite: Boolean = true,
+        val rotationAngle: Float = 0f
+    )
+
+    /**
+     * Wendet anpassbare Optimierungs-Parameter für den interaktiven Split-Review-Screen an.
+     * Ermöglicht das stufenlose Nachjustieren von Kontrast, Schatten-Entfernung und Drehung
+     * oder das vollständige Deaktivieren der Optimierung.
+     */
+    suspend fun applyCustomDocumentOptimization(
+        bitmap: Bitmap,
+        config: DocumentOptimizationConfig
+    ): Bitmap = withContext(Dispatchers.Default) {
+        val workingSrc = ensureSoftwareBitmap(bitmap)
+        val rotated = if (Math.abs(config.rotationAngle) > 0.1f) {
+            rotateBitmap(workingSrc, config.rotationAngle)
+        } else {
+            workingSrc
+        }
+
+        if (!config.isEnabled) {
+            rotated
+        } else {
+            if (config.isColorMode) {
+                enhanceColor(rotated, contrast = config.contrast, brightnessOffset = config.brightnessOffset * 0.25f)
+            } else {
+                convertToOptimizedBw(
+                    src = rotated,
+                    contrast = config.contrast,
+                    brightnessOffset = config.brightnessOffset,
+                    cleanBackgroundWhite = config.cleanBackgroundWhite
+                )
+            }
+        }
+    }
+
     /**
      * Erstellt eine optimierte Voransicht zur Gegenüberstellung (Original vs. Optimiert).
      */
