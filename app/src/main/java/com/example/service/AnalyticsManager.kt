@@ -42,6 +42,23 @@ class AnalyticsManager(context: Context, private val analyticsEnabled: StateFlow
         }
     }
 
+    private fun getTpsBucket(tps: Float): String {
+        return when {
+            tps < 5f -> "under_5_tps"
+            tps < 15f -> "5_to_15_tps"
+            tps < 30f -> "15_to_30_tps"
+            else -> "over_30_tps"
+        }
+    }
+
+    private fun getQualityBucket(score: Int): String {
+        return when {
+            score >= 85 -> "high_85_100"
+            score >= 60 -> "medium_60_84"
+            else -> "low_under_60"
+        }
+    }
+
     /**
      * Datenschutzkonforme Übermittlung von LLM-Inferenz-Telemetriedaten (ohne private Dokument- oder Textinhalte).
      */
@@ -50,19 +67,22 @@ class AnalyticsManager(context: Context, private val analyticsEnabled: StateFlow
         latencyMs: Long,
         tokensPerSecond: Float,
         confidence: Float,
-        preferenceMode: String
+        preferenceMode: String,
+        devicePerfTier: String = "STANDARD"
     ) {
         if (analyticsEnabled.value) {
             val bundle = android.os.Bundle().apply {
                 putString("model_id", modelId.take(40))
                 putLong("latency_ms", latencyMs)
                 putFloat("tps", tokensPerSecond)
+                putString("tps_bucket", getTpsBucket(tokensPerSecond))
                 putInt("confidence_pct", (confidence * 100).toInt().coerceIn(0, 100))
                 putString("pref_mode", preferenceMode)
             }
             logEvent("llm_inference_completed", bundle)
             setUserProperty("last_llm_model", modelId.take(40))
             setUserProperty("llm_pref_mode", preferenceMode)
+            setUserProperty("device_perf_tier", devicePerfTier)
         }
     }
 
@@ -74,17 +94,21 @@ class AnalyticsManager(context: Context, private val analyticsEnabled: StateFlow
         qualityScore: Int,
         quantityScore: Int,
         overallScore: Int,
-        tps: Float
+        tps: Float,
+        devicePerfTier: String = "STANDARD"
     ) {
         if (analyticsEnabled.value) {
             val bundle = android.os.Bundle().apply {
                 putString("model_id", modelId.take(40))
                 putInt("quality_score", qualityScore.coerceIn(0, 100))
+                putString("quality_bucket", getQualityBucket(qualityScore))
                 putInt("quantity_score", quantityScore.coerceIn(0, 100))
                 putInt("overall_score", overallScore.coerceIn(0, 100))
                 putFloat("tps", tps)
+                putString("tps_bucket", getTpsBucket(tps))
             }
             logEvent("llm_benchmark_completed", bundle)
+            setUserProperty("device_perf_tier", devicePerfTier)
         }
     }
 }

@@ -364,12 +364,12 @@ object AppAuditLogger {
                     AuditLogEntry(
                         timestamp = ts ?: System.currentTimeMillis(),
                         category = when {
-                            line.contains("[AI_INFERENCE]") -> LogCategory.AI_INFERENCE
-                            line.contains("[OCR]") -> LogCategory.OCR
-                            line.contains("[RULE_ENGINE]") -> LogCategory.RULE_ENGINE
-                            line.contains("[STORAGE_DMS]") -> LogCategory.STORAGE_DMS
-                            line.contains("[P2P_SYNC]") -> LogCategory.P2P_SYNC
-                            line.contains("[ERROR]") -> LogCategory.ERROR
+                            line.contains("AI_INFERENCE]") -> LogCategory.AI_INFERENCE
+                            line.contains("OCR]") -> LogCategory.OCR
+                            line.contains("RULE_ENGINE]") -> LogCategory.RULE_ENGINE
+                            line.contains("STORAGE_DMS]") -> LogCategory.STORAGE_DMS
+                            line.contains("P2P_SYNC]") -> LogCategory.P2P_SYNC
+                            line.contains("ERROR]") -> LogCategory.ERROR
                             else -> LogCategory.SYSTEM
                         },
                         tag = "Historie",
@@ -378,7 +378,9 @@ object AppAuditLogger {
                         isError = line.contains("[ERROR]")
                     )
                 }.reversed()
-                _logs.update { parsedList }
+                _logs.update { current ->
+                    (current + parsedList).distinctBy { it.details + it.timestamp }.take(MAX_MEMORY_LOGS)
+                }
             }
         } catch (_: Exception) {}
     }

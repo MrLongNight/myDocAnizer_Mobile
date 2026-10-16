@@ -86,6 +86,15 @@ object CloudSyncWorkerService {
                 return@withContext
             }
 
+            if (config.enableGoogleDrive && (!config.googleDriveConnected || config.googleDriveAccessToken.isBlank())) {
+                _syncState.value = SyncState.Error("Google Drive ist aktiviert, aber nicht verbunden oder Token fehlt.")
+                return@withContext
+            }
+            if (config.enableWebDavNas && config.webDavUrl.isBlank()) {
+                _syncState.value = SyncState.Error("WebDAV / NAS ist aktiviert, aber keine URL angegeben.")
+                return@withContext
+            }
+
             val targetList = mutableListOf<String>()
             if (config.enableGoogleDrive) targetList.add("Google Drive")
             if (config.enableWebDavNas) {
@@ -167,9 +176,8 @@ object CloudSyncWorkerService {
 
                         // Mark synced in database NUR wenn ALLE aktiven Ziele erfolgreich übertragen wurden
                         val allActiveTargetsSuccessful = (isWebDavActive || isDriveActive) && webDavSuccess && driveSuccess
-                        val isOfflineOnly = !isWebDavActive && !isDriveActive
 
-                        if (allActiveTargetsSuccessful || isOfflineOnly) {
+                        if (allActiveTargetsSuccessful) {
                             documentDao.markSynced(doc.id)
                             uploadedCount++
                         }

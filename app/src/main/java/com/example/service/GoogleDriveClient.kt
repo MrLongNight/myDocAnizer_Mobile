@@ -57,11 +57,16 @@ object GoogleDriveClient {
         }
     }
 
+    private val folderCache = java.util.concurrent.ConcurrentHashMap<Pair<String, Int>, String>()
+
     /**
      * Sucht nach einem bestehenden Ordner oder erstellt ihn, falls noch nicht vorhanden.
      */
     suspend fun findOrCreateFolder(accessToken: String, folderName: String): String? = withContext(Dispatchers.IO) {
         if (folderName.isBlank()) return@withContext null
+        val cacheKey = Pair(folderName, accessToken.hashCode())
+        folderCache[cacheKey]?.let { return@withContext it }
+
         try {
             val q = "mimeType = 'application/vnd.google-apps.folder' and name = '${folderName.replace("'", "\\'")}' and trashed = false"
             val encodedQ = java.net.URLEncoder.encode(q, "UTF-8")
@@ -76,7 +81,11 @@ object GoogleDriveClient {
                     val json = JSONObject(resp.body?.string() ?: "{}")
                     val files = json.optJSONArray("files")
                     if (files != null && files.length() > 0) {
-                        return@withContext files.getJSONObject(0).optString("id")
+                        val folderId = files.getJSONObject(0).optString("id")
+                        if (folderId.isNotBlank()) {
+                            folderCache[cacheKey] = folderId
+                            return@withContext folderId
+                        }
                     }
                 }
             }
@@ -97,7 +106,10 @@ object GoogleDriveClient {
                 if (resp.isSuccessful) {
                     val json = JSONObject(resp.body?.string() ?: "{}")
                     val id = json.optString("id", "")
-                    if (id.isNotBlank()) return@withContext id
+                    if (id.isNotBlank()) {
+                        folderCache[cacheKey] = id
+                        return@withContext id
+                    }
                 }
             }
         } catch (_: Exception) {}

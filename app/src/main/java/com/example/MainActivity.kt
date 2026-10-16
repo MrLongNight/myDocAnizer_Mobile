@@ -58,7 +58,6 @@ open class MainActivity : FragmentActivity() {
                 android.os.Build.MODEL.contains("Android SDK", ignoreCase = true) ||
                 android.os.Build.PRODUCT.contains("sdk", ignoreCase = true) ||
                 android.os.Build.PRODUCT.contains("cuttlefish", ignoreCase = true) ||
-                android.os.Build.PRODUCT.contains("gsi", ignoreCase = true) ||
                 android.os.Build.BOARD.contains("cuttlefish", ignoreCase = true) ||
                 android.os.Build.MANUFACTURER.contains("Genymotion", ignoreCase = true) ||
                 android.os.Build.BRAND.startsWith("generic") ||

@@ -326,15 +326,25 @@ object DocumentStorageService {
             // Bitmap einpassen mit ensureSoftwareBitmap und seitenverhältnis-erhaltender Skalierung & Zentrierung
             var safeBmp = ImageProcessingService.ensureSoftwareBitmap(bitmap)
             
-            // Basic DPI scaling optimization
+            // Basic DPI scaling optimization & A4 max pixel dimension limit
             val targetDpi = settings.dpi.coerceIn(72, 600)
-            val scaleFactor = targetDpi / 300f
-            if (scaleFactor < 0.9f) {
-                val newW = (safeBmp.width * scaleFactor).toInt()
-                val newH = (safeBmp.height * scaleFactor).toInt()
+            val maxDimPx = ((targetDpi / 72f) * 842f).toInt()
+            if (safeBmp.width > maxDimPx || safeBmp.height > maxDimPx) {
+                val ratio = minOf(maxDimPx.toFloat() / safeBmp.width, maxDimPx.toFloat() / safeBmp.height)
+                val newW = (safeBmp.width * ratio).toInt().coerceAtLeast(1)
+                val newH = (safeBmp.height * ratio).toInt().coerceAtLeast(1)
                 val scaledBmp = Bitmap.createScaledBitmap(safeBmp, newW, newH, true)
                 if (safeBmp !== bitmap) safeBmp.recycle()
                 safeBmp = scaledBmp
+            } else {
+                val scaleFactor = targetDpi / 300f
+                if (scaleFactor < 0.9f) {
+                    val newW = (safeBmp.width * scaleFactor).toInt().coerceAtLeast(1)
+                    val newH = (safeBmp.height * scaleFactor).toInt().coerceAtLeast(1)
+                    val scaledBmp = Bitmap.createScaledBitmap(safeBmp, newW, newH, true)
+                    if (safeBmp !== bitmap) safeBmp.recycle()
+                    safeBmp = scaledBmp
+                }
             }
 
             val margin = 20f
@@ -1153,7 +1163,12 @@ object DocumentStorageService {
                         subCategoryId = subCatId
                     )
 
-                    val finalDestFile = File(targetDir, safeFileName)
+                    val targetFile = File(targetDir, safeFileName)
+                    val finalDestFile = if (targetFile.exists()) {
+                        File(targetDir, "${id}_$safeFileName")
+                    } else {
+                        targetFile
+                    }
                     if (!finalDestFile.canonicalPath.startsWith(targetDir.canonicalPath)) {
                         throw SecurityException("Ungültiger Zielpfad für Dokument (Zip Slip Schutz).")
                     }

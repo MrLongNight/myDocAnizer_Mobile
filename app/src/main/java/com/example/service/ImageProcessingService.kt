@@ -28,44 +28,42 @@ object ImageProcessingService {
      */
     suspend fun analyzeImage(bitmap: Bitmap): ImageAnalysisResult = withContext(Dispatchers.Default) {
         val workingBitmap = ensureSoftwareBitmap(bitmap)
-        val width = workingBitmap.width
-        val height = workingBitmap.height
-
-        // Downsample for rapid realtime analysis
         val sampleSize = 40
+
+        val small = Bitmap.createScaledBitmap(workingBitmap, sampleSize, sampleSize, false)
+        val pixels = IntArray(sampleSize * sampleSize)
+        small.getPixels(pixels, 0, sampleSize, 0, 0, sampleSize, sampleSize)
+
         var totalLuminance = 0.0
         var colorDiffTotal = 0.0
         var pixelCount = 0
 
-        val stepX = (width / sampleSize).coerceAtLeast(1)
-        val stepY = (height / sampleSize).coerceAtLeast(1)
+        for (i in 0 until sampleSize * sampleSize) {
+            val pixel = pixels[i]
+            val r = (pixel shr 16) and 0xFF
+            val g = (pixel shr 8) and 0xFF
+            val b = pixel and 0xFF
 
-        val pixels = IntArray(width * height)
-        workingBitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-        for (x in 0 until width step stepX) {
-            for (y in 0 until height step stepY) {
-                val pixel = pixels[y * width + x]
-                val r = (pixel shr 16) and 0xFF
-                val g = (pixel shr 8) and 0xFF
-                val b = pixel and 0xFF
+            // Perceived luminance
+            val lum = (0.299 * r + 0.587 * g + 0.114 * b)
+            totalLuminance += lum
 
-                // Perceived luminance
-                val lum = (0.299 * r + 0.587 * g + 0.114 * b)
-                totalLuminance += lum
+            // Color saturation indicator (difference between RGB channels)
+            val maxC = maxOf(r, maxOf(g, b))
+            val minC = minOf(r, minOf(g, b))
+            colorDiffTotal += (maxC - minC)
 
-                // Color saturation indicator (difference between RGB channels)
-                val maxC = maxOf(r, maxOf(g, b))
-                val minC = minOf(r, minOf(g, b))
-                colorDiffTotal += (maxC - minC)
+            pixelCount++
+        }
 
-                pixelCount++
-            }
+        if (small !== workingBitmap && small !== bitmap) {
+            small.recycle()
         }
 
         val avgLuminance = if (pixelCount > 0) (totalLuminance / pixelCount) / 255.0 else 0.5
         val avgColorDiff = if (pixelCount > 0) colorDiffTotal / pixelCount else 0.0
 
-        // If color differences are very low (< 22), it is predominantly monochrome/printed document
+        // If color differences are very low (< 25), it is predominantly monochrome/printed document
         val isRecommendedBw = avgColorDiff < 25.0
         val isWellLit = avgLuminance in 0.35..0.90
 
