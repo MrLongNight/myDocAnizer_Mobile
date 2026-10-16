@@ -134,7 +134,7 @@ fun SettingsView(
         }
     }
 
-    LaunchedEffect(appViewLevel) {
+    LaunchedEffect(appViewLevel, visibleTabs) {
         if (visibleTabs.none { it.originalIndex == selectedSettingsTab }) {
             selectedSettingsTab = visibleTabs.firstOrNull()?.originalIndex ?: 3
         }
@@ -142,7 +142,8 @@ fun SettingsView(
 
     val selectedVisibleIndex = remember(selectedSettingsTab, visibleTabs) {
         val idx = visibleTabs.indexOfFirst { it.originalIndex == selectedSettingsTab }
-        if (idx >= 0) idx else 0
+        val found = if (idx >= 0) idx else 0
+        found.coerceIn(0, (visibleTabs.size - 1).coerceAtLeast(0))
     }
 
     Column(
@@ -239,7 +240,16 @@ fun SettingsView(
                     selected = selectedVisibleIndex == visibleIdx,
                     onClick = { selectedSettingsTab = tab.originalIndex },
                     text = { Text(tab.title, fontSize = 12.sp) },
-                    icon = { Icon(tab.icon, contentDescription = null, modifier = Modifier.size(20.dp)) }
+                    icon = {
+                        if (tab.originalIndex == 2) {
+                            com.example.ui.components.LocalAiAgentIcon(
+                                modifier = Modifier.size(20.dp),
+                                tint = if (selectedVisibleIndex == visibleIdx) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                            )
+                        } else {
+                            Icon(tab.icon, contentDescription = null, modifier = Modifier.size(20.dp))
+                        }
+                    }
                 )
             }
         }

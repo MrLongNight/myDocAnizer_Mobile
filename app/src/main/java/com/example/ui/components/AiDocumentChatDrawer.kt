@@ -126,39 +126,22 @@ fun AiDocumentChatDrawer(
                 }
         )
 
-        // 2. Minimalistisches Seiten-Panel vom linken Bildrand mit Schiebeelement-Griff
-        Row(
+        var isFullscreen by remember { mutableStateOf(false) }
+
+        // 2. Minimalistisches Bottom-Sheet Panel vom unteren Bildschirmrand (ca. 42% Bildschirmhöhe als Default, auf Vollbild maximierbar)
+        Box(
             modifier = Modifier
-                .align(Alignment.CenterStart)
-                .fillMaxHeight(),
-            verticalAlignment = Alignment.CenterVertically
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .then(if (isFullscreen) Modifier.fillMaxHeight(0.92f) else Modifier.fillMaxHeight(0.42f))
         ) {
             Surface(
-                shape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 8.dp,
                 shadowElevation = 16.dp,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.86f)
-                    .widthIn(max = 360.dp)
-                    .pointerInput(Unit) {
-                        var totalCloseDrag = 0f
-                        detectHorizontalDragGestures(
-                            onDragStart = { totalCloseDrag = 0f },
-                            onDragEnd = { totalCloseDrag = 0f },
-                            onDragCancel = { totalCloseDrag = 0f },
-                            onHorizontalDrag = { change, dragAmount ->
-                                totalCloseDrag += dragAmount
-                                if (totalCloseDrag < -30f) { // Nach links wischen schließt das Panel
-                                    change.consume()
-                                    totalCloseDrag = 0f
-                                    onClose()
-                                }
-                            }
-                        )
-                    }
+                modifier = Modifier.fillMaxSize()
             ) {
                 Column(
                     modifier = Modifier
@@ -171,7 +154,7 @@ fun AiDocumentChatDrawer(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -182,13 +165,13 @@ fun AiDocumentChatDrawer(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(32.dp)
                                     .clip(CircleShape)
                                     .background(Brush.linearGradient(listOf(cyanColor, lilaColor))),
                                 contentAlignment = Alignment.Center
                             ) {
                                 LocalAiAgentIcon(
-                                    modifier = Modifier.size(28.dp),
+                                    modifier = Modifier.size(22.dp),
                                     tint = Color.White
                                 )
                             }
@@ -275,6 +258,19 @@ fun AiDocumentChatDrawer(
                                 Icon(
                                     Icons.Default.Refresh,
                                     contentDescription = "Chat leeren",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
+
+                            // Vollbild umschalten
+                            IconButton(
+                                onClick = { isFullscreen = !isFullscreen },
+                                modifier = Modifier.size(30.dp).testTag("btn_drawer_fullscreen")
+                            ) {
+                                Icon(
+                                    imageVector = if (isFullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                    contentDescription = "Vollbild umschalten",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(17.dp)
                                 )

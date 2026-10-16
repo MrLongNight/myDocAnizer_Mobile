@@ -57,17 +57,43 @@ fun MainBottomBar(
         label = "fab_scale"
     )
 
-    // Invertierte Bewegung für den AI-Agent Button (dreht in entgegengesetzte Richtung -135° und skaliert subtil zurück)
-    val aiFabRotation by animateFloatAsState(
-        targetValue = if (enableAiAgentAnimation && isFabExpanded) -135f else 0f,
-        animationSpec = spring(stiffness = Spring.StiffnessLow, dampingRatio = Spring.DampingRatioMediumBouncy),
-        label = "ai_fab_rotation"
+    // Pulsierende AI-Agent Animationen (Leucht-Halo, Atmen-Skalierung, sanftes Neigen)
+    val aiInfiniteTransition = rememberInfiniteTransition(label = "ai_agent_pulse_transition")
+    val aiPulseScale by aiInfiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.25f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ai_pulse_scale"
     )
-
-    val aiFabScale by animateFloatAsState(
-        targetValue = if (enableAiAgentAnimation && isFabExpanded) 0.85f else 1f,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioHighBouncy),
-        label = "ai_fab_scale"
+    val aiPulseAlpha by aiInfiniteTransition.animateFloat(
+        initialValue = 0.38f,
+        targetValue = 0.04f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ai_pulse_alpha"
+    )
+    val aiBreathingScale by aiInfiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.07f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ai_breathing_scale"
+    )
+    val aiGentleTilt by aiInfiniteTransition.animateFloat(
+        initialValue = -3f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ai_gentle_tilt"
     )
 
     val infiniteTransition = rememberInfiniteTransition(label = "fab_pulse_transition")
@@ -241,9 +267,9 @@ fun MainBottomBar(
                     },
                     label = {
                         Text(
-                            text = "Scan Eingang",
+                            text = "Posteingang",
                             fontWeight = if (isBatchSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                            fontSize = if (isBatchSelected) 11.5.sp else 11.sp,
+                            fontSize = 10.sp,
                             maxLines = 1,
                             softWrap = false
                         )
@@ -269,17 +295,21 @@ fun MainBottomBar(
                 // Left FAB: Chatbot (Tour Schritt 7)
                 val isStepAiActive = activeTourStep == 7
                 if (enableAiAgentFab) {
-                    val aiFabScale by animateFloatAsState(
-                        targetValue = if (isFabExpanded) 0.9f else 1f, // Invertiert (kleiner beim Öffnen)
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                        label = "ai_fab_scale"
-                    )
                     Box(
                         modifier = Modifier
                             .weight(0.85f)
                             .offset(y = (-18).dp),
                         contentAlignment = Alignment.Center
                     ) {
+                        if (enableAiAgentAnimation && !isStepAiActive) {
+                            // Leuchtender, pulsierender Halo-Ringeffekt um den KI-Agenten
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.secondary.copy(alpha = aiPulseAlpha),
+                                modifier = Modifier.size((60 * aiPulseScale).dp)
+                            ) {}
+                        }
+
                         FloatingActionButton(
                             onClick = {
                                 if (isStepAiActive) onTourElementClicked?.invoke(7)
@@ -292,9 +322,10 @@ fun MainBottomBar(
                             modifier = Modifier
                                 .size(60.dp)
                                 .graphicsLayer {
-                                    scaleX = aiFabScale
-                                    scaleY = aiFabScale
-                                    rotationZ = aiFabRotation
+                                    val currentScale = if (isFabExpanded) 0.85f else if (enableAiAgentAnimation) aiBreathingScale else 1f
+                                    scaleX = currentScale
+                                    scaleY = currentScale
+                                    rotationZ = if (isFabExpanded) -135f else if (enableAiAgentAnimation) aiGentleTilt else 0f
                                 }
                                 .onGloballyPositioned { coords ->
                                     if (isStepAiActive) {

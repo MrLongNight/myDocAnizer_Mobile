@@ -1,5 +1,6 @@
 package com.example.ui.views
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
@@ -15,6 +16,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,6 +76,8 @@ fun SetupWizardDialog(
     var webDavUser by rememberSaveable { mutableStateOf(cloudSyncConfig.webDavUsername) }
     var webDavPass by rememberSaveable { mutableStateOf(cloudSyncConfig.webDavPassword) }
 
+    val context = LocalContext.current
+
     if (showSkipDialog) {
         AlertDialog(
             onDismissRequest = { showSkipDialog = false },
@@ -81,7 +85,7 @@ fun SetupWizardDialog(
             title = { Text("Einrichtung überspringen?", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    text = "Möchtest du die Einrichtung nur für jetzt überspringen und beim nächsten Start erneut angezeigt bekommen, oder möchtest du die App dauerhaft ohne Assistenten nutzen?",
+                    text = "Möchtest du die Einrichtung überspringen? Das für deine Hardware empfohlene KI-Modell wird automatisch im Hintergrund heruntergeladen. In den Einstellungen kann jederzeit ein anderes Modell gewählt werden.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             },
@@ -89,23 +93,33 @@ fun SetupWizardDialog(
                 Button(onClick = {
                     showSkipDialog = false
                     viewModel.setWizardCompleted(true)
+                    val recModel = availableModels.find { it.isHardwareRecommended } ?: availableModels.firstOrNull()
+                    if (recModel != null) {
+                        viewModel.downloadModel(recModel.id)
+                        Toast.makeText(context, "Hardware-empfohlenes Modell (${recModel.name}) wird im Hintergrund geladen.", Toast.LENGTH_LONG).show()
+                    }
                     if (customPassword.isBlank() && !isUnencryptedMode) {
                         viewModel.openSecuritySettingsTab()
                     }
                     onFinish()
                 }) {
-                    Text("Dauerhaft ohne Assistent nutzen")
+                    Text("Überspringen & Modell laden")
                 }
             },
             dismissButton = {
                 TextButton(onClick = {
                     showSkipDialog = false
+                    val recModel = availableModels.find { it.isHardwareRecommended } ?: availableModels.firstOrNull()
+                    if (recModel != null) {
+                        viewModel.downloadModel(recModel.id)
+                        Toast.makeText(context, "Hardware-empfohlenes Modell (${recModel.name}) wird im Hintergrund geladen.", Toast.LENGTH_LONG).show()
+                    }
                     if (customPassword.isBlank() && !isUnencryptedMode) {
                         viewModel.openSecuritySettingsTab()
                     }
                     onDismissSession()
                 }) {
-                    Text("Nur für jetzt überspringen")
+                    Text("Nur für jetzt")
                 }
             }
         )
