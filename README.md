@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://github.com/MrLongNight/myDocAnizer_Mobile">
-    <img src="app/src/main/res/drawable/mydocanizer_mobile.png" alt="myDocAnizer Mobile logo" width="1000" />
+    <img src="app/src/main/res/drawable-nodpi/mydocanizer_mobile.png" alt="myDocAnizer Mobile logo" width="1000" />
   </a>
 </div>
 
@@ -16,7 +16,7 @@ The Privacy-First, 100% On-Device Document Management & Smart Scanner App
 
 <div align="center">
   <a href="https://github.com/MrLongNight/myDocAnizer-Desktop">
-    <img src="app/src/main/res/drawable/mydocanizer_desktop.png" alt="myDocAnizer Desktop logo" width="900" />
+    <img src="app/src/main/res/drawable-nodpi/mydocanizer_desktop.png" alt="myDocAnizer Desktop logo" width="900" />
   </a>
 </div>
 
