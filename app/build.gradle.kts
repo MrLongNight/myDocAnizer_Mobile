@@ -15,11 +15,11 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.mydocanizer.app.zwyxdl"
+    applicationId = "com.aistudio.mydocanizer.app.v28"
     minSdk = 24
     targetSdk = 36
-    versionCode = 260
-    versionName = "2.6.0"
+    versionCode = 280
+    versionName = "2.8.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
