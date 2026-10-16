@@ -40,7 +40,12 @@ data class ModelBenchmarkStats(
     val avgConfidence: Float = 0f,
     val avgFieldsExtracted: Float = 0f,
     val peakRamDeltaMb: Float = 0f,
-    val lastUsedTimestamp: Long = System.currentTimeMillis()
+    val lastUsedTimestamp: Long = System.currentTimeMillis(),
+    val tokensPerSecond: Float = 0f,
+    val avgTokensPerSecond: Float = 0f,
+    val lastBenchmarkQualityScore: Int = 0,
+    val lastBenchmarkQuantityScore: Int = 0,
+    val lastBenchmarkOverallScore: Int = 0
 )
 
 data class AuditLogEntry(
@@ -54,7 +59,8 @@ data class AuditLogEntry(
     val modelId: String? = null,
     val latencyMs: Long? = null,
     val ramDeltaMb: Float? = null,
-    val reasoningTrace: String? = null
+    val reasoningTrace: String? = null,
+    val tokensPerSecond: Float = 0f
 ) {
     val formattedTime: String
         get() = SimpleDateFormat("dd.MM.yyyy HH:mm:ss.SSS", Locale.GERMAN).format(Date(timestamp))
@@ -62,7 +68,8 @@ data class AuditLogEntry(
     fun toLogLine(): String {
         val errPrefix = if (isError) "[🚨 ERROR] " else ""
         val detailsStr = if (details.isNotBlank()) " | Details: $details" else ""
-        val hwStr = if (ramDeltaMb != null && latencyMs != null) " [RAM-Δ: ${ramDeltaMb}MB, Latenz: ${latencyMs}ms]" else ""
+        val tpsStr = if (tokensPerSecond > 0f) ", Speed: ${tokensPerSecond} TPS" else ""
+        val hwStr = if (ramDeltaMb != null && latencyMs != null) " [RAM-Δ: ${ramDeltaMb}MB, Latenz: ${latencyMs}ms$tpsStr]" else ""
         return "[$formattedTime] [${category.icon} ${category.name}] [$tag]$hwStr $errPrefix$message$detailsStr"
     }
 
@@ -81,7 +88,8 @@ data class AuditLogEntry(
             }
         }
         if (ramDeltaMb != null || latencyMs != null) {
-            sb.append("   ↳ Hardware-Ressourcen: RAM-Verbrauch: ${ramDeltaMb ?: 0f} MB | Laufzeit: ${latencyMs ?: 0L} ms\n")
+            val tpsStr = if (tokensPerSecond > 0f) " | Speed: ${tokensPerSecond} TPS" else ""
+            sb.append("   ↳ Hardware-Ressourcen: RAM-Verbrauch: ${ramDeltaMb ?: 0f} MB | Laufzeit: ${latencyMs ?: 0L} ms$tpsStr\n")
         }
         sb.append("--------------------------------------------------------------------------------\n")
         return sb.toString()
@@ -121,7 +129,9 @@ object AppAuditLogger {
         synchronized(logLock) {
             if (appContext == null) {
                 appContext = appCtx
-                loadInitialLogsFromFile(appCtx)
+                scope.launch {
+                    loadInitialLogsFromFile(appCtx)
+                }
                 log(LogCategory.SYSTEM, "AppAuditLogger", "Diagnose-Logger erfolgreich initialisiert (100% lokales Audit-Protokoll)")
             }
         }
@@ -145,10 +155,14 @@ object AppAuditLogger {
         )
 
         // Logcat für Android-Debugging
-        if (isError) {
-            Log.e("myDocAnizer", "[${category.name}] [$tag] $message $details")
-        } else {
-            Log.i("myDocAnizer", "[${category.name}] [$tag] $message $details")
+        try {
+            if (isError) {
+                Log.e("myDocAnizer", "[${category.name}] [$tag] $message $details")
+            } else {
+                Log.i("myDocAnizer", "[${category.name}] [$tag] $message $details")
+            }
+        } catch (_: Throwable) {
+            // Safe fallback for JVM unit tests
         }
 
         // In-Memory Liste aktualisieren
@@ -179,17 +193,19 @@ object AppAuditLogger {
         customFieldsCount: Int,
         reasoningSnippet: String,
         ramDeltaMb: Float = 0f,
-        fullReasoning: String = ""
+        fullReasoning: String = "",
+        tokensPerSecond: Float = 0f
     ) {
         val entry = AuditLogEntry(
             category = LogCategory.AI_INFERENCE,
             tag = "InferenceEngine",
             message = "Dokument als '$docType' ($sender) eingestuft (${(confidence * 100).toInt()}% Konfidenz)",
-            details = "Modell: $modelId | Latenz: ${latencyMs}ms | RAM-Δ: ${ramDeltaMb}MB | Felder: $customFieldsCount | Auszug: $reasoningSnippet",
+            details = "Modell: $modelId | Latenz: ${latencyMs}ms | TPS: ${if (tokensPerSecond > 0f) tokensPerSecond else "-"} | RAM-Δ: ${ramDeltaMb}MB | Felder: $customFieldsCount | Auszug: $reasoningSnippet",
             modelId = modelId,
             latencyMs = latencyMs,
             ramDeltaMb = ramDeltaMb,
-            reasoningTrace = if (fullReasoning.isNotBlank()) fullReasoning else reasoningSnippet
+            reasoningTrace = if (fullReasoning.isNotBlank()) fullReasoning else reasoningSnippet,
+            tokensPerSecond = tokensPerSecond
         )
 
         _logs.update { list ->
@@ -212,6 +228,10 @@ object AppAuditLogger {
             val newAvgLatency = ((prev.avgLatencyMs * prev.totalInferences) + latencyMs) / newTotal
             val newAvgConf = ((prev.avgConfidence * prev.totalInferences) + confidence) / newTotal
             val newAvgFields = ((prev.avgFieldsExtracted * prev.totalInferences) + customFieldsCount) / newTotal
+            val newAvgTps = if (tokensPerSecond > 0f) {
+                if (prev.avgTokensPerSecond <= 0f) tokensPerSecond
+                else ((prev.avgTokensPerSecond * prev.totalInferences) + tokensPerSecond) / newTotal
+            } else prev.avgTokensPerSecond
             val peakRam = maxOf(prev.peakRamDeltaMb, ramDeltaMb)
 
             currentBenchmarks[modelId] = prev.copy(
@@ -220,7 +240,9 @@ object AppAuditLogger {
                 avgConfidence = newAvgConf,
                 avgFieldsExtracted = newAvgFields,
                 peakRamDeltaMb = peakRam,
-                lastUsedTimestamp = System.currentTimeMillis()
+                lastUsedTimestamp = System.currentTimeMillis(),
+                tokensPerSecond = tokensPerSecond,
+                avgTokensPerSecond = ((newAvgTps * 10).toInt() / 10f)
             )
             currentBenchmarks
         }
@@ -231,6 +253,40 @@ object AppAuditLogger {
                 appendToFile(ctx, entry)
             }
         }
+    }
+
+    fun recordBenchmarkResult(
+        modelId: String,
+        modelName: String,
+        qualityScore: Int,
+        quantityScore: Int,
+        overallScore: Int,
+        tokensPerSecond: Float,
+        latencyMs: Long
+    ) {
+        _modelBenchmarks.update { map ->
+            val currentBenchmarks = map.toMutableMap()
+            val prev = currentBenchmarks[modelId] ?: ModelBenchmarkStats(
+                modelId = modelId,
+                modelName = modelName
+            )
+            currentBenchmarks[modelId] = prev.copy(
+                modelName = modelName,
+                tokensPerSecond = tokensPerSecond,
+                avgTokensPerSecond = if (prev.avgTokensPerSecond > 0f) ((prev.avgTokensPerSecond + tokensPerSecond) / 2f) else tokensPerSecond,
+                lastBenchmarkQualityScore = qualityScore,
+                lastBenchmarkQuantityScore = quantityScore,
+                lastBenchmarkOverallScore = overallScore,
+                avgLatencyMs = if (prev.avgLatencyMs > 0L) ((prev.avgLatencyMs + latencyMs) / 2L) else latencyMs,
+                lastUsedTimestamp = System.currentTimeMillis()
+            )
+            currentBenchmarks
+        }
+        log(
+            category = LogCategory.AI_INFERENCE,
+            tag = "LlmBenchmark",
+            message = "Dual-Benchmark für '$modelName' abgeschlossen: Gesamt $overallScore/100 (Qualität: $qualityScore%, Geschwindigkeit: $quantityScore%, $tokensPerSecond TPS, ${latencyMs}ms)"
+        )
     }
 
     fun logOcr(charCount: Int, durationMs: Long, preview: String) {
@@ -260,7 +316,7 @@ object AppAuditLogger {
     }
 
     fun logError(tag: String, message: String, throwable: Throwable? = null) {
-        val stackTrace = throwable?.let { Log.getStackTraceString(it) } ?: ""
+        val stackTrace = try { throwable?.let { Log.getStackTraceString(it) } ?: "" } catch (_: Throwable) { throwable?.message ?: "" }
         log(
             category = LogCategory.ERROR,
             tag = tag,
@@ -298,10 +354,15 @@ object AppAuditLogger {
             val file = getLogFile(context)
             if (file.exists()) {
                 val lines = file.readLines(Charsets.UTF_8).takeLast(MAX_MEMORY_LOGS)
+                val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm:ss.SSS", Locale.GERMAN)
+                val timestampRegex = Regex("\\[(\\d{2}\\.\\d{2}\\.\\d{4} \\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\]")
+                
                 val parsedList = lines.mapNotNull { line ->
-                    // Einfacher Parser für bestehende Logzeilen
+                    val match = timestampRegex.find(line)
+                    val ts = if (match != null) try { sdf.parse(match.groupValues[1])?.time } catch(_: Exception) { null } else null
+                    
                     AuditLogEntry(
-                        timestamp = System.currentTimeMillis(),
+                        timestamp = ts ?: System.currentTimeMillis(),
                         category = when {
                             line.contains("[AI_INFERENCE]") -> LogCategory.AI_INFERENCE
                             line.contains("[OCR]") -> LogCategory.OCR

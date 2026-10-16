@@ -400,6 +400,7 @@ class DmsManager(
 
     fun deleteCustomField(fieldId: String) {
         scope.launch(Dispatchers.IO) {
+            customFieldDao.deleteAllValuesForCustomField(fieldId)
             customFieldDao.deleteCustomFieldById(fieldId)
         }
     }

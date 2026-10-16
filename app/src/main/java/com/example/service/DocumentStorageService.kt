@@ -3,8 +3,9 @@ package com.example.service
 import android.content.Context
 import android.graphics.*
 import android.graphics.pdf.PdfDocument
-import com.example.model.DocumentEntity
-import com.example.model.PdfSettings
+import com.example.model.*
+import com.example.data.AppDatabase
+import com.example.service.DocRuleRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -323,7 +324,19 @@ object DocumentStorageService {
             canvas.drawRect(0f, 0f, pageWidth.toFloat(), pageHeight.toFloat(), bgPaint)
 
             // Bitmap einpassen mit ensureSoftwareBitmap und seitenverhältnis-erhaltender Skalierung & Zentrierung
-            val safeBmp = ImageProcessingService.ensureSoftwareBitmap(bitmap)
+            var safeBmp = ImageProcessingService.ensureSoftwareBitmap(bitmap)
+            
+            // Basic DPI scaling optimization
+            val targetDpi = settings.dpi.coerceIn(72, 600)
+            val scaleFactor = targetDpi / 300f
+            if (scaleFactor < 0.9f) {
+                val newW = (safeBmp.width * scaleFactor).toInt()
+                val newH = (safeBmp.height * scaleFactor).toInt()
+                val scaledBmp = Bitmap.createScaledBitmap(safeBmp, newW, newH, true)
+                if (safeBmp !== bitmap) safeBmp.recycle()
+                safeBmp = scaledBmp
+            }
+
             val margin = 20f
             val availW = pageWidth - 2 * margin
             val availH = pageHeight - 2 * margin - 56f
@@ -337,6 +350,9 @@ object DocumentStorageService {
             val destRect = RectF(left, top, left + drawW, top + drawH)
             val paint = Paint(Paint.FILTER_BITMAP_FLAG)
             canvas.drawBitmap(safeBmp, null, destRect, paint)
+            
+            // Memory cleanup
+            if (safeBmp !== bitmap) safeBmp.recycle()
 
             // Kopfzeile mit Metadaten
             val headerPaint = Paint().apply {
@@ -725,21 +741,281 @@ object DocumentStorageService {
         )
     }
 
+    data class VaultMetadata(
+        val customFields: List<CustomFieldEntity> = emptyList(),
+        val customFieldValues: List<DocumentCustomFieldValueEntity> = emptyList(),
+        val cashTransactions: List<CashTransactionEntity> = emptyList(),
+        val bankStatementEntries: List<BankStatementEntryEntity> = emptyList(),
+        val customDashboardWidgets: List<CustomDashboardWidgetEntity> = emptyList(),
+        val rules: List<DocRule> = emptyList()
+    )
+
+    fun vaultMetadataToJson(metadata: VaultMetadata): JSONObject {
+        val root = JSONObject()
+        root.put("version", 1)
+        root.put("createdAt", System.currentTimeMillis())
+
+        val cfArr = JSONArray()
+        metadata.customFields.forEach { f ->
+            cfArr.put(JSONObject().apply {
+                put("id", f.id)
+                put("name", f.name)
+                put("description", f.description)
+                put("type", f.type.name)
+                put("options", f.options)
+                put("scope", f.scope.name)
+                put("targetMainCategory", f.targetMainCategory)
+                put("targetSubCategory", f.targetSubCategory)
+                put("defaultValue", f.defaultValue)
+                put("isRequired", f.isRequired)
+                put("iconName", f.iconName)
+                put("createdAt", f.createdAt)
+            })
+        }
+        root.put("custom_fields", cfArr)
+
+        val cfvArr = JSONArray()
+        metadata.customFieldValues.forEach { v ->
+            cfvArr.put(JSONObject().apply {
+                put("documentId", v.documentId)
+                put("customFieldId", v.customFieldId)
+                put("fieldValue", v.fieldValue)
+                put("updatedAt", v.updatedAt)
+            })
+        }
+        root.put("document_custom_field_values", cfvArr)
+
+        val txArr = JSONArray()
+        metadata.cashTransactions.forEach { tx ->
+            txArr.put(JSONObject().apply {
+                put("id", tx.id)
+                put("title", tx.title)
+                put("amount", tx.amount)
+                put("type", tx.type.name)
+                put("category", tx.category)
+                put("date", tx.date)
+                if (tx.relatedDocumentId != null) put("relatedDocumentId", tx.relatedDocumentId)
+                put("note", tx.note)
+                put("isMatchedWithBankStatement", tx.isMatchedWithBankStatement)
+                if (tx.matchReconciliationMonth != null) put("matchReconciliationMonth", tx.matchReconciliationMonth)
+            })
+        }
+        root.put("cash_transactions", txArr)
+
+        val bsArr = JSONArray()
+        metadata.bankStatementEntries.forEach { b ->
+            bsArr.put(JSONObject().apply {
+                put("id", b.id)
+                put("date", b.date)
+                put("bookingText", b.bookingText)
+                put("purpose", b.purpose)
+                put("amount", b.amount)
+                put("isCashWithdrawal", b.isCashWithdrawal)
+                if (b.matchedCashTransactionId != null) put("matchedCashTransactionId", b.matchedCashTransactionId)
+                put("monthYear", b.monthYear)
+            })
+        }
+        root.put("bank_statement_entries", bsArr)
+
+        val widgetArr = JSONArray()
+        metadata.customDashboardWidgets.forEach { w ->
+            widgetArr.put(JSONObject().apply {
+                put("id", w.id)
+                put("title", w.title)
+                put("subtitle", w.subtitle)
+                put("widgetType", w.widgetType.name)
+                put("targetMainCategory", w.targetMainCategory)
+                put("targetSubCategory", w.targetSubCategory)
+                put("targetCustomFieldId", w.targetCustomFieldId)
+                put("targetCustomFieldValue", w.targetCustomFieldValue)
+                put("numericLimit", w.numericLimit)
+                put("noteContent", w.noteContent)
+                put("colorHex", w.colorHex)
+                put("iconName", w.iconName)
+                put("isEnabled", w.isEnabled)
+                put("position", w.position)
+                put("createdAt", w.createdAt)
+            })
+        }
+        root.put("custom_dashboard_widgets", widgetArr)
+
+        val rulesArr = JSONArray()
+        metadata.rules.forEach { r ->
+            rulesArr.put(DocRuleRepository.ruleToJson(r))
+        }
+        root.put("rules", rulesArr)
+
+        return root
+    }
+
+    fun jsonToVaultMetadata(obj: JSONObject): VaultMetadata {
+        val customFields = mutableListOf<CustomFieldEntity>()
+        val cfArr = obj.optJSONArray("custom_fields")
+        if (cfArr != null) {
+            for (i in 0 until cfArr.length()) {
+                val o = cfArr.getJSONObject(i)
+                customFields.add(
+                    CustomFieldEntity(
+                        id = o.optString("id", UUID.randomUUID().toString()),
+                        name = o.optString("name", "Feld"),
+                        description = o.optString("description", ""),
+                        type = try { CustomFieldType.valueOf(o.optString("type", "TEXT")) } catch (_: Exception) { CustomFieldType.TEXT },
+                        options = o.optString("options", ""),
+                        scope = try { CustomFieldScope.valueOf(o.optString("scope", "GLOBAL")) } catch (_: Exception) { CustomFieldScope.GLOBAL },
+                        targetMainCategory = o.optString("targetMainCategory", ""),
+                        targetSubCategory = o.optString("targetSubCategory", ""),
+                        defaultValue = o.optString("defaultValue", ""),
+                        isRequired = o.optBoolean("isRequired", false),
+                        iconName = o.optString("iconName", "label"),
+                        createdAt = o.optLong("createdAt", System.currentTimeMillis())
+                    )
+                )
+            }
+        }
+
+        val customFieldValues = mutableListOf<DocumentCustomFieldValueEntity>()
+        val cfvArr = obj.optJSONArray("document_custom_field_values")
+        if (cfvArr != null) {
+            for (i in 0 until cfvArr.length()) {
+                val o = cfvArr.getJSONObject(i)
+                customFieldValues.add(
+                    DocumentCustomFieldValueEntity(
+                        documentId = o.getLong("documentId"),
+                        customFieldId = o.getString("customFieldId"),
+                        fieldValue = o.optString("fieldValue", ""),
+                        updatedAt = o.optLong("updatedAt", System.currentTimeMillis())
+                    )
+                )
+            }
+        }
+
+        val cashTransactions = mutableListOf<CashTransactionEntity>()
+        val txArr = obj.optJSONArray("cash_transactions")
+        if (txArr != null) {
+            for (i in 0 until txArr.length()) {
+                val o = txArr.getJSONObject(i)
+                cashTransactions.add(
+                    CashTransactionEntity(
+                        id = o.optString("id", UUID.randomUUID().toString()),
+                        title = o.optString("title", ""),
+                        amount = o.optDouble("amount", 0.0),
+                        type = try { CashTransactionType.valueOf(o.optString("type", "EXPENSE")) } catch (_: Exception) { CashTransactionType.EXPENSE },
+                        category = o.optString("category", "Allgemein"),
+                        date = o.optLong("date", System.currentTimeMillis()),
+                        relatedDocumentId = if (o.has("relatedDocumentId") && !o.isNull("relatedDocumentId")) o.getLong("relatedDocumentId") else null,
+                        note = o.optString("note", ""),
+                        isMatchedWithBankStatement = o.optBoolean("isMatchedWithBankStatement", false),
+                        matchReconciliationMonth = if (o.has("matchReconciliationMonth") && !o.isNull("matchReconciliationMonth")) o.getString("matchReconciliationMonth") else null
+                    )
+                )
+            }
+        }
+
+        val bankStatementEntries = mutableListOf<BankStatementEntryEntity>()
+        val bsArr = obj.optJSONArray("bank_statement_entries")
+        if (bsArr != null) {
+            for (i in 0 until bsArr.length()) {
+                val o = bsArr.getJSONObject(i)
+                bankStatementEntries.add(
+                    BankStatementEntryEntity(
+                        id = o.optString("id", UUID.randomUUID().toString()),
+                        date = o.optLong("date", System.currentTimeMillis()),
+                        bookingText = o.optString("bookingText", ""),
+                        purpose = o.optString("purpose", ""),
+                        amount = o.optDouble("amount", 0.0),
+                        isCashWithdrawal = o.optBoolean("isCashWithdrawal", false),
+                        matchedCashTransactionId = if (o.has("matchedCashTransactionId") && !o.isNull("matchedCashTransactionId")) o.getString("matchedCashTransactionId") else null,
+                        monthYear = o.optString("monthYear", "")
+                    )
+                )
+            }
+        }
+
+        val widgets = mutableListOf<CustomDashboardWidgetEntity>()
+        val widgetArr = obj.optJSONArray("custom_dashboard_widgets")
+        if (widgetArr != null) {
+            for (i in 0 until widgetArr.length()) {
+                val o = widgetArr.getJSONObject(i)
+                widgets.add(
+                    CustomDashboardWidgetEntity(
+                        id = o.optString("id", UUID.randomUUID().toString()),
+                        title = o.optString("title", ""),
+                        subtitle = o.optString("subtitle", ""),
+                        widgetType = try { CustomWidgetType.valueOf(o.optString("widgetType", "FOLDER_MONITOR")) } catch (_: Exception) { CustomWidgetType.FOLDER_MONITOR },
+                        targetMainCategory = o.optString("targetMainCategory", ""),
+                        targetSubCategory = o.optString("targetSubCategory", ""),
+                        targetCustomFieldId = o.optString("targetCustomFieldId", ""),
+                        targetCustomFieldValue = o.optString("targetCustomFieldValue", ""),
+                        numericLimit = o.optDouble("numericLimit", 0.0),
+                        noteContent = o.optString("noteContent", ""),
+                        colorHex = o.optLong("colorHex", 0xFF2563EB),
+                        iconName = o.optString("iconName", "Folder"),
+                        isEnabled = o.optBoolean("isEnabled", true),
+                        position = o.optInt("position", 0),
+                        createdAt = o.optLong("createdAt", System.currentTimeMillis())
+                    )
+                )
+            }
+        }
+
+        val rules = mutableListOf<DocRule>()
+        val rulesArr = obj.optJSONArray("rules")
+        if (rulesArr != null) {
+            for (i in 0 until rulesArr.length()) {
+                rules.add(DocRuleRepository.jsonToRule(rulesArr.getJSONObject(i)))
+            }
+        }
+
+        return VaultMetadata(
+            customFields = customFields,
+            customFieldValues = customFieldValues,
+            cashTransactions = cashTransactions,
+            bankStatementEntries = bankStatementEntries,
+            customDashboardWidgets = widgets,
+            rules = rules
+        )
+    }
+
     /**
      * 1-Klick-Sicherung & Export:
-     * Packt alle archivierten Dokumente und die Index-Metadaten in ein ZIP-Container
+     * Packt alle archivierten Dokumente, Index-Metadaten (doc_index.json) sowie
+     * optional den gesamten Vault-Zustand (vault_metadata.json: Zusatzfelder,
+     * Transaktionen, Dashboard-Widgets, Regeln) in einen ZIP-Container
      * und verschlüsselt diesen vollständig clientseitig mit AES-256-GCM.
      */
     suspend fun createEncryptedBackupArchive(
         context: Context,
         docs: List<DocumentEntity>,
         outputEncFile: File,
-        passwordKey: String
+        passwordKey: String,
+        vaultMetadata: VaultMetadata? = null,
+        includeVaultMetadata: Boolean = true
     ): File = withContext(Dispatchers.IO) {
         val tempZip = File(context.cacheDir, "backup_bundle_${UUID.randomUUID()}.zip")
         try {
+            val metadataToSave = if (vaultMetadata != null) {
+                vaultMetadata
+            } else if (includeVaultMetadata) {
+                try {
+                    val db = AppDatabase.getDatabase(context)
+                    val ruleRepo = DocRuleRepository(context)
+                    VaultMetadata(
+                        customFields = db.customFieldDao().getAllCustomFieldsList(),
+                        customFieldValues = db.customFieldDao().getAllDocumentCustomFieldValuesList(),
+                        cashTransactions = db.financeDao().getAllCashTransactionsList(),
+                        bankStatementEntries = db.financeDao().getAllBankStatementEntriesList(),
+                        customDashboardWidgets = db.customDashboardWidgetDao().getAllWidgetsList(),
+                        rules = ruleRepo.rules.value
+                    )
+                } catch (_: Exception) {
+                    null
+                }
+            } else {
+                null
+            }
+
             ZipOutputStream(FileOutputStream(tempZip)).use { zos ->
-                // 1. Central Disaster Recovery Index beilegen
+                // 1. Central Disaster Recovery Index beilegen (abwärtskompatibel zu doc_index.json)
                 val jsonArray = JSONArray()
                 docs.forEach { doc ->
                     jsonArray.put(documentToJson(doc))
@@ -749,7 +1025,16 @@ object DocumentStorageService {
                 zos.write(jsonArray.toString().toByteArray(Charsets.UTF_8))
                 zos.closeEntry()
 
-                // 2. Dokument-PDFs archivieren (mit eindeutigen Präfixen zur Vermeidung von ZipException Kollisionen)
+                // 2. Vault-Metadaten beilegen
+                if (metadataToSave != null) {
+                    val metaObj = vaultMetadataToJson(metadataToSave)
+                    val metaEntry = ZipEntry("vault_metadata.json")
+                    zos.putNextEntry(metaEntry)
+                    zos.write(metaObj.toString().toByteArray(Charsets.UTF_8))
+                    zos.closeEntry()
+                }
+
+                // 3. Dokument-PDFs archivieren (mit eindeutigen Präfixen zur Vermeidung von ZipException Kollisionen)
                 for (doc in docs) {
                     val file = File(doc.filePath)
                     if (file.exists()) {
@@ -773,36 +1058,42 @@ object DocumentStorageService {
     /**
      * Stellt ein verschlüsseltes Backup-Archiv (.enc) wieder her:
      * 1. Entschlüsselt die Datei mit dem Master-Passwort nach temporärem ZIP
-     * 2. Extrahiert alle Dokumente in das Dokumentenverzeichnis
-     * 3. Liest doc_index.json und gibt die Liste wiederhergestellter DocumentEntity zurück
+     * 2. Extrahiert alle Dokumente in das Dokumentenverzeichnis über getDocumentDirectory (2-Ebenen-Ordnerstruktur)
+     * 3. Stellt bei vorhandener vault_metadata.json alle Zusatzfelder, Transaktionen, Widgets und Regeln wieder her
+     * 4. Liest doc_index.json und gibt die Liste wiederhergestellter DocumentEntity zurück
      */
     suspend fun restoreEncryptedBackupArchive(
         context: Context,
         inputEncFile: File,
-        passwordKey: String
+        passwordKey: String,
+        database: AppDatabase = AppDatabase.getDatabase(context),
+        ruleRepository: DocRuleRepository = DocRuleRepository(context)
     ): Result<List<DocumentEntity>> = withContext(Dispatchers.IO) {
         val tempZip = File(context.cacheDir, "restore_bundle_${UUID.randomUUID()}.zip")
+        val tempExtractDir = File(context.cacheDir, "temp_extract_${UUID.randomUUID()}").apply { mkdirs() }
         try {
             val decrypted = decryptFile(inputEncFile, tempZip, passwordKey)
             if (!decrypted || !tempZip.exists()) {
                 return@withContext Result.failure(Exception("Entschlüsselung fehlgeschlagen. Bitte Master-Passwort prüfen!"))
             }
 
-            val restoredDocs = mutableListOf<DocumentEntity>()
-            val targetDir = File(context.filesDir, "Documents").apply { mkdirs() }
             var indexJsonString: String? = null
+            var vaultMetadataJsonString: String? = null
 
+            // 1. Temporär entpacken mit Zip-Slip-Schutz
             java.util.zip.ZipInputStream(tempZip.inputStream()).use { zis ->
                 var entry = zis.nextEntry
                 while (entry != null) {
                     val entryName = entry.name
                     if (entryName == "doc_index.json") {
                         indexJsonString = zis.bufferedReader(Charsets.UTF_8).readText()
+                    } else if (entryName == "vault_metadata.json") {
+                        vaultMetadataJsonString = zis.bufferedReader(Charsets.UTF_8).readText()
                     } else if (entryName.startsWith("documents/") && !entry.isDirectory) {
                         val rawFileName = entryName.substringAfter("documents/")
                         val safeFileName = File(rawFileName).name
-                        val destFile = File(targetDir, safeFileName)
-                        if (!destFile.canonicalPath.startsWith(targetDir.canonicalPath)) {
+                        val destFile = File(tempExtractDir, safeFileName)
+                        if (!destFile.canonicalPath.startsWith(tempExtractDir.canonicalPath)) {
                             throw SecurityException("Ungültiger Pfad im Archiv erkannt (Zip Slip Schutz).")
                         }
                         destFile.outputStream().use { fos ->
@@ -814,11 +1105,114 @@ object DocumentStorageService {
                 }
             }
 
+            // 2. Vault-Metadaten wiederherstellen (falls vorhanden)
+            if (vaultMetadataJsonString != null) {
+                try {
+                    val metadata = jsonToVaultMetadata(JSONObject(vaultMetadataJsonString!!))
+                    if (metadata.customFields.isNotEmpty()) {
+                        database.customFieldDao().insertCustomFields(metadata.customFields)
+                    }
+                    if (metadata.customFieldValues.isNotEmpty()) {
+                        database.customFieldDao().insertOrUpdateFieldValues(metadata.customFieldValues)
+                    }
+                    if (metadata.cashTransactions.isNotEmpty()) {
+                        database.financeDao().insertCashTransactions(metadata.cashTransactions)
+                    }
+                    if (metadata.bankStatementEntries.isNotEmpty()) {
+                        database.financeDao().insertBankStatementEntries(metadata.bankStatementEntries)
+                    }
+                    if (metadata.customDashboardWidgets.isNotEmpty()) {
+                        database.customDashboardWidgetDao().insertOrUpdateWidgets(metadata.customDashboardWidgets)
+                    }
+                    if (metadata.rules.isNotEmpty()) {
+                        ruleRepository.addRules(metadata.rules)
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // 3. Dokumente wiederherstellen in 2-Ebenen-Ordnerstruktur über getDocumentDirectory
+            val restoredDocs = mutableListOf<DocumentEntity>()
             if (indexJsonString != null) {
-                val array = JSONArray(indexJsonString)
+                val array = JSONArray(indexJsonString!!)
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
-                    restoredDocs.add(jsonToDocument(obj, targetDir, System.currentTimeMillis() + i))
+                    val id = obj.optLong("id", System.currentTimeMillis() + i)
+                    val rawFileName = obj.optString("fileName", "doc_$id.pdf")
+                    val safeFileName = File(rawFileName).name
+                    val mainCat = obj.optString("mainCategory", "Allgemein")
+                    val subCat = obj.optString("subCategory", "Diverses")
+                    val mainCatId = obj.optString("mainCategoryId", "")
+                    val subCatId = obj.optString("subCategoryId", "")
+
+                    // Zielverzeichnis über getDocumentDirectory (2-Ebenen-Ordnerstruktur)
+                    val targetDir = getDocumentDirectory(
+                        context = context,
+                        mainCategory = mainCat,
+                        subCategory = subCat,
+                        mainCategoryId = mainCatId,
+                        subCategoryId = subCatId
+                    )
+
+                    val finalDestFile = File(targetDir, safeFileName)
+                    if (!finalDestFile.canonicalPath.startsWith(targetDir.canonicalPath)) {
+                        throw SecurityException("Ungültiger Zielpfad für Dokument (Zip Slip Schutz).")
+                    }
+
+                    // Suche nach der entpackten Datei im tempExtractDir
+                    val candidate1 = File(tempExtractDir, "${id}_$safeFileName")
+                    val candidate2 = File(tempExtractDir, safeFileName)
+                    val sourceFile = when {
+                        candidate1.exists() -> candidate1
+                        candidate2.exists() -> candidate2
+                        else -> null
+                    }
+
+                    if (sourceFile != null && sourceFile.exists()) {
+                        sourceFile.copyTo(finalDestFile, overwrite = true)
+                        sourceFile.delete()
+                    }
+
+                    val resolvedPath = if (finalDestFile.exists()) {
+                        finalDestFile.absolutePath
+                    } else {
+                        obj.optString("filePath", finalDestFile.absolutePath)
+                    }
+
+                    val docEntity = DocumentEntity(
+                        id = id,
+                        title = obj.optString("title", "Wiederhergestelltes Dokument"),
+                        sender = obj.optString("sender", ""),
+                        fileName = safeFileName,
+                        filePath = resolvedPath,
+                        mainCategory = mainCat,
+                        subCategory = subCat,
+                        mainCategoryId = if (mainCatId.isNotBlank()) mainCatId else "A01",
+                        subCategoryId = if (subCatId.isNotBlank()) subCatId else "B1.01",
+                        docType = obj.optString("docType", "Dokument"),
+                        tags = obj.optString("tags", ""),
+                        ocrText = obj.optString("ocrText", ""),
+                        colorMode = obj.optString("colorMode", "BW"),
+                        pageCount = obj.optInt("pageCount", 1),
+                        fileSizeFormatted = obj.optString(
+                            "fileSizeFormatted",
+                            "${if (File(resolvedPath).exists()) (File(resolvedPath).length() / 1024).coerceAtLeast(1) else 10} KB"
+                        ),
+                        isEncrypted = obj.optBoolean("isEncrypted", true),
+                        isSynced = obj.optBoolean("isSynced", false),
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                        isDeleted = obj.optBoolean("isDeleted", false),
+                        deletedAt = if (obj.has("deletedAt") && !obj.isNull("deletedAt")) obj.getLong("deletedAt") else null,
+                        contractEndDate = if (obj.has("contractEndDate") && !obj.isNull("contractEndDate")) obj.getLong("contractEndDate") else null,
+                        cancellationDeadline = if (obj.has("cancellationDeadline") && !obj.isNull("cancellationDeadline")) obj.getLong("cancellationDeadline") else null,
+                        reminderDaysBefore = obj.optInt("reminderDaysBefore", 14),
+                        hasCalendarReminder = obj.optBoolean("hasCalendarReminder", false),
+                        calendarEventType = obj.optString("calendarEventType", "BOTH"),
+                        reminderNotes = obj.optString("reminderNotes", ""),
+                        amount = if (obj.has("amount") && !obj.isNull("amount")) obj.getDouble("amount") else null,
+                        customIcon = obj.optString("customIcon", ""),
+                        companyLogo = obj.optString("companyLogo", "")
+                    )
+                    restoredDocs.add(docEntity)
                 }
             }
 
@@ -827,6 +1221,7 @@ object DocumentStorageService {
             Result.failure(e)
         } finally {
             if (tempZip.exists()) tempZip.delete()
+            if (tempExtractDir.exists()) tempExtractDir.deleteRecursively()
         }
     }
 

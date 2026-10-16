@@ -28,12 +28,7 @@ open class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try {
-            com.example.service.AppAuditLogger.init(this)
-            com.example.ui.components.SplashSoundSynthesizer.precompute(this)
-        } catch (t: Throwable) {
-            android.util.Log.e("MainActivity", "AuditLogger init failed: ${t.message}")
-        }
+        // Init moved to DocAnizerApp.onCreate()
         try {
             handleWidgetIntent(intent)
         } catch (t: Throwable) {
@@ -50,8 +45,6 @@ open class MainActivity : FragmentActivity() {
             val isEmulator = android.os.Build.FINGERPRINT.contains("generic", ignoreCase = true) ||
                 android.os.Build.FINGERPRINT.contains("emulator", ignoreCase = true) ||
                 android.os.Build.FINGERPRINT.contains("cuttlefish", ignoreCase = true) ||
-                android.os.Build.FINGERPRINT.contains("gsi", ignoreCase = true) ||
-                android.os.Build.FINGERPRINT.contains("aosp", ignoreCase = true) ||
                 android.os.Build.FINGERPRINT.startsWith("unknown") ||
                 android.os.Build.HARDWARE.contains("ranchu", ignoreCase = true) ||
                 android.os.Build.HARDWARE.contains("goldfish", ignoreCase = true) ||

@@ -1275,6 +1275,21 @@ data class BatchDocumentItem(
     val timestamp: Long = System.currentTimeMillis()
 )
 
+enum class LlmPreferenceMode(
+    val id: String,
+    val title: String,
+    val qualityWeight: Float,
+    val speedWeight: Float
+) {
+    QUALITY_FOCUS("QUALITY", "Fokus: Maximale Qualität (Standard)", qualityWeight = 0.75f, speedWeight = 0.25f),
+    SPEED_FOCUS("SPEED", "Fokus: Hohe Geschwindigkeit", qualityWeight = 0.55f, speedWeight = 0.45f);
+
+    companion object {
+        fun fromId(id: String): LlmPreferenceMode =
+            values().find { it.id.equals(id, ignoreCase = true) } ?: QUALITY_FOCUS
+    }
+}
+
 /**
  * Echte Hardware-Telemetrie des Android-Geräts zur KI-Kompatibilitätsprüfung
  */
@@ -1284,7 +1299,12 @@ data class DeviceHardwareInfo(
     val usedRamGb: Float = 2.5f,
     val ramUsagePercent: Int = 42,
     val cpuCores: Int = 8,
-    val isLowRamDevice: Boolean = false
+    val isLowRamDevice: Boolean = false,
+    val socModel: String = "",
+    val maxCpuFreqMhz: Int = 2000,
+    val supportsArmDotProd: Boolean = true,
+    val hasVulkanGpu: Boolean = true,
+    val cpuBenchmarkScore: Int = 75
 ) {
     val freeRamGb: Float get() = availableRamGb
 
@@ -1303,6 +1323,22 @@ data class DeviceHardwareInfo(
         }
     }
 }
+
+data class ModelBenchmarkResult(
+    val modelId: String,
+    val modelName: String,
+    val qualityScore: Int = 0,
+    val quantityScore: Int = 0,
+    val overallScore: Int = 0,
+    val tokensPerSecond: Float = 0f,
+    val latencyMs: Long = 0L,
+    val generatedTokens: Int = 0,
+    val extractedSender: String = "",
+    val extractedDocType: String = "",
+    val extractedAmount: String = "",
+    val rawOutput: String = "",
+    val evaluationDetails: String = ""
+)
 
 enum class ModelCompatibilityLevel {
     OPTIMAL,          // Vollständig unterstützt, flüssige On-Device Inferenz

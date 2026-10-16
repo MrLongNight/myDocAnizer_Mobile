@@ -20,6 +20,9 @@ interface FinanceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCashTransaction(tx: CashTransactionEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCashTransactions(txs: List<CashTransactionEntity>)
+
     @Update
     suspend fun updateCashTransaction(tx: CashTransactionEntity)
 

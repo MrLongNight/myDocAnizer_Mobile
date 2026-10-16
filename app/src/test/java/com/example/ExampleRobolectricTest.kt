@@ -1423,6 +1423,224 @@ class ExampleRobolectricTest {
     assertTrue(recoveredDek!!.contentEquals(setupRes.dek))
     assertTrue(secManager.isUnlocked())
   }
+
+  @Test
+  fun `verify FTS query sanitization and safe query fallback for special characters`() = runBlocking {
+    val sanitizedDash = com.example.data.DocumentDao.sanitizeFtsQuery("---")
+    assertEquals("", sanitizedDash)
+
+    val sanitizedStar = com.example.data.DocumentDao.sanitizeFtsQuery("*")
+    assertEquals("", sanitizedStar)
+
+    val sanitizedValid = com.example.data.DocumentDao.sanitizeFtsQuery("Rechnung 2026")
+    assertEquals("Rechnung* AND 2026*", sanitizedValid)
+
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val db = AppDatabase.getDatabase(app)
+    val docDao = db.documentDao()
+
+    val results = docDao.searchDocumentsFtsSafe("---").first()
+    assertNotNull(results)
+  }
+
+  @Test
+  fun `verify trash clearing file deletion and custom field value cleanup`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val db = AppDatabase.getDatabase(app)
+    val docDao = db.documentDao()
+    val customFieldDao = db.customFieldDao()
+
+    val tempFile = java.io.File(app.cacheDir, "trash_test_doc.pdf").apply {
+      writeText("Trash Test Content")
+    }
+    assertTrue(tempFile.exists())
+
+    val doc = com.example.model.DocumentEntity(
+      title = "Trash Doc",
+      sender = "Test Sender",
+      fileName = "trash_test_doc.pdf",
+      filePath = tempFile.absolutePath,
+      mainCategory = "Allgemein",
+      subCategory = "Sonstiges",
+      isDeleted = true,
+      deletedAt = System.currentTimeMillis()
+    )
+    val docId = docDao.insertDocument(doc)
+
+    val fieldValue = com.example.model.DocumentCustomFieldValueEntity(
+      documentId = docId,
+      customFieldId = "field_test_123",
+      fieldValue = "Orphan Value"
+    )
+    customFieldDao.insertOrUpdateFieldValue(fieldValue)
+
+    val valuesBefore = customFieldDao.getCustomFieldValuesForDocumentList(docId)
+    assertEquals(1, valuesBefore.size)
+
+    val viewModel = DocAnizerViewModel(app)
+    viewModel.emptyTrash()
+
+    kotlinx.coroutines.delay(500)
+
+    val trashList = docDao.getTrashDocumentsList()
+    assertTrue(trashList.isEmpty())
+
+    val valuesAfter = customFieldDao.getCustomFieldValuesForDocumentList(docId)
+    assertTrue(valuesAfter.isEmpty())
+
+    assertFalse(tempFile.exists())
+  }
+
+  @Test
+  fun `verify backup archive creation and restore roundtrip with vault metadata and 2-level folder structure`() = runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Application>()
+    val db = AppDatabase.getDatabase(context)
+    val ruleRepo = com.example.service.DocRuleRepository(context)
+
+    // 1. Create a sample document file
+    val sampleFile = java.io.File(context.cacheDir, "sample_invoice.pdf").apply {
+      writeText("%PDF-1.4 Mock PDF Content for Backup Test")
+    }
+
+    val sampleDoc = com.example.model.DocumentEntity(
+      id = 9999L,
+      title = "Test Rechnung Telekom",
+      sender = "Telekom",
+      fileName = "sample_invoice.pdf",
+      filePath = sampleFile.absolutePath,
+      mainCategory = "Finanzen",
+      subCategory = "Telekommunikation",
+      mainCategoryId = "A02",
+      subCategoryId = "B2.01",
+      docType = "Rechnung"
+    )
+
+    // 2. Insert metadata: custom field, custom field value, cash tx, bank entry, widget, rule
+    val testField = CustomFieldEntity(
+      id = "field_roundtrip_1",
+      name = "Vertragsnummer",
+      type = CustomFieldType.TEXT,
+      scope = CustomFieldScope.FOLDER_SPECIFIC,
+      targetMainCategory = "Finanzen"
+    )
+    db.customFieldDao().insertCustomField(testField)
+
+    val testFieldValue = com.example.model.DocumentCustomFieldValueEntity(
+      documentId = 9999L,
+      customFieldId = "field_roundtrip_1",
+      fieldValue = "VK-12345678"
+    )
+    db.customFieldDao().insertOrUpdateFieldValue(testFieldValue)
+
+    val testCashTx = com.example.model.CashTransactionEntity(
+      id = "tx_roundtrip_1",
+      title = "Büromaterial Bar",
+      amount = 14.99,
+      type = com.example.model.CashTransactionType.EXPENSE,
+      category = "Büro"
+    )
+    db.financeDao().insertCashTransaction(testCashTx)
+
+    val testBankEntry = com.example.model.BankStatementEntryEntity(
+      id = "bank_roundtrip_1",
+      date = System.currentTimeMillis(),
+      bookingText = "Telekom Deutschland",
+      purpose = "Monatsrechnung",
+      amount = -49.95,
+      isCashWithdrawal = false,
+      monthYear = "2026-10"
+    )
+    db.financeDao().insertBankStatementEntry(testBankEntry)
+
+    val testWidget = com.example.model.CustomDashboardWidgetEntity(
+      id = "widget_roundtrip_1",
+      title = "Telekom Ausgaben",
+      targetMainCategory = "Finanzen"
+    )
+    db.customDashboardWidgetDao().insertOrUpdateWidget(testWidget)
+
+    val testRule = com.example.model.DocRule(
+      id = "rule_roundtrip_1",
+      name = "Telekom Auto-Kategorie",
+      matchKeywords = listOf("Telekom", "Festnetz"),
+      targetMainCategoryId = "A02",
+      targetSubCategoryId = "B2.01"
+    )
+    ruleRepo.addRule(testRule)
+
+    // 3. Create encrypted backup archive
+    val backupFile = java.io.File(context.cacheDir, "test_vault_backup.enc")
+    val passwordKey = "MasterPasswordSafe123"
+
+    val createdArchive = com.example.service.DocumentStorageService.createEncryptedBackupArchive(
+      context = context,
+      docs = listOf(sampleDoc),
+      outputEncFile = backupFile,
+      passwordKey = passwordKey,
+      includeVaultMetadata = true
+    )
+
+    assertTrue("Backup-Datei sollte existieren", createdArchive.exists())
+    assertTrue("Backup-Datei sollte Inhalt haben", createdArchive.length() > 0)
+
+    // Delete existing entries to verify full restore
+    db.customFieldDao().deleteCustomFieldById("field_roundtrip_1")
+    db.customFieldDao().deleteAllValuesForDocument(9999L)
+    db.financeDao().deleteCashTransactionById("tx_roundtrip_1")
+    db.financeDao().deleteBankStatementEntryById("bank_roundtrip_1")
+    db.customDashboardWidgetDao().deleteWidgetById("widget_roundtrip_1")
+    ruleRepo.deleteRule("rule_roundtrip_1")
+
+    // 4. Restore encrypted backup archive
+    val restoreResult = com.example.service.DocumentStorageService.restoreEncryptedBackupArchive(
+      context = context,
+      inputEncFile = createdArchive,
+      passwordKey = passwordKey,
+      database = db,
+      ruleRepository = ruleRepo
+    )
+
+    assertTrue("Restore sollte erfolgreich sein", restoreResult.isSuccess)
+    val restoredDocs = restoreResult.getOrNull()
+    assertNotNull(restoredDocs)
+    assertEquals(1, restoredDocs!!.size)
+
+    val restoredDoc = restoredDocs[0]
+    assertEquals(9999L, restoredDoc.id)
+    assertEquals("Finanzen", restoredDoc.mainCategory)
+    assertEquals("Telekommunikation", restoredDoc.subCategory)
+
+    // Verify 2-level folder path
+    val restoredFile = java.io.File(restoredDoc.filePath)
+    assertTrue("Wiederhergestellte Datei muss auf der Festplatte existieren", restoredFile.exists())
+    assertTrue(
+      "Pfad muss Unterordner für Finanzen/Telekommunikation enthalten", 
+      restoredDoc.filePath.contains("Finanzen") || restoredDoc.filePath.contains("A02") || restoredDoc.filePath.contains("Telekommunikation")
+    )
+
+    // Verify restored database vault metadata
+    val restoredFields = db.customFieldDao().getAllCustomFieldsList()
+    assertTrue(restoredFields.any { it.id == "field_roundtrip_1" })
+
+    val restoredFieldValues = db.customFieldDao().getCustomFieldValuesForDocumentList(9999L)
+    assertTrue(restoredFieldValues.any { it.customFieldId == "field_roundtrip_1" && it.fieldValue == "VK-12345678" })
+
+    val restoredTxs = db.financeDao().getAllCashTransactionsList()
+    assertTrue(restoredTxs.any { it.id == "tx_roundtrip_1" })
+
+    val restoredBankEntries = db.financeDao().getAllBankStatementEntriesList()
+    assertTrue(restoredBankEntries.any { it.id == "bank_roundtrip_1" })
+
+    val restoredWidgets = db.customDashboardWidgetDao().getAllWidgetsList()
+    assertTrue(restoredWidgets.any { it.id == "widget_roundtrip_1" })
+
+    val restoredRules = ruleRepo.rules.value
+    assertTrue(restoredRules.any { it.id == "rule_roundtrip_1" })
+
+    // Clean up
+    if (backupFile.exists()) backupFile.delete()
+    if (sampleFile.exists()) sampleFile.delete()
+  }
 }
 
 

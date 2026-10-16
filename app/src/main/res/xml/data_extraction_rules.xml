@@ -12,8 +12,8 @@
         <exclude domain="database" path="mydocanizer_database" />
         <exclude domain="database" path="mydocanizer_database-shm" />
         <exclude domain="database" path="mydocanizer_database-wal" />
-        <include domain="sharedpref" path="mydocanizer_prefs.xml" />
-        <include domain="sharedpref" path="doc_rules_storage.xml" />
+        <exclude domain="sharedpref" path="mydocanizer_prefs.xml" />
+        <exclude domain="sharedpref" path="doc_rules_storage.xml" />
     </cloud-backup>
     <device-transfer>
         <!-- Bei direktem Gerät-zu-Gerät Umzug (z.B. Kabel/WiFi-Direct) Transfer erlauben -->

@@ -66,6 +66,7 @@ fun HuggingFaceModelsContent(
     val newModelsNotification by viewModel.newModelsNotification.collectAsState()
     val autoCheckEnabled by viewModel.llmCatalogAutoCheckEnabled.collectAsState()
     val checkInterval by viewModel.llmCatalogCheckInterval.collectAsState()
+    val preferenceMode by viewModel.llmPreferenceMode.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
     var showGgufInfoDialog by remember { mutableStateOf(false) }
@@ -358,7 +359,7 @@ fun HuggingFaceModelsContent(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "${String.format(java.util.Locale.US, "%.1f", hardwareInfo.totalRamGb)} GB RAM • ${hardwareInfo.cpuCores} CPU-Kerne • ${hardwareInfo.performanceTier}",
+                                    text = "${String.format(java.util.Locale.US, "%.1f", hardwareInfo.totalRamGb)} GB RAM • ${hardwareInfo.cpuCores} Kerne @ ${hardwareInfo.maxCpuFreqMhz} MHz",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -370,12 +371,78 @@ fun HuggingFaceModelsContent(
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
                             Text(
-                                text = "100% Offline",
+                                text = "SoC: ${hardwareInfo.socModel.ifBlank { "ARM64" }}",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                             )
+                        }
+                    }
+
+                    // Erweiterte Hardware-Telemetrie & Micro-Benchmark
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Vulkan: ${if (hardwareInfo.hasVulkanGpu) "✓ Ja" else "✗ Nein"} • DotProd: ${if (hardwareInfo.supportsArmDotProd) "✓ Ja" else "✗ Nein"}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "CPU-Index: ${hardwareInfo.cpuBenchmarkScore}/100",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // Präferenz-Umschalter (Qualität vs. Geschwindigkeit)
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "LLM-Empfehlungspräferenz:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (preferenceMode == com.example.model.LlmPreferenceMode.QUALITY_FOCUS) "75% Qualität / 25% Speed" else "55% Qualität / 45% Speed",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 8.5.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                FilterChip(
+                                    selected = preferenceMode == com.example.model.LlmPreferenceMode.QUALITY_FOCUS,
+                                    onClick = { viewModel.setLlmPreferenceMode(com.example.model.LlmPreferenceMode.QUALITY_FOCUS) },
+                                    label = { Text("Qualitäts-Fokus (75%)", fontSize = 9.5.sp) },
+                                    modifier = Modifier.weight(1f).height(28.dp)
+                                )
+                                FilterChip(
+                                    selected = preferenceMode == com.example.model.LlmPreferenceMode.SPEED_FOCUS,
+                                    onClick = { viewModel.setLlmPreferenceMode(com.example.model.LlmPreferenceMode.SPEED_FOCUS) },
+                                    label = { Text("Speed-Fokus (45%)", fontSize = 9.5.sp) },
+                                    modifier = Modifier.weight(1f).height(28.dp)
+                                )
+                            }
                         }
                     }
 
@@ -593,6 +660,50 @@ fun ModelCardHorizontal(
     viewModel: DocAnizerViewModel
 ) {
     val compatibility = hardwareInfo.getCompatibility(model.recommendedRamGb)
+    var isBenchmarking by remember { mutableStateOf(false) }
+    var benchmarkResult by remember { mutableStateOf<com.example.model.ModelBenchmarkResult?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    if (benchmarkResult != null) {
+        val bench = benchmarkResult!!
+        AlertDialog(
+            onDismissRequest = { benchmarkResult = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text("Dual-Benchmark: ${bench.modelName.take(22)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text("Gesamt-Score: ${bench.overallScore}/100", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text("Gewichtung: 65% Qualität + 35% Geschwindigkeit", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Text("• Qualität: ${bench.qualityScore}% (Ground-Truth Check)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("• Durchsatz: ${bench.quantityScore}% (${bench.tokensPerSecond} TPS, ${bench.latencyMs}ms)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("• Absender: ${bench.extractedSender} | Typ: ${bench.extractedDocType}", fontSize = 11.sp)
+                    if (bench.extractedAmount.isNotBlank()) {
+                        Text("• Rechnungsbetrag: ${bench.extractedAmount}", fontSize = 11.sp)
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text("Evaluierungsergebnis:\n${bench.evaluationDetails}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { benchmarkResult = null }) {
+                    Text("Schließen")
+                }
+            }
+        )
+    }
+
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = if (model.isSelected) {
@@ -671,7 +782,7 @@ fun ModelCardHorizontal(
                                 }
                             }
                             Text(
-                                text = "${model.parameterSize} • ${model.modelCategory}",
+                                text = "${model.parameterSize} • ${if (model.estimatedTps > 0f) "${model.estimatedTps} TPS" else model.modelCategory} • Score: ${model.recommendationScore}/100",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 9.sp,
@@ -775,15 +886,40 @@ fun ModelCardHorizontal(
                         }
                     }
                 } else if (!model.isDownloaded) {
-                    FilledTonalButton(
-                        onClick = { viewModel.startBackgroundDownload(model.id) },
-                        shape = RoundedCornerShape(4.dp),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                        modifier = Modifier.height(24.dp).testTag("btn_download_${model.id}")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(10.dp))
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text("Laden", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        FilledTonalButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    isBenchmarking = true
+                                    benchmarkResult = viewModel.runModelBenchmark(model.id)
+                                    isBenchmarking = false
+                                }
+                            },
+                            shape = RoundedCornerShape(4.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                            modifier = Modifier.height(24.dp).testTag("btn_bench_${model.id}")
+                        ) {
+                            if (isBenchmarking) {
+                                CircularProgressIndicator(modifier = Modifier.size(10.dp), strokeWidth = 1.dp)
+                            } else {
+                                Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(10.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("Bench", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        FilledTonalButton(
+                            onClick = { viewModel.startBackgroundDownload(model.id) },
+                            shape = RoundedCornerShape(4.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                            modifier = Modifier.height(24.dp).testTag("btn_download_${model.id}")
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(10.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("Laden", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 } else {
                     Row(
@@ -800,6 +936,27 @@ fun ModelCardHorizontal(
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(13.dp)
                             )
+                        }
+
+                        FilledTonalButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    isBenchmarking = true
+                                    benchmarkResult = viewModel.runModelBenchmark(model.id)
+                                    isBenchmarking = false
+                                }
+                            },
+                            shape = RoundedCornerShape(4.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                            modifier = Modifier.height(24.dp).testTag("btn_bench_${model.id}")
+                        ) {
+                            if (isBenchmarking) {
+                                CircularProgressIndicator(modifier = Modifier.size(10.dp), strokeWidth = 1.dp)
+                            } else {
+                                Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(10.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("Bench", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
 
                         if (!model.isSelected) {

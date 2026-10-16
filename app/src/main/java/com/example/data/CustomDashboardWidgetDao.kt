@@ -9,8 +9,14 @@ interface CustomDashboardWidgetDao {
     @Query("SELECT * FROM custom_dashboard_widgets ORDER BY position ASC, createdAt ASC")
     fun getAllWidgetsFlow(): Flow<List<CustomDashboardWidgetEntity>>
 
+    @Query("SELECT * FROM custom_dashboard_widgets ORDER BY position ASC, createdAt ASC")
+    suspend fun getAllWidgetsList(): List<CustomDashboardWidgetEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateWidget(widget: CustomDashboardWidgetEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdateWidgets(widgets: List<CustomDashboardWidgetEntity>)
 
     @Delete
     suspend fun deleteWidget(widget: CustomDashboardWidgetEntity)

@@ -130,10 +130,14 @@ object CloudSyncWorkerService {
                     try {
                         DocumentStorageService.encryptFile(originalPdf, encryptedBlob, userPasswordKey)
 
-                        var anyUploadSuccessful = false
+                        val isWebDavActive = config.enableWebDavNas && config.webDavUrl.isNotBlank()
+                        val isDriveActive = config.enableGoogleDrive && config.googleDriveConnected && config.googleDriveAccessToken.isNotBlank()
+
+                        var webDavSuccess = !isWebDavActive
+                        var driveSuccess = !isDriveActive
 
                         // Reale WebDAV-Übertragung wenn aktiviert
-                        if (config.enableWebDavNas && config.webDavUrl.isNotBlank()) {
+                        if (isWebDavActive) {
                             _syncState.value = SyncState.Syncing("Übertrage ${encryptedBlob.name} an WebDAV/NAS...")
                             val webDavRes = WebDavClient.uploadFile(
                                 url = config.webDavUrl,
@@ -143,25 +147,29 @@ object CloudSyncWorkerService {
                                 localFile = encryptedBlob
                             )
                             if (webDavRes.isSuccess) {
-                                anyUploadSuccessful = true
+                                webDavSuccess = true
                             }
                         }
 
                         // Reale Google Drive Übertragung wenn Token vorhanden
-                        if (config.enableGoogleDrive && config.googleDriveConnected && config.googleDriveAccessToken.isNotBlank()) {
+                        if (isDriveActive) {
                             _syncState.value = SyncState.Syncing("Übertrage ${encryptedBlob.name} an Google Drive...")
                             val driveRes = GoogleDriveClient.uploadEncryptedFile(
                                 accessToken = config.googleDriveAccessToken,
                                 file = encryptedBlob,
-                                remoteName = encryptedBlob.name
+                                remoteName = encryptedBlob.name,
+                                folderName = config.googleDriveFolder
                             )
                             if (driveRes.isSuccess) {
-                                anyUploadSuccessful = true
+                                driveSuccess = true
                             }
                         }
 
-                        // Mark synced in database only if upload was successful or offline test mode
-                        if (anyUploadSuccessful || (!config.enableWebDavNas && !config.enableGoogleDrive)) {
+                        // Mark synced in database NUR wenn ALLE aktiven Ziele erfolgreich übertragen wurden
+                        val allActiveTargetsSuccessful = (isWebDavActive || isDriveActive) && webDavSuccess && driveSuccess
+                        val isOfflineOnly = !isWebDavActive && !isDriveActive
+
+                        if (allActiveTargetsSuccessful || isOfflineOnly) {
                             documentDao.markSynced(doc.id)
                             uploadedCount++
                         }
@@ -182,11 +190,13 @@ object CloudSyncWorkerService {
             try {
                 // Step 3: Payload upload to Google Drive and/or NAS WebDAV
                 if (encryptedIndex.exists()) {
-                    var anyIndexTargetAttempted = false
-                    var anyIndexTargetSucceeded = false
+                    val isWebDavActive = config.enableWebDavNas && config.webDavUrl.isNotBlank()
+                    val isDriveActive = config.enableGoogleDrive && config.googleDriveConnected && config.googleDriveAccessToken.isNotBlank()
 
-                    if (config.enableWebDavNas && config.webDavUrl.isNotBlank()) {
-                        anyIndexTargetAttempted = true
+                    var webDavIndexSuccess = !isWebDavActive
+                    var driveIndexSuccess = !isDriveActive
+
+                    if (isWebDavActive) {
                         _syncState.value = SyncState.Syncing("Übertrage doc_index.enc an WebDAV/NAS...")
                         val webDavIndexRes = WebDavClient.uploadFile(
                             url = config.webDavUrl,
@@ -196,24 +206,24 @@ object CloudSyncWorkerService {
                             localFile = encryptedIndex
                         )
                         if (webDavIndexRes.isSuccess) {
-                            anyIndexTargetSucceeded = true
+                            webDavIndexSuccess = true
                         }
                     }
 
-                    if (config.enableGoogleDrive && config.googleDriveConnected && config.googleDriveAccessToken.isNotBlank()) {
-                        anyIndexTargetAttempted = true
+                    if (isDriveActive) {
                         _syncState.value = SyncState.Syncing("Übertrage doc_index.enc an Google Drive...")
                         val driveIndexRes = GoogleDriveClient.uploadEncryptedFile(
                             accessToken = config.googleDriveAccessToken,
                             file = encryptedIndex,
-                            remoteName = "doc_index.enc"
+                            remoteName = "doc_index.enc",
+                            folderName = config.googleDriveFolder
                         )
                         if (driveIndexRes.isSuccess) {
-                            anyIndexTargetSucceeded = true
+                            driveIndexSuccess = true
                         }
                     }
 
-                    if (anyIndexTargetAttempted && !anyIndexTargetSucceeded) {
+                    if ((isWebDavActive || isDriveActive) && (!webDavIndexSuccess || !driveIndexSuccess)) {
                         indexUploadSuccess = false
                     }
                 }

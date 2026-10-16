@@ -16,6 +16,8 @@ data class HuggingFaceModelInfo(
     val compatibilityLevel: ModelCompatibilityLevel = ModelCompatibilityLevel.OPTIMAL,
     val isHardwareRecommended: Boolean = false,
     val hardwareRecommendationReason: String = "",
+    val estimatedTps: Float = 0f,
+    val recommendationScore: Int = 0,
     val downloadUrl: String = "",
     val fileName: String = "",
     val localFileSizeBytes: Long = 0L,

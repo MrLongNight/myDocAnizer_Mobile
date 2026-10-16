@@ -318,33 +318,33 @@ ws ::= [ \t\n\r]*
             val lower = ocrText.lowercase()
             val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
             val detectedSender = when {
-                lower.contains("congstar") -> "congstar"
-                lower.contains("deutsche post") || lower.contains("postbank") -> "Deutsche Post"
-                lower.contains("dhl") -> "DHL Paket"
-                lower.contains("vodafone") -> "Vodafone GmbH"
-                lower.contains("telekom") || lower.contains("magenta") -> "Deutsche Telekom"
-                lower.contains("o2") || lower.contains("telefonica") -> "Telefónica O2"
-                lower.contains("1&1") -> "1&1 Telecom"
-                lower.contains("allianz") -> "Allianz"
-                lower.contains("ergo") -> "ERGO Versicherung"
-                lower.contains("huk") -> "HUK-COBURG"
-                lower.contains("finanzamt") -> "Finanzamt"
-                lower.contains("stadtwerke") -> "Stadtwerke"
-                lower.contains("e.on") || lower.contains("eon") -> "E.ON Energie"
-                lower.contains("vattenfall") -> "Vattenfall"
-                lower.contains("barmer") -> "BARMER"
-                lower.contains("techniker") || lower.contains("tk ") -> "Techniker Krankenkasse"
-                lower.contains("aok") -> "AOK"
-                lower.contains("sparkasse") -> "Sparkasse"
-                lower.contains("volksbank") || lower.contains("raiffeisenbank") -> "Volksbank Raiffeisenbank"
-                lower.contains("ing-diba") || lower.contains("ing diba") -> "ING"
-                lower.contains("dkb") -> "DKB"
-                lower.contains("commerzbank") -> "Commerzbank"
-                lower.contains("deutsche bank") -> "Deutsche Bank"
-                lower.contains("adac") -> "ADAC"
-                lower.contains("amazon") -> "Amazon"
-                lower.contains("paypal") -> "PayPal"
-                lower.contains("klarna") -> "Klarna"
+                DocRuleRepository.containsKeywordMatch(lower, "congstar") -> "congstar"
+                DocRuleRepository.containsKeywordMatch(lower, "deutsche post") || DocRuleRepository.containsKeywordMatch(lower, "postbank") -> "Deutsche Post"
+                DocRuleRepository.containsKeywordMatch(lower, "dhl") -> "DHL Paket"
+                DocRuleRepository.containsKeywordMatch(lower, "vodafone") -> "Vodafone GmbH"
+                DocRuleRepository.containsKeywordMatch(lower, "telekom") || DocRuleRepository.containsKeywordMatch(lower, "magenta") -> "Deutsche Telekom"
+                DocRuleRepository.containsKeywordMatch(lower, "o2") || DocRuleRepository.containsKeywordMatch(lower, "telefonica") -> "Telefónica O2"
+                DocRuleRepository.containsKeywordMatch(lower, "1&1") -> "1&1 Telecom"
+                DocRuleRepository.containsKeywordMatch(lower, "allianz") -> "Allianz"
+                DocRuleRepository.containsKeywordMatch(lower, "ergo") -> "ERGO Versicherung"
+                DocRuleRepository.containsKeywordMatch(lower, "huk") -> "HUK-COBURG"
+                DocRuleRepository.containsKeywordMatch(lower, "finanzamt") -> "Finanzamt"
+                DocRuleRepository.containsKeywordMatch(lower, "stadtwerke") -> "Stadtwerke"
+                DocRuleRepository.containsKeywordMatch(lower, "e.on") || DocRuleRepository.containsKeywordMatch(lower, "eon") -> "E.ON Energie"
+                DocRuleRepository.containsKeywordMatch(lower, "vattenfall") -> "Vattenfall"
+                DocRuleRepository.containsKeywordMatch(lower, "barmer") -> "BARMER"
+                DocRuleRepository.containsKeywordMatch(lower, "techniker") || DocRuleRepository.containsKeywordMatch(lower, "tk ") -> "Techniker Krankenkasse"
+                DocRuleRepository.containsKeywordMatch(lower, "aok") -> "AOK"
+                DocRuleRepository.containsKeywordMatch(lower, "sparkasse") -> "Sparkasse"
+                DocRuleRepository.containsKeywordMatch(lower, "volksbank") || DocRuleRepository.containsKeywordMatch(lower, "raiffeisenbank") -> "Volksbank Raiffeisenbank"
+                DocRuleRepository.containsKeywordMatch(lower, "ing-diba") || DocRuleRepository.containsKeywordMatch(lower, "ing diba") -> "ING"
+                DocRuleRepository.containsKeywordMatch(lower, "dkb") -> "DKB"
+                DocRuleRepository.containsKeywordMatch(lower, "commerzbank") -> "Commerzbank"
+                DocRuleRepository.containsKeywordMatch(lower, "deutsche bank") -> "Deutsche Bank"
+                DocRuleRepository.containsKeywordMatch(lower, "adac") -> "ADAC"
+                DocRuleRepository.containsKeywordMatch(lower, "amazon") -> "Amazon"
+                DocRuleRepository.containsKeywordMatch(lower, "paypal") -> "PayPal"
+                DocRuleRepository.containsKeywordMatch(lower, "klarna") -> "Klarna"
                 else -> null
             }
             val detectedType = when {
@@ -561,6 +561,9 @@ ws ::= [ \t\n\r]*
             val endNativeRam = try { android.os.Debug.getNativeHeapAllocatedSize() } catch (_: Throwable) { 0L }
             val latency = (endTime - startTime).coerceAtLeast(1)
             val ramDeltaMb = (((endRam + endNativeRam) - (startRam + startNativeRam)) / (1024f * 1024f)).coerceAtLeast(0.1f)
+            val generatedTokens = (output.length / 3.6f).toInt().coerceAtLeast(1)
+            val tokensPerSecond = ((generatedTokens / (latency / 1000f)) * 10).toInt() / 10f
+            val safeTps = tokensPerSecond.coerceAtLeast(0.1f)
 
             AppAuditLogger.logAiInference(
                 modelId = modelFile.name,
@@ -569,9 +572,10 @@ ws ::= [ \t\n\r]*
                 confidence = 0.98f,
                 latencyMs = latency,
                 customFieldsCount = 5,
-                reasoningSnippet = "Inferenz via llama.cpp mit Chain-of-Thought (_reasoning) abgeschlossen.",
+                reasoningSnippet = "Inferenz via llama.cpp (${safeTps} TPS, ${generatedTokens} Tokens, Chain-of-Thought) abgeschlossen.",
                 ramDeltaMb = ramDeltaMb,
-                fullReasoning = output
+                fullReasoning = output,
+                tokensPerSecond = safeTps
             )
 
             output
@@ -688,7 +692,7 @@ ws ::= [ \t\n\r]*
         }
     }
 
-    private fun executeFallbackInference(ocrText: String, systemPrompt: String): String {
+    fun executeFallbackInference(ocrText: String, systemPrompt: String): String {
         val parsed = createHeuristicFallbackResponse(ocrText)
         return parsed.toJsonString()
     }

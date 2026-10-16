@@ -62,41 +62,16 @@ class LlmService(private val context: Context) {
 
     private val database by lazy { AppDatabase.getDatabase(context) }
 
+    var currentPreferenceMode: com.example.model.LlmPreferenceMode = com.example.model.LlmPreferenceMode.QUALITY_FOCUS
+    var analyticsManager: AnalyticsManager? = null
+
+    fun updatePreferenceMode(mode: com.example.model.LlmPreferenceMode) {
+        currentPreferenceMode = mode
+        refreshHardwareInfo()
+    }
+
     fun detectDeviceHardware(): DeviceHardwareInfo {
-        return try {
-            val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-            val memoryInfo = ActivityManager.MemoryInfo()
-            activityManager?.getMemoryInfo(memoryInfo)
-
-            val totalGb = (memoryInfo.totalMem / (1024.0 * 1024.0 * 1024.0)).toFloat()
-            val availGb = (memoryInfo.availMem / (1024.0 * 1024.0 * 1024.0)).toFloat()
-            val usedGb = (totalGb - availGb).coerceAtLeast(0f)
-            val usagePct = if (totalGb > 0f) ((usedGb / totalGb) * 100).toInt() else 42
-            val cores = Runtime.getRuntime().availableProcessors()
-            val isLowRam = memoryInfo.lowMemory || totalGb < 3.0f
-
-            val roundedTotal = ((totalGb * 10).toInt() / 10f).coerceAtLeast(1.0f)
-            val roundedAvail = ((availGb * 10).toInt() / 10f).coerceAtLeast(0.5f)
-            val roundedUsed = ((usedGb * 10).toInt() / 10f).coerceAtLeast(0.5f)
-
-            DeviceHardwareInfo(
-                totalRamGb = roundedTotal,
-                availableRamGb = roundedAvail,
-                usedRamGb = roundedUsed,
-                ramUsagePercent = usagePct.coerceIn(5, 95),
-                cpuCores = cores.coerceAtLeast(4),
-                isLowRamDevice = isLowRam
-            )
-        } catch (e: Exception) {
-            DeviceHardwareInfo(
-                totalRamGb = 6.0f,
-                availableRamGb = 3.5f,
-                usedRamGb = 2.5f,
-                ramUsagePercent = 42,
-                cpuCores = 8,
-                isLowRamDevice = false
-            )
-        }
+        return com.example.service.llm.LlmHardwareDetector.detectDeviceHardware(context)
     }
 
     private fun calculateCompatibility(recommendedRamGb: Float, hw: DeviceHardwareInfo): ModelCompatibilityLevel {
@@ -910,7 +885,18 @@ class LlmService(private val context: Context) {
                 modelCategory = "Google Gemma Modelle"
             )
         )
-        return baseList
+        val recommendedList = com.example.service.llm.LlmHardwareDetector.applyHardwareRecommendations(
+            models = baseList,
+            hw = hw,
+            preference = currentPreferenceMode
+        )
+        val hasSelection = recommendedList.any { it.isSelected }
+        return if (!hasSelection) {
+            val topModel = recommendedList.find { it.isHardwareRecommended } ?: recommendedList.firstOrNull()
+            recommendedList.map { it.copy(isSelected = it.id == topModel?.id) }
+        } else {
+            recommendedList
+        }
     }
 
     private val _availableModels = MutableStateFlow(createInitialModels(_deviceHardware.value))
@@ -951,7 +937,7 @@ class LlmService(private val context: Context) {
         val hw = detectDeviceHardware()
         _deviceHardware.value = hw
         _availableModels.update { currentModels ->
-            currentModels.map {
+            val updatedDiskInfo = currentModels.map {
                 val diskSize = getModelDiskSize(it.fileName)
                 val onDisk = diskSize > 1024 * 1024
                 val isJobActive = activeDownloadJobs[it.id]?.isActive == true
@@ -963,6 +949,11 @@ class LlmService(private val context: Context) {
                     downloadProgress = if (isJobActive) it.downloadProgress else if (onDisk) 1.0f else it.downloadProgress
                 )
             }
+            com.example.service.llm.LlmHardwareDetector.applyHardwareRecommendations(
+                models = updatedDiskInfo,
+                hw = hw,
+                preference = currentPreferenceMode
+            )
         }
     }
 
@@ -989,6 +980,158 @@ class LlmService(private val context: Context) {
         return _availableModels.value.find { it.isSelected }
             ?: _availableModels.value.firstOrNull { it.isDownloaded }
             ?: _availableModels.value.first()
+    }
+
+    suspend fun runStandardizedModelBenchmark(modelId: String): com.example.model.ModelBenchmarkResult = withContext(Dispatchers.IO) {
+        val model = _availableModels.value.find { it.id == modelId }
+            ?: _availableModels.value.first()
+
+        val referenceOcrText = """
+            Vodafone GmbH
+            Ferdinand-Braun-Platz 1
+            40549 Düsseldorf
+
+            Rechnung Nr. VF-2026-94821
+            Rechnungsdatum: 12.04.2026
+            Fälligkeitsdatum: 26.04.2026
+            Kundennummer: 0019283746
+            IBAN: DE89370400440532013000
+
+            Ihre Mobilfunk- und Festnetzabrechnung für April 2026
+            Tarif: GigaMobil M mit 5G & Flat
+
+            Gesamtbetrag fällig: 89,95 €
+            Enthaltene MwSt. (19%): 14,36 €
+            Nettobetrag: 75,59 €
+
+            Zahlung erfolgt bequem per Lastschrift zum 26.04.2026.
+        """.trimIndent()
+
+        val startTime = System.currentTimeMillis()
+        val modelFile = getModelFile(model.id)
+        val rawOutput = if (modelFile.exists() && modelFile.length() > 1024 * 1024) {
+            try {
+                llamaCppEngine.executeFirstRunExtraction(
+                    modelFile = modelFile,
+                    ocrText = referenceOcrText,
+                    whitelistedCustomFields = listOf("Rechnungsbetrag", "Fälligkeit", "IBAN", "Kundennummer"),
+                    params = LlamaCppInferenceEngine.InferenceParams(temperature = 0.1f, maxTokens = 350)
+                ).toJsonString()
+            } catch (_: Throwable) {
+                llamaCppEngine.executeFallbackInference(
+                    ocrText = referenceOcrText,
+                    systemPrompt = "Extrahiere Absender, Dokumententyp und Betrag im DMS-Format."
+                )
+            }
+        } else {
+            llamaCppEngine.executeFallbackInference(
+                ocrText = referenceOcrText,
+                systemPrompt = "Extrahiere Absender, Dokumententyp und Betrag im DMS-Format."
+            )
+        }
+
+        val endTime = System.currentTimeMillis()
+        val latencyMs = (endTime - startTime).coerceAtLeast(1)
+        val generatedTokens = (rawOutput.length / 3.6f).toInt().coerceAtLeast(1)
+        val tokensPerSecond = ((generatedTokens / (latencyMs / 1000f)) * 10).toInt() / 10f
+        val safeTps = tokensPerSecond.coerceAtLeast(0.1f)
+
+        val lowerOutput = rawOutput.lowercase()
+        val extractedSender = when {
+            lowerOutput.contains("vodafone") -> "Vodafone GmbH"
+            else -> "Unbekannt"
+        }
+        val extractedDocType = when {
+            lowerOutput.contains("rechnung") || lowerOutput.contains("abrechnung") -> "Rechnung"
+            else -> "Dokument"
+        }
+        val extractedAmount = when {
+            lowerOutput.contains("89,95") || lowerOutput.contains("89.95") -> "89,95 €"
+            lowerOutput.contains("75,59") -> "75,59 €"
+            else -> ""
+        }
+
+        var qualityScore = 0
+        val evalDetails = mutableListOf<String>()
+
+        if (extractedSender.contains("Vodafone", ignoreCase = true)) {
+            qualityScore += 25
+            evalDetails.add("✓ Absender erkannt: Vodafone GmbH (+25%)")
+        } else {
+            evalDetails.add("✗ Absender nicht erkannt (+0%)")
+        }
+
+        if (extractedDocType.equals("Rechnung", ignoreCase = true)) {
+            qualityScore += 25
+            evalDetails.add("✓ Dokumententyp erkannt: Rechnung (+25%)")
+        } else {
+            evalDetails.add("✗ Dokumententyp nicht exakt (+0%)")
+        }
+
+        if (extractedAmount == "89,95 €") {
+            qualityScore += 20
+            evalDetails.add("✓ Rechnungsbetrag exakt: 89,95 € (+20%)")
+        } else {
+            evalDetails.add("✗ Rechnungsbetrag abweichend (+0%)")
+        }
+
+        if (lowerOutput.contains("26.04.2026") || lowerOutput.contains("12.04.2026")) {
+            qualityScore += 15
+            evalDetails.add("✓ Datums- & Fristenprüfung (+15%)")
+        } else {
+            evalDetails.add("✗ Datum nicht erfasst (+0%)")
+        }
+
+        if (lowerOutput.contains("de89370400440532013000") || lowerOutput.contains("iban") || lowerOutput.contains("kundennummer")) {
+            qualityScore += 15
+            evalDetails.add("✓ Metadaten & IBAN verifiziert (+15%)")
+        } else {
+            evalDetails.add("✗ Metadaten unvollständig (+0%)")
+        }
+
+        val quantityScore = when {
+            safeTps >= 25f -> 100
+            safeTps >= 15f -> 85
+            safeTps >= 10f -> 70
+            safeTps >= 5f -> 55
+            else -> ((safeTps / 10f) * 60).toInt().coerceIn(15, 50)
+        }
+
+        val overallScore = ((qualityScore * 0.65f) + (quantityScore * 0.35f)).toInt().coerceIn(0, 100)
+
+        AppAuditLogger.recordBenchmarkResult(
+            modelId = model.id,
+            modelName = model.name,
+            qualityScore = qualityScore,
+            quantityScore = quantityScore,
+            overallScore = overallScore,
+            tokensPerSecond = safeTps,
+            latencyMs = latencyMs
+        )
+
+        analyticsManager?.logLlmBenchmarkCompleted(
+            modelId = model.id,
+            qualityScore = qualityScore,
+            quantityScore = quantityScore,
+            overallScore = overallScore,
+            tps = safeTps
+        )
+
+        com.example.model.ModelBenchmarkResult(
+            modelId = model.id,
+            modelName = model.name,
+            qualityScore = qualityScore,
+            quantityScore = quantityScore,
+            overallScore = overallScore,
+            tokensPerSecond = safeTps,
+            latencyMs = latencyMs,
+            generatedTokens = generatedTokens,
+            extractedSender = extractedSender,
+            extractedDocType = extractedDocType,
+            extractedAmount = extractedAmount,
+            rawOutput = rawOutput,
+            evaluationDetails = evalDetails.joinToString("\n")
+        )
     }
 
     fun deleteModel(modelId: String): Boolean {
@@ -1406,7 +1549,11 @@ class LlmService(private val context: Context) {
                     buildModelReasoning(activeModel, ruleName, sender, docType, mainCat, subCat, finalCustomFields, 0.94f)
                 }
 
-                val latency = System.currentTimeMillis() - startTime
+                val latency = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
+                val generatedTokens = (explanation.length / 3.6f).toInt().coerceAtLeast(1)
+                val safeTps = (((generatedTokens / (latency / 1000f))) * 10).toInt() / 10f
+                val finalTps = safeTps.coerceAtLeast(0.1f)
+
                 AppAuditLogger.logAiInference(
                     modelId = activeModel.id,
                     docType = docType,
@@ -1416,7 +1563,16 @@ class LlmService(private val context: Context) {
                     customFieldsCount = finalCustomFields.size,
                     reasoningSnippet = explanation.take(180),
                     ramDeltaMb = 8.5f,
-                    fullReasoning = explanation
+                    fullReasoning = explanation,
+                    tokensPerSecond = finalTps
+                )
+
+                analyticsManager?.logLlmInferenceTelemetry(
+                    modelId = activeModel.id,
+                    latencyMs = latency,
+                    tokensPerSecond = finalTps,
+                    confidence = 0.94f,
+                    preferenceMode = currentPreferenceMode.id
                 )
 
                 return@withContext LlmClassificationResult(
@@ -1743,10 +1899,13 @@ class LlmService(private val context: Context) {
             val harmonization = CustomFieldHarmonizer.harmonizeFields(result.customFields, existingDbFields)
             val finalResult = result.copy(customFields = harmonization.harmonizedFields)
 
-            val latency = System.currentTimeMillis() - startTime
+            val latency = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
             val rt = Runtime.getRuntime()
             val usedMemMb = ((rt.totalMemory() - rt.freeMemory()) / (1024f * 1024f)).coerceAtLeast(0.5f)
             val roundedMemDelta = ((usedMemMb * 10).toInt() / 10f)
+            val generatedTokens = (finalResult.explanation.length / 3.6f).toInt().coerceAtLeast(1)
+            val safeTps = (((generatedTokens / (latency / 1000f))) * 10).toInt() / 10f
+            val finalTps = safeTps.coerceAtLeast(0.1f)
 
             AppAuditLogger.logAiInference(
                 modelId = activeModel.id,
@@ -1757,7 +1916,16 @@ class LlmService(private val context: Context) {
                 customFieldsCount = finalResult.customFields.size,
                 reasoningSnippet = finalResult.explanation.take(180),
                 ramDeltaMb = roundedMemDelta,
-                fullReasoning = finalResult.explanation
+                fullReasoning = finalResult.explanation,
+                tokensPerSecond = finalTps
+            )
+
+            analyticsManager?.logLlmInferenceTelemetry(
+                modelId = activeModel.id,
+                latencyMs = latency,
+                tokensPerSecond = finalTps,
+                confidence = finalResult.confidence,
+                preferenceMode = currentPreferenceMode.id
             )
 
             finalResult
@@ -2048,7 +2216,11 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
 
                 val explanation = "[Team 2 Tiefenanalyse • ${targetDept.displayName} • ${activeModel.name}] ${dmsExtraction.reasoning}\n• Absender: $sender | Typ: $docType | Pfad: $suggestedPath | ${finalCustomFields.size} globale Zusatzfelder"
 
-                val latency = System.currentTimeMillis() - startTime
+                val latency = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
+                val generatedTokens = (explanation.length / 3.6f).toInt().coerceAtLeast(1)
+                val safeTps = (((generatedTokens / (latency / 1000f))) * 10).toInt() / 10f
+                val finalTps = safeTps.coerceAtLeast(0.1f)
+
                 AppAuditLogger.logAiInference(
                     modelId = activeModel.id,
                     docType = docType,
@@ -2058,7 +2230,16 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                     customFieldsCount = finalCustomFields.size,
                     reasoningSnippet = explanation.take(180),
                     ramDeltaMb = 18.0f,
-                    fullReasoning = explanation
+                    fullReasoning = explanation,
+                    tokensPerSecond = finalTps
+                )
+
+                analyticsManager?.logLlmInferenceTelemetry(
+                    modelId = activeModel.id,
+                    latencyMs = latency,
+                    tokensPerSecond = finalTps,
+                    confidence = 0.98f,
+                    preferenceMode = currentPreferenceMode.id
                 )
 
                 return@withContext LlmClassificationResult(

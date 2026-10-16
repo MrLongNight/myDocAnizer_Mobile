@@ -3,6 +3,8 @@ package com.example.service
 import android.graphics.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.*
 
 object ImageProcessingService {
 
@@ -38,12 +40,14 @@ object ImageProcessingService {
         val stepX = (width / sampleSize).coerceAtLeast(1)
         val stepY = (height / sampleSize).coerceAtLeast(1)
 
+        val pixels = IntArray(width * height)
+        workingBitmap.getPixels(pixels, 0, width, 0, 0, width, height)
         for (x in 0 until width step stepX) {
             for (y in 0 until height step stepY) {
-                val pixel = workingBitmap.getPixel(x, y)
-                val r = Color.red(pixel)
-                val g = Color.green(pixel)
-                val b = Color.blue(pixel)
+                val pixel = pixels[y * width + x]
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
 
                 // Perceived luminance
                 val lum = (0.299 * r + 0.587 * g + 0.114 * b)
@@ -169,16 +173,18 @@ object ImageProcessingService {
             val sampleW = 200
             val sampleH = (200 * (workingBmp.height.toFloat() / workingBmp.width.toFloat())).toInt().coerceAtLeast(100)
             val small = Bitmap.createScaledBitmap(workingBmp, sampleW, sampleH, false)
+            val pixels = IntArray(sampleW * sampleH)
+            small.getPixels(pixels, 0, sampleW, 0, 0, sampleW, sampleH)
             var edgeSum = 0.0
             var count = 0
 
             for (y in 1 until sampleH - 1) {
                 for (x in 1 until sampleW - 1) {
-                    val pCenter = Color.red(small.getPixel(x, y))
-                    val pLeft = Color.red(small.getPixel(x - 1, y))
-                    val pRight = Color.red(small.getPixel(x + 1, y))
-                    val pTop = Color.red(small.getPixel(x, y - 1))
-                    val pBottom = Color.red(small.getPixel(x, y + 1))
+                    val pCenter = (pixels[y * sampleW + x] shr 16) and 0xFF
+                    val pLeft = (pixels[y * sampleW + (x - 1)] shr 16) and 0xFF
+                    val pRight = (pixels[y * sampleW + (x + 1)] shr 16) and 0xFF
+                    val pTop = (pixels[(y - 1) * sampleW + x] shr 16) and 0xFF
+                    val pBottom = (pixels[(y + 1) * sampleW + x] shr 16) and 0xFF
 
                     val laplace = Math.abs(4 * pCenter - pLeft - pRight - pTop - pBottom)
                     edgeSum += laplace
@@ -269,12 +275,14 @@ object ImageProcessingService {
             var minY = smallH
             var maxY = 0
 
+            val pixels = IntArray(smallW * smallH)
+            small.getPixels(pixels, 0, smallW, 0, 0, smallW, smallH)
             for (y in 0 until smallH) {
                 for (x in 0 until smallW) {
-                    val pixel = small.getPixel(x, y)
-                    val r = Color.red(pixel)
-                    val g = Color.green(pixel)
-                    val b = Color.blue(pixel)
+                    val pixel = pixels[y * smallW + x]
+                    val r = (pixel shr 16) and 0xFF
+                    val g = (pixel shr 8) and 0xFF
+                    val b = pixel and 0xFF
                     val luma = 0.299 * r + 0.587 * g + 0.114 * b
                     if (luma > 135) {
                         if (x < minX) minX = x
@@ -431,13 +439,16 @@ object ImageProcessingService {
             var minY = sh
             var maxY = 0
             
+            val pixels = IntArray(sw * sh)
+            smallBmp.getPixels(pixels, 0, sw, 0, 0, sw, sh)
+            
             // Finde den hellsten zusammenhängenden Bereich (Papier luma > 140)
             for (y in 0 until sh) {
                 for (x in 0 until sw) {
-                    val pixel = smallBmp.getPixel(x, y)
-                    val r = Color.red(pixel)
-                    val g = Color.green(pixel)
-                    val b = Color.blue(pixel)
+                    val pixel = pixels[y * sw + x]
+                    val r = (pixel shr 16) and 0xFF
+                    val g = (pixel shr 8) and 0xFF
+                    val b = pixel and 0xFF
                     val luma = 0.299 * r + 0.587 * g + 0.114 * b
                     
                     if (luma > 140) {
@@ -555,10 +566,16 @@ object ImageProcessingService {
             isAntiAlias = true
         }
 
+        val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.GERMANY)
+        val today = dateFormat.format(Date())
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.DAY_OF_YEAR, 14)
+        val dueDate = dateFormat.format(cal.time)
+
         val lines = listOf(
             "Rechnungsnummer: INV-${(10000..99999).random()}",
             "Kundennummer: KD-${(1000..9999).random()}",
-            "Rechnungsdatum: ${java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"))}",
+            "Rechnungsdatum: $today",
             "",
             "Sehr geehrte Damen und Herren,",
             "vielen Dank für Ihr Vertrauen in unsere Dienstleistungen.",
@@ -568,7 +585,7 @@ object ImageProcessingService {
             "- Umsatzsteuer (19%): 19,63 EUR",
             "--------------------------------------------------",
             "Rechnungsbetrag: 122,93 EUR",
-            "Fälligkeit: ${java.time.LocalDate.now().plusDays(14).format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"))}",
+            "Fälligkeit: $dueDate",
             "",
             "Zahlungsziel: Innerhalb von 14 Tagen ohne Abzug.",
             "IBAN: DE89 3704 0044 0532 0130 00",

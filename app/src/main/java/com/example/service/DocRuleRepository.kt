@@ -25,44 +25,7 @@ class DocRuleRepository(private val context: Context) {
             val arr = JSONArray(json)
             val list = mutableListOf<DocRule>()
             for (i in 0 until arr.length()) {
-                val obj = arr.getJSONObject(i)
-                val matchArr = obj.optJSONArray("matchKeywords") ?: JSONArray()
-                val matchWords = (0 until matchArr.length()).map { matchArr.getString(it) }
-
-                val exclArr = obj.optJSONArray("excludeKeywords") ?: JSONArray()
-                val exclWords = (0 until exclArr.length()).map { exclArr.getString(it) }
-
-                val tagsArr = obj.optJSONArray("targetTags") ?: JSONArray()
-                val tags = (0 until tagsArr.length()).map { tagsArr.getString(it) }
-
-                val cfObj = obj.optJSONObject("targetCustomFields") ?: JSONObject()
-                val customFieldsMap = mutableMapOf<String, String>()
-                val cfKeys = cfObj.keys()
-                while (cfKeys.hasNext()) {
-                    val key = cfKeys.next()
-                    customFieldsMap[key] = cfObj.getString(key)
-                }
-
-                list.add(
-                    DocRule(
-                        id = obj.optString("id", java.util.UUID.randomUUID().toString()),
-                        name = obj.optString("name", "Regel"),
-                        matchKeywords = matchWords,
-                        excludeKeywords = exclWords,
-                        targetMainCategoryId = obj.optString("targetMainCategoryId", "A01"),
-                        targetSubCategoryId = obj.optString("targetSubCategoryId", "B1.01"),
-                        targetDocType = obj.optString("targetDocType", "Dokument"),
-                        detectedSender = obj.optString("detectedSender", ""),
-                        targetFolderPath = obj.optString("targetFolderPath", ""),
-                        targetTags = tags,
-                        isEnabled = obj.optBoolean("isEnabled", true),
-                        confidenceScore = obj.optDouble("confidenceScore", 1.0).toFloat(),
-                        isAiGenerated = obj.optBoolean("isAiGenerated", false),
-                        targetCustomFields = customFieldsMap,
-                        targetIcon = obj.optString("targetIcon", ""),
-                        targetLogo = obj.optString("targetLogo", "")
-                    )
-                )
+                list.add(jsonToRule(arr.getJSONObject(i)))
             }
             list
         } catch (e: Exception) {
@@ -74,32 +37,92 @@ class DocRuleRepository(private val context: Context) {
         try {
             val arr = JSONArray()
             list.forEach { r ->
-                val obj = JSONObject().apply {
-                    put("id", r.id)
-                    put("name", r.name)
-                    put("matchKeywords", JSONArray(r.matchKeywords))
-                    put("excludeKeywords", JSONArray(r.excludeKeywords))
-                    put("targetMainCategoryId", r.targetMainCategoryId)
-                    put("targetSubCategoryId", r.targetSubCategoryId)
-                    put("targetDocType", r.targetDocType)
-                    put("detectedSender", r.detectedSender)
-                    put("targetFolderPath", r.targetFolderPath)
-                    put("targetTags", JSONArray(r.targetTags))
-                    put("isEnabled", r.isEnabled)
-                    put("confidenceScore", r.confidenceScore.toDouble())
-                    put("isAiGenerated", r.isAiGenerated)
-                    val cfObj = JSONObject()
-                    r.targetCustomFields.forEach { (k, v) -> cfObj.put(k, v) }
-                    put("targetCustomFields", cfObj)
-                    put("targetIcon", r.targetIcon)
-                    put("targetLogo", r.targetLogo)
-                }
-                arr.put(obj)
+                arr.put(ruleToJson(r))
             }
             prefs.edit().putString("saved_doc_rules_json", arr.toString()).apply()
             _rules.value = list
         } catch (e: Exception) {
             // Logging
+        }
+    }
+
+    companion object {
+        /**
+         * Prüft, ob ein Keyword mittels Wortgrenzen-Analyse im Text vorkommt.
+         */
+        fun containsKeywordMatch(text: String, keyword: String): Boolean {
+            val kw = keyword.trim()
+            if (kw.length <= 4 || kw.matches(Regex("^[a-zA-Z0-9]+$"))) {
+                return try {
+                    Regex("\\b${Regex.escape(kw)}\\b", RegexOption.IGNORE_CASE).containsMatchIn(text)
+                } catch (e: Exception) {
+                    text.contains(kw, ignoreCase = true)
+                }
+            }
+            return text.contains(kw, ignoreCase = true)
+        }
+
+        fun ruleToJson(r: DocRule): JSONObject {
+            // (existing ruleToJson content)
+            return JSONObject().apply {
+                put("id", r.id)
+                put("name", r.name)
+                put("matchKeywords", JSONArray(r.matchKeywords))
+                put("excludeKeywords", JSONArray(r.excludeKeywords))
+                put("targetMainCategoryId", r.targetMainCategoryId)
+                put("targetSubCategoryId", r.targetSubCategoryId)
+                put("targetDocType", r.targetDocType)
+                put("detectedSender", r.detectedSender)
+                put("targetFolderPath", r.targetFolderPath)
+                put("targetTags", JSONArray(r.targetTags))
+                put("isEnabled", r.isEnabled)
+                put("confidenceScore", r.confidenceScore.toDouble())
+                put("isAiGenerated", r.isAiGenerated)
+                val cfObj = JSONObject()
+                r.targetCustomFields.forEach { (k, v) -> cfObj.put(k, v) }
+                put("targetCustomFields", cfObj)
+                put("targetIcon", r.targetIcon)
+                put("targetLogo", r.targetLogo)
+            }
+        }
+        
+        fun jsonToRule(obj: JSONObject): DocRule {
+            // (existing jsonToRule content)
+            val matchArr = obj.optJSONArray("matchKeywords") ?: JSONArray()
+            val matchWords = (0 until matchArr.length()).map { matchArr.getString(it) }
+
+            val exclArr = obj.optJSONArray("excludeKeywords") ?: JSONArray()
+            val exclWords = (0 until exclArr.length()).map { exclArr.getString(it) }
+
+            val tagsArr = obj.optJSONArray("targetTags") ?: JSONArray()
+            val tags = (0 until tagsArr.length()).map { tagsArr.getString(it) }
+
+            val cfObj = obj.optJSONObject("targetCustomFields") ?: JSONObject()
+            val customFieldsMap = mutableMapOf<String, String>()
+            val cfKeys = cfObj.keys()
+            while (cfKeys.hasNext()) {
+                val key = cfKeys.next()
+                customFieldsMap[key] = cfObj.getString(key)
+            }
+
+            return DocRule(
+                id = obj.optString("id", java.util.UUID.randomUUID().toString()),
+                name = obj.optString("name", "Regel"),
+                matchKeywords = matchWords,
+                excludeKeywords = exclWords,
+                targetMainCategoryId = obj.optString("targetMainCategoryId", "A01"),
+                targetSubCategoryId = obj.optString("targetSubCategoryId", "B1.01"),
+                targetDocType = obj.optString("targetDocType", "Dokument"),
+                detectedSender = obj.optString("detectedSender", ""),
+                targetFolderPath = obj.optString("targetFolderPath", ""),
+                targetTags = tags,
+                isEnabled = obj.optBoolean("isEnabled", true),
+                confidenceScore = obj.optDouble("confidenceScore", 1.0).toFloat(),
+                isAiGenerated = obj.optBoolean("isAiGenerated", false),
+                targetCustomFields = customFieldsMap,
+                targetIcon = obj.optString("targetIcon", ""),
+                targetLogo = obj.optString("targetLogo", "")
+            )
         }
     }
 
@@ -149,13 +172,13 @@ class DocRuleRepository(private val context: Context) {
 
             // 1. Ausschlusskriterien prüfen
             val hasExcludedWord = rule.excludeKeywords.any {
-                it.isNotBlank() && lowerText.contains(it.lowercase())
+                it.isNotBlank() && DocRuleRepository.containsKeywordMatch(lowerText, it)
             }
             if (hasExcludedWord) continue
 
             // 2. Pflicht-Keywords prüfen (alle Keywords der Regel müssen vorkommen)
             val allMatch = rule.matchKeywords.all {
-                it.isNotBlank() && lowerText.contains(it.lowercase())
+                it.isNotBlank() && DocRuleRepository.containsKeywordMatch(lowerText, it)
             }
 
             if (allMatch) {

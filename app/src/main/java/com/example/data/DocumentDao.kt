@@ -73,6 +73,19 @@ interface DocumentDao {
     """)
     fun searchDocumentsFts(query: String): Flow<List<DocumentEntity>>
 
+    fun searchDocumentsFtsSafe(rawQuery: String): Flow<List<DocumentEntity>> {
+        val sanitized = sanitizeFtsQuery(rawQuery)
+        return if (sanitized.isBlank()) {
+            if (rawQuery.isBlank()) {
+                getAllDocuments()
+            } else {
+                searchDocuments(rawQuery)
+            }
+        } else {
+            searchDocumentsFts(sanitized)
+        }
+    }
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDocument(document: DocumentEntity): Long
 
@@ -90,6 +103,12 @@ interface DocumentDao {
 
     @Query("UPDATE documents SET isDeleted = 0, deletedAt = NULL WHERE id = :id")
     suspend fun restoreDocument(id: Long)
+
+    @Query("SELECT * FROM documents WHERE isDeleted = 1")
+    suspend fun getTrashDocumentsList(): List<DocumentEntity>
+
+    @Query("SELECT * FROM documents WHERE isDeleted = 1 AND deletedAt < :thresholdTimestamp")
+    suspend fun getTrashOlderThanList(thresholdTimestamp: Long): List<DocumentEntity>
 
     @Query("DELETE FROM documents WHERE isDeleted = 1")
     suspend fun emptyTrash()

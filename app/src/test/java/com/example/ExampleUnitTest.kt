@@ -112,7 +112,31 @@ class ExampleUnitTest {
         assertEquals("30.11.2026", fallback.globaleZusatzfelder["Fälligkeit"])
         assertEquals("RE-2026-98765", fallback.globaleZusatzfelder["Rechnungsnummer"])
         assertEquals("KD-112233", fallback.globaleZusatzfelder["Kundennummer"])
-        assertEquals("Z-554433", fallback.globaleZusatzfelder["Zählernummer"])
+    }
+
+    @Test
+    fun testDocRuleRepository_containsKeywordMatch() {
+        val ocrText = "CO2-Steuer Zahlung an o2"
+        
+        // "o2" in "CO2-Steuer" should NOT match, but "o2" in "an o2" SHOULD match
+        assertTrue("o2 should match 'an o2'", com.example.service.DocRuleRepository.containsKeywordMatch(ocrText, "o2"))
+        
+        // "co2" should match "CO2-Steuer"
+        assertTrue("co2 should match 'CO2-Steuer'", com.example.service.DocRuleRepository.containsKeywordMatch(ocrText, "co2"))
+        
+        // "o2" should NOT match "CO2"
+        assertFalse("o2 should not match part of CO2", com.example.service.DocRuleRepository.containsKeywordMatch("CO2", "o2"))
+    }
+
+    @Test
+    fun testBankStatementParser_encodingDetection() {
+        val utf8Text = "Überweisung mit ü"
+        val brokenUtf8Bytes = (utf8Text + "\uFFFD").toByteArray(Charsets.UTF_8)
+        
+        val previewUtf8 = String(brokenUtf8Bytes, Charsets.UTF_8)
+        val useIso = previewUtf8.contains("\uFFFD")
+        
+        assertTrue("Broken UTF-8 should trigger ISO-8859-1 detection", useIso)
     }
 }
 

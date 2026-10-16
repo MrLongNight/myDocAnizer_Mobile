@@ -1383,6 +1383,19 @@ class SettingsRepository(context: Context) {
         _llmInferenceConfig.value = config
     }
 
+    // LLM Präferenz-Einstellung (Qualität vs. Geschwindigkeit)
+    private val _llmPreferenceMode = MutableStateFlow(
+        com.example.model.LlmPreferenceMode.fromId(
+            prefs.getString("llm_preference_mode", com.example.model.LlmPreferenceMode.QUALITY_FOCUS.id) ?: com.example.model.LlmPreferenceMode.QUALITY_FOCUS.id
+        )
+    )
+    val llmPreferenceMode: StateFlow<com.example.model.LlmPreferenceMode> = _llmPreferenceMode.asStateFlow()
+
+    fun setLlmPreferenceMode(mode: com.example.model.LlmPreferenceMode) {
+        prefs.edit().putString("llm_preference_mode", mode.id).apply()
+        _llmPreferenceMode.value = mode
+    }
+
     // App-Rating/Bewertung-Metriken (Call-to-Action)
     private val _appLaunchCount = MutableStateFlow(prefs.getInt("app_launch_count", 0))
     val appLaunchCount: StateFlow<Int> = _appLaunchCount.asStateFlow()

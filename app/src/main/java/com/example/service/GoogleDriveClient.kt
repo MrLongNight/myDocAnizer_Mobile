@@ -58,7 +58,85 @@ object GoogleDriveClient {
     }
 
     /**
+     * Sucht nach einem bestehenden Ordner oder erstellt ihn, falls noch nicht vorhanden.
+     */
+    suspend fun findOrCreateFolder(accessToken: String, folderName: String): String? = withContext(Dispatchers.IO) {
+        if (folderName.isBlank()) return@withContext null
+        try {
+            val q = "mimeType = 'application/vnd.google-apps.folder' and name = '${folderName.replace("'", "\\'")}' and trashed = false"
+            val encodedQ = java.net.URLEncoder.encode(q, "UTF-8")
+            val searchRequest = Request.Builder()
+                .url("https://www.googleapis.com/drive/v3/files?q=$encodedQ&fields=files(id,name)")
+                .header("Authorization", "Bearer $accessToken")
+                .get()
+                .build()
+
+            httpClient.newCall(searchRequest).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val json = JSONObject(resp.body?.string() ?: "{}")
+                    val files = json.optJSONArray("files")
+                    if (files != null && files.length() > 0) {
+                        return@withContext files.getJSONObject(0).optString("id")
+                    }
+                }
+            }
+
+            // Ordner neu anlegen
+            val folderMetadata = JSONObject().apply {
+                put("name", folderName)
+                put("mimeType", "application/vnd.google-apps.folder")
+            }.toString()
+
+            val createRequest = Request.Builder()
+                .url("https://www.googleapis.com/drive/v3/files")
+                .header("Authorization", "Bearer $accessToken")
+                .post(folderMetadata.toRequestBody("application/json; charset=UTF-8".toMediaTypeOrNull()))
+                .build()
+
+            httpClient.newCall(createRequest).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val json = JSONObject(resp.body?.string() ?: "{}")
+                    val id = json.optString("id", "")
+                    if (id.isNotBlank()) return@withContext id
+                }
+            }
+        } catch (_: Exception) {}
+        null
+    }
+
+    /**
+     * Prüft, ob bereits eine Datei mit `remoteName` (z.B. doc_index.enc) existiert.
+     */
+    suspend fun findExistingFileId(accessToken: String, remoteName: String, parentFolderId: String? = null): String? = withContext(Dispatchers.IO) {
+        try {
+            val qBuilder = StringBuilder("name = '${remoteName.replace("'", "\\'")}' and trashed = false")
+            if (!parentFolderId.isNullOrBlank()) {
+                qBuilder.append(" and '${parentFolderId}' in parents")
+            }
+            val encodedQ = java.net.URLEncoder.encode(qBuilder.toString(), "UTF-8")
+            val searchRequest = Request.Builder()
+                .url("https://www.googleapis.com/drive/v3/files?q=$encodedQ&fields=files(id,name)&orderBy=modifiedTime desc")
+                .header("Authorization", "Bearer $accessToken")
+                .get()
+                .build()
+
+            httpClient.newCall(searchRequest).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val json = JSONObject(resp.body?.string() ?: "{}")
+                    val files = json.optJSONArray("files")
+                    if (files != null && files.length() > 0) {
+                        return@withContext files.getJSONObject(0).optString("id")
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        null
+    }
+
+    /**
      * Lädt eine verschlüsselte Datei (.enc) per Google Drive v3 Multipart-Upload hoch.
+     * Nutzt PATCH, wenn die Datei bereits existiert (um Duplikate zu vermeiden),
+     * andernfalls POST mit optionaler Ordner-Zuweisung.
      */
     suspend fun uploadEncryptedFile(
         accessToken: String,
@@ -74,10 +152,16 @@ object GoogleDriveClient {
                 return@withContext Result.failure(IllegalArgumentException("Lokale Datei existiert nicht: ${file.name}"))
             }
 
+            val parentFolderId = if (folderName.isNotBlank()) findOrCreateFolder(accessToken, folderName) else null
+            val existingFileId = findExistingFileId(accessToken, remoteName, parentFolderId)
+
             // Metadaten JSON
             val metadataJson = JSONObject().apply {
                 put("name", remoteName)
                 put("description", "myDocAnizer Zero-Knowledge Encrypted Backup")
+                if (parentFolderId != null && existingFileId == null) {
+                    put("parents", org.json.JSONArray().put(parentFolderId))
+                }
             }.toString()
 
             val multipartBody = MultipartBody.Builder()
@@ -94,16 +178,26 @@ object GoogleDriveClient {
                 )
                 .build()
 
-            val request = Request.Builder()
-                .url("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart")
-                .header("Authorization", "Bearer $accessToken")
-                .post(multipartBody)
-                .build()
+            val request = if (existingFileId != null) {
+                // Bestehende Datei per PATCH aktualisieren
+                Request.Builder()
+                    .url("https://www.googleapis.com/upload/drive/v3/files/$existingFileId?uploadType=multipart")
+                    .header("Authorization", "Bearer $accessToken")
+                    .patch(multipartBody)
+                    .build()
+            } else {
+                // Neue Datei per POST anlegen
+                Request.Builder()
+                    .url("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart")
+                    .header("Authorization", "Bearer $accessToken")
+                    .post(multipartBody)
+                    .build()
+            }
 
             httpClient.newCall(request).execute().use { resp ->
                 if (resp.isSuccessful) {
                     val respJson = JSONObject(resp.body?.string() ?: "{}")
-                    val fileId = respJson.optString("id", "")
+                    val fileId = respJson.optString("id", existingFileId ?: "")
                     Result.success(fileId)
                 } else {
                     Result.failure(IOException("Google Drive Upload fehlgeschlagen: HTTP ${resp.code} ${resp.message}"))

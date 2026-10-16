@@ -16,6 +16,9 @@ interface CustomFieldDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomField(field: CustomFieldEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCustomFields(fields: List<CustomFieldEntity>)
+
     @Update
     suspend fun updateCustomField(field: CustomFieldEntity)
 
@@ -35,6 +38,9 @@ interface CustomFieldDao {
     @Query("SELECT * FROM document_custom_field_values")
     fun getAllDocumentCustomFieldValues(): Flow<List<DocumentCustomFieldValueEntity>>
 
+    @Query("SELECT * FROM document_custom_field_values")
+    suspend fun getAllDocumentCustomFieldValuesList(): List<DocumentCustomFieldValueEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateFieldValue(value: DocumentCustomFieldValueEntity)
 
@@ -46,4 +52,10 @@ interface CustomFieldDao {
 
     @Query("DELETE FROM document_custom_field_values WHERE documentId = :documentId")
     suspend fun deleteAllValuesForDocument(documentId: Long)
+
+    @Query("DELETE FROM document_custom_field_values WHERE customFieldId = :customFieldId")
+    suspend fun deleteAllValuesForCustomField(customFieldId: String)
+
+    @Query("DELETE FROM document_custom_field_values WHERE documentId NOT IN (SELECT id FROM documents)")
+    suspend fun deleteOrphanedFieldValues()
 }

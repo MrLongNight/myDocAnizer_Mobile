@@ -63,6 +63,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         AppAuditLogger.init(application)
         settingsRepo.incrementAppLaunchCount()
+        llmService.analyticsManager = analyticsManager
+        llmService.updatePreferenceMode(settingsRepo.llmPreferenceMode.value)
 
         // Automatische Verknüpfung bestehender Modelle & Katalog-Check nach Intervall
         viewModelScope.launch(Dispatchers.IO) {
@@ -421,9 +423,19 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val isGeneratingAi: StateFlow<Boolean> = llmService.isGenerating
     val deviceHardwareInfo: StateFlow<com.example.model.DeviceHardwareInfo> = llmService.deviceHardware
     val llmInferenceConfig: StateFlow<com.example.model.LlmInferenceConfig> = settingsRepo.llmInferenceConfig
+    val llmPreferenceMode: StateFlow<com.example.model.LlmPreferenceMode> = settingsRepo.llmPreferenceMode
     val isCheckingNewModels: StateFlow<Boolean> = llmService.isCheckingNewModels
     val newModelsNotification: StateFlow<String?> = llmService.newModelsNotification
     val lastCatalogSync: StateFlow<Long> = llmService.lastCatalogSync
+
+    fun setLlmPreferenceMode(mode: com.example.model.LlmPreferenceMode) {
+        settingsRepo.setLlmPreferenceMode(mode)
+        llmService.updatePreferenceMode(mode)
+    }
+
+    suspend fun runModelBenchmark(modelId: String): com.example.model.ModelBenchmarkResult {
+        return llmService.runStandardizedModelBenchmark(modelId)
+    }
 
     fun selectModel(modelId: String) = llmService.selectModel(modelId)
     fun selectHuggingFaceModel(modelId: String) = llmService.selectModel(modelId)
@@ -2372,11 +2384,12 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     fun permanentlyDeleteDocument(document: DocumentEntity) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val file = File(document.filePath)
-                if (file.exists()) {
-                    file.delete()
+                if (document.filePath.isNotBlank()) {
+                    val file = File(document.filePath)
+                    if (file.exists()) file.delete()
                 }
-            } catch (ignored: Exception) {}
+            } catch (_: Exception) {}
+            customFieldDao.deleteAllValuesForDocument(document.id)
             documentDao.deleteDocument(document)
         }
     }
@@ -2386,14 +2399,18 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
      */
     fun emptyTrash() {
         viewModelScope.launch(Dispatchers.IO) {
-            val trashed = documentDao.getTrashDocuments().first()
+            val trashed = documentDao.getTrashDocumentsList()
             for (doc in trashed) {
                 try {
-                    val file = File(doc.filePath)
-                    if (file.exists()) file.delete()
-                } catch (ignored: Exception) {}
+                    if (doc.filePath.isNotBlank()) {
+                        val file = File(doc.filePath)
+                        if (file.exists()) file.delete()
+                    }
+                } catch (_: Exception) {}
+                customFieldDao.deleteAllValuesForDocument(doc.id)
             }
             documentDao.emptyTrash()
+            customFieldDao.deleteOrphanedFieldValues()
         }
     }
 
@@ -2406,15 +2423,18 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         if (days <= 0) return
         viewModelScope.launch(Dispatchers.IO) {
             val threshold = System.currentTimeMillis() - (days * 24L * 60L * 60L * 1000L)
-            val trashed = documentDao.getTrashDocuments().first()
-            val toDelete = trashed.filter { (it.deletedAt ?: 0L) < threshold }
-            for (doc in toDelete) {
+            val oldTrashDocs = documentDao.getTrashOlderThanList(threshold)
+            for (doc in oldTrashDocs) {
                 try {
-                    val file = File(doc.filePath)
-                    if (file.exists()) file.delete()
-                } catch (ignored: Exception) {}
+                    if (doc.filePath.isNotBlank()) {
+                        val file = File(doc.filePath)
+                        if (file.exists()) file.delete()
+                    }
+                } catch (_: Exception) {}
+                customFieldDao.deleteAllValuesForDocument(doc.id)
             }
             documentDao.deleteTrashOlderThan(threshold)
+            customFieldDao.deleteOrphanedFieldValues()
         }
     }
 
