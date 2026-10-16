@@ -2,6 +2,39 @@
 
 All notable changes to **myDocAnizer-Mobile** are documented here.
 
+## [2.8.0] - 2026-10-15 (UI-Optimierung, Hardware-LLM Autodownload & Stabilität)
+
+### 🤖 Hardware-Empfohlenes LLM Autodownload beim Überspringen des Einrichtungsassistenten
+- **Automatischer Modell-Download bei Wizard-Skip:**
+  - Wird der Ersteinrichtungs-Assistent (`SetupWizardDialog.kt`) vorzeitig beendet oder übersprungen, ermittelt die App automatisch das über die On-Device Hardware-Erkennung (`detectDeviceHardware()`) empfohlene Modell für das Endgerät (z. B. SmolLM2 360M, Qwen2.5 0.5B / 1.5B oder NuExtract 2B) und startet den Download im Hintergrund.
+  - Informativer Toast-Hinweis informiert den Nutzer, dass das empfohlene Modell geladen wird und jederzeit in den Einstellungen ein anderes Modell gewählt werden kann.
+
+### 💬 Schlanker KI-Chat-Bereich & Textanzeige-Maximierung (`AiDocumentChatDrawer.kt`)
+- **Bottom-Sheet Design mit Slide-In:**
+  - Der KI-Agenten-Chat öffnet sich nun als elegantes Bottom-Sheet vom unteren Bildschirmrand statt als sperriges Seiten-Panel.
+  - Standard-Höhe auf ca. 42% der Bildschirmhöhe optimiert (ausreichend Platz für Dialoge, ohne den Dokumenten-Kontext völlig zu verdecken).
+  - Neuer Vollbild-Maximierungs-Button (`btn_drawer_fullscreen`) in der Kopfzeile für 100% Bildschirmabdeckung bei langen Konversationen.
+- **Kompakte Kopfleiste:**
+  - Minimierte vertikale Abstände und Icons in der Header-Leiste, wodurch maximaler vertikaler Raum für den Textanzeigebereich und Chat-Verlauf freigegeben wird.
+
+### 🔍 Dokumenten-Prüfung & Schärfe-Check (`DocumentReviewAndCropScreen.kt`)
+- **Interaktiver Schärfe-Check (Lupe):**
+  - Implementierung einer Lupenfunktion zur Prüfung feiner Textdetails und Schärfe vor dem finalen Zuschneiden und Speichern im Dokumenten-Tresor.
+
+### 📱 UI-Feinschliff & Navigation
+- **Korrektur der Scan-Eingang Beschriftung (`MainBottomBar.kt`):**
+  - Umbenennung in „Posteingang“ mit 10.sp Schriftgröße, um unschöne Textabschneidungen auf schmaleren Displays zu verhindern.
+- **KI-Agent Icon im Settings-Menü (`SettingsView.kt`):**
+  - Der Reiter „Lokaler KI Agent“ verwendet nun das offizielle Roboter-KI-Icon (`LocalAiAgentIcon`).
+- **Verfeinerte Animation:**
+  - Sanfte Pulsier- und Neige-Animation des schwebenden KI-Agenten-Buttons in der Navigationsleiste.
+
+### 🛡️ Stabilität, Crash-Prävention & Audit-Fixes
+- **TabRow IndexOutOfBoundsException Schutz:**
+  - Absicherung aller `ScrollableTabRow`- und `TabRow`-Komponenten (`SettingsView.kt`, `ModuleSettingsTab.kt`) mit Index-Coercion (`coerceIn`) und geschützten Indikatoren (`safeSelectedTabIndex in tabPositions.indices`). Verhindert Abstürze beim dynamischen Umschalten zwischen Standard-, Advanced- und Expert-Modus.
+- **Auto-Mirror & Cloud-Sync Fallback bei unverschlüsseltem Modus:**
+  - `DocAnizerViewModel.kt` und `CloudSyncWorkerService.kt` werfen keine Exceptions mehr bei leerem Master-Passwort, sondern führen eine sichere lokale Spiegelung durch bzw. informieren verständlich über den Status.
+
 ## [2.7.0] - 2026-10-13 (Zero-Knowledge Security & Bottom Navigation Margin Optimization)
 
 ### 🔐 Erweitertes Zero-Knowledge Sicherheitskonzept & Recovery-System

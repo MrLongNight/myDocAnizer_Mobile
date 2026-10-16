@@ -14,7 +14,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.DocAnizerViewModel
-import com.example.ui.views.RulesAndAiSettingsTab
 
 @Composable
 fun ModuleSettingsTab(
@@ -29,7 +28,7 @@ fun ModuleSettingsTab(
             .background(MaterialTheme.colorScheme.background)
     ) {
         ScrollableTabRow(
-            selectedTabIndex = activeSubSection,
+            selectedTabIndex = activeSubSection.coerceIn(0, 2),
             edgePadding = 16.dp,
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             contentColor = MaterialTheme.colorScheme.primary,
@@ -37,7 +36,7 @@ fun ModuleSettingsTab(
         ) {
             listOf("Scan", "PDF", "Finanzen").forEachIndexed { index, title ->
                 Tab(
-                    selected = activeSubSection == index,
+                    selected = activeSubSection.coerceIn(0, 2) == index,
                     onClick = { activeSubSection = index },
                     text = { Text(title, fontSize = 11.sp) }
                 )

@@ -22,6 +22,7 @@ import com.example.ui.views.settings.*
 
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 
 data class SettingsTabItem(val title: String, val icon: ImageVector)
 
@@ -228,23 +229,32 @@ fun SettingsView(
             }
         }
 
+        val safeSelectedTabIndex = if (visibleTabs.isEmpty()) 0 else selectedVisibleIndex.coerceIn(0, visibleTabs.size - 1)
+
         ScrollableTabRow(
-            selectedTabIndex = selectedVisibleIndex,
+            selectedTabIndex = safeSelectedTabIndex,
             edgePadding = 16.dp,
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.primary,
-            divider = {}
+            divider = {},
+            indicator = { tabPositions ->
+                if (safeSelectedTabIndex in tabPositions.indices) {
+                    TabRowDefaults.SecondaryIndicator(
+                        Modifier.tabIndicatorOffset(tabPositions[safeSelectedTabIndex])
+                    )
+                }
+            }
         ) {
             visibleTabs.forEachIndexed { visibleIdx, tab ->
                 Tab(
-                    selected = selectedVisibleIndex == visibleIdx,
+                    selected = safeSelectedTabIndex == visibleIdx,
                     onClick = { selectedSettingsTab = tab.originalIndex },
                     text = { Text(tab.title, fontSize = 12.sp) },
                     icon = {
                         if (tab.originalIndex == 2) {
                             com.example.ui.components.LocalAiAgentIcon(
                                 modifier = Modifier.size(20.dp),
-                                tint = if (selectedVisibleIndex == visibleIdx) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                                tint = if (safeSelectedTabIndex == visibleIdx) MaterialTheme.colorScheme.primary else LocalContentColor.current
                             )
                         } else {
                             Icon(tab.icon, contentDescription = null, modifier = Modifier.size(20.dp))

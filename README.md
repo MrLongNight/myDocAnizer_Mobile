@@ -6,7 +6,7 @@
 
 The Privacy-First, 100% On-Device Document Management & Smart Scanner App
 
-**Version:** 2.6.0 (Build 2026.10)  
+**Version:** 2.8.0 (Build 2026.10)  
 **License:** GNU Affero General Public License v3.0 (AGPLv3) for source code; All branding, logos, trademarks & store assets copyright mr.locke84.  
 **Repository:** https://github.com/MrLongNight/myDocAnizer_Mobile  
 **Desktop:** https://github.com/MrLongNight/myDocAnizer-Desktop  

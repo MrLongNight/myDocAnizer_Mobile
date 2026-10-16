@@ -105,6 +105,11 @@ object CloudSyncWorkerService {
             val pendingDocs = allDocuments.filter { !it.isSynced }
             var uploadedCount = 0
 
+            if (userPasswordKey.isBlank() && pendingDocs.isNotEmpty()) {
+                _syncState.value = SyncState.Error("Synchronisation pausiert: Kein Master-Passwort für Zero-Knowledge Verschlüsselung vergeben.")
+                return@withContext
+            }
+
             _syncState.value = SyncState.Syncing("Zero-Knowledge Verschlüsselung (AES-256-GCM + PBKDF2)...")
             
             val batteryLevel = getBatteryLevel(context)

@@ -2310,8 +2310,15 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     launch(Dispatchers.IO) {
                         try {
                             val backupDir = File(context.filesDir, "Backups").apply { mkdirs() }
-                            val encTarget = File(backupDir, "${entity.fileName}.enc")
-                            DocumentStorageService.encryptFile(targetPdfFile, encTarget, syncPasswordKey.value)
+                            val pw = syncPasswordKey.value
+                            if (!pw.isNullOrBlank()) {
+                                val encTarget = File(backupDir, "${entity.fileName}.enc")
+                                DocumentStorageService.encryptFile(targetPdfFile, encTarget, pw)
+                            } else {
+                                // Bei unverschlüsseltem Modus direkt eine lokale Sicherheitskopie anlegen
+                                val rawTarget = File(backupDir, entity.fileName)
+                                targetPdfFile.copyTo(rawTarget, overwrite = true)
+                            }
                         } catch (e: Exception) {
                             Log.e("DocAnizerViewModel", "Auto-Mirror fehlgeschlagen: ${e.message}")
                         }
