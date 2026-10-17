@@ -1,0 +1,67 @@
+--- /dev/null	2026-10-17 13:57:25.293024359 +0000
++++ docs/security/micro-ap-baseline.md	2026-10-17 16:12:36.617915298 +0000
+@@ -0,0 +1,64 @@
++# Baseline Audit Bericht - myDocAnizer-Mobile
++
++**Datum:** 2026-10-17  
++**Status:** AUDIT ABGESCHLOSSEN  
++**Build-Status:** SUCCESSFUL (Gradle assembleDebug)  
++**Test-Status:** SUCCESSFUL (33 unit tests passed)
++
++## 1. Inventar und Befunde
++
++### 1.1 Vault, KDF & Recovery
++- **Dateibasis:** `VaultSecurityManager.kt`
++- **Header-Format:** Version 1 (JSON-String in SharedPreferences `mydocanizer_vault_security`).
++- **KDF:** 
++    - Argon2id (2 Iterationen, 16MB RAM) für Master-Passwort.
++    - PBKDF2WithHmacSHA256 (50.000 Iterationen) für Recovery-PIN.
++- **Encryption:** AES-256-GCM (JCA/JCE).
++- **Recovery:** 
++    - BIP-39 (12 Wörter).
++    - Emergency PDF (enthält QR-Code und **Base64 Roh-DEK** als Monospace-Fallback!).
++    - Shamir's Secret Sharing (2 von 3).
++- **Befund [BESTÄTIGT]:** Der rohe DEK wird im Klartext (Base64) im Emergency PDF und im UI (Monospace Key) ausgegeben. Dies widerspricht dem Zero-Knowledge Prinzip für gedruckte Dokumente.
++- **Befund [BESTÄTIGT]:** `VaultHeader` v1 ist ein ungeschützter JSON-String in Prefs (keine Integritätssicherung des Headers selbst).
++
++### 1.2 Document Storage
++- **Dateibasis:** `DocumentStorageService.kt`
++- **Verschlüsselung:** AES-256-GCM Streaming (64KB Buffer).
++- **KDF:** PBKDF2WithHmacSHA256 (100.000 Iterationen).
++- **Speicherort:** `context.filesDir/Documents` (interne App-Daten) oder externe Verzeichnisse.
++- **Befund [BESTÄTIGT]:** `isEncrypted` Status wird oft als Parameter übergeben oder per Dateiendung (`.enc`) vermutet, statt aus einem Datei-Header validiert zu werden.
++- **Befund [BESTÄTIGT]:** Temporäre Dateien im `cacheDir` werden nicht immer sicher überschrieben (nur gelöscht).
++
++### 1.3 P2P Sync & Server
++- **Dateibasis:** `P2pSyncServer.kt`
++- **Technik:** Manueller `ServerSocket` mit HTTP-Parsing (Eigenbau).
++- **Auth:** HMAC-Signatur (Shared Secret) für P2P; PIN für Web-Portal.
++- **Befund [BESTÄTIGT]:** Der Server läuft standardmäßig auf einem Plain-HTTP-Socket. TLS-Terminierung ist vorbereitet (`P2pSyncSecurityService`), aber nicht für den `ServerSocket` aktiv.
++- **Befund [BESTÄTIGT]:** Web-Portal erlaubt Zugriff auf Dokumente via PIN; E2EE im Browser basiert auf WebCrypto, nutzt aber die PIN als alleiniges Geheimnis (schwache Entropie).
++
++### 1.4 Cloud Sync
++- **Dateibasis:** `CloudSyncWorkerService.kt`
++- **Technik:** E2EE vor Upload zu Google Drive / WebDAV.
++- **Befund [BESTÄTIGT]:** `userPasswordKey` wird als String im RAM gehalten und durch mehrere Schichten gereicht.
++- **Befund [BESTÄTIGT]:** Backup-Index `doc_index.enc` wird erzeugt, aber die Integrität beim Restore ist nicht vollständig gehärtet (Zip-Slip Risiko).
++
++### 1.5 Room Database
++- **Dateibasis:** `AppDatabase.kt`
++- **Version:** 9
++- **Features:** FTS4 für Volltextsuche.
++- **Befund [BESTÄTIGT]:** Die Datenbank ist nicht verschlüsselt (kein SQLCipher). Sensible Metadaten und OCR-Texte (FTS-Tabelle) liegen im Klartext auf dem Dateisystem.
++
++### 1.6 LLM / AI
++- **Dateibasis:** `LlamaCppInferenceEngine.kt`
++- **Technik:** JNI-Anbindung an `llama_android` (llama.cpp).
++- **Befund [OFFEN]:** Native Bibliotheken (`.so`) müssen auf ABI-Kompatibilität geprüft werden. Heuristik-Fallback ist vorhanden.
++
++## 2. Grenzen der Umgebung
++- **Emulator:** Kein Zugriff auf Streaming-Emulator für Agent.
++- **Biometrie:** Nur über Mocks/Tests prüfbar.
++- **Netzwerk:** P2P-Verbindungen nur lokal (In-Process) testbar.
++
++## 3. Nächste Schritte (Micro-AP Planung)
++1. **V01:** Erstellung von v1-Header-Fixtures und Kryptoinventar zur Sicherstellung der Abwärtskompatibilität.
++2. **S01:** Inventarisierung der Lock-Zustände zur Vorbereitung eines zentralen `LockManager`.
++3. **D02:** Architekturentscheidung für Datenbankverschlüsselung (SQLCipher vs. Feldverschlüsselung).

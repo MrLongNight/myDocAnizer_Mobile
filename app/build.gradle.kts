@@ -140,6 +140,7 @@ dependencies {
   kspDebug(libs.androidx.room.compiler)
   kspRelease(libs.androidx.room.compiler)
   implementation(libs.vico.compose)
+  implementation(libs.bouncycastle)
   // "ksp"(libs.moshi.kotlin.codegen)
 }
 

@@ -325,7 +325,7 @@ class P2pSyncServer(
                 }
 
                 path == "/api/sync/exchange_manifest" && method == "POST" -> {
-                    if (!verifyAuth(headers)) {
+                    if (!verifyAuth(req)) {
                         sendJsonResponse(output, 401, JSONObject().put("error", "Nicht autorisiert").toString())
                     } else {
                         val bodyBytes = readBinaryBody(input, contentLength, req.initialBodyBytes)
@@ -334,7 +334,7 @@ class P2pSyncServer(
                 }
 
                 path == "/api/sync/download_file" && method == "GET" -> {
-                    if (!verifyAuth(headers)) {
+                    if (!verifyAuth(req)) {
                         sendJsonResponse(output, 401, JSONObject().put("error", "Nicht autorisiert").toString())
                     } else {
                         val docId = queryParams["docId"]?.toLongOrNull()
@@ -343,7 +343,7 @@ class P2pSyncServer(
                 }
 
                 path == "/api/sync/upload_file" && method == "POST" -> {
-                    if (!verifyAuth(headers)) {
+                    if (!verifyAuth(req)) {
                         sendJsonResponse(output, 401, JSONObject().put("error", "Nicht autorisiert").toString())
                     } else {
                         val docId = queryParams["docId"]?.toLongOrNull() ?: 0L
@@ -357,7 +357,7 @@ class P2pSyncServer(
                 // myDocAnizer-Light Desktop-App Schnittstellen
                 // ==========================================
                 path == "/api/scan/desktop_stream" && method == "POST" -> {
-                    if (!verifyAuth(headers) && !isWebSessionValid(headers["x-session-token"] ?: "")) {
+                    if (!verifyAuth(req) && !isWebSessionValid(headers["x-session-token"] ?: "")) {
                         sendJsonResponse(output, 401, JSONObject().put("error", "Nicht autorisiert für Scan-to-Android").toString())
                     } else {
                         val fileName = headers["x-file-name"] ?: queryParams["fileName"] ?: "PC_Scan_${System.currentTimeMillis()}.pdf"
@@ -368,7 +368,7 @@ class P2pSyncServer(
                 }
 
                 path == "/api/sync/desktop_delta" && method == "POST" -> {
-                    if (!verifyAuth(headers) && !isWebSessionValid(headers["x-session-token"] ?: "")) {
+                    if (!verifyAuth(req) && !isWebSessionValid(headers["x-session-token"] ?: "")) {
                         sendJsonResponse(output, 401, JSONObject().put("error", "Nicht autorisiert für Delta-Sync").toString())
                     } else {
                         val bodyBytes = readBinaryBody(input, contentLength, req.initialBodyBytes)
