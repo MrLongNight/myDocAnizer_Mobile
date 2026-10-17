@@ -75,7 +75,7 @@
 
 ## 3. Micro-APs – jeweils nur EINEN Auftrag ausführen
 
-# M00 – Baseline und Bestandsinventar (AUDIT, keine Produktänderung)
+# M00 – Baseline und Bestandsinventar (AUDIT, keine Produktänderung) — **[ERLEDIGT]**
 
 **Prompt:** Erfasse lesend die im Workspace vorhandene Dateibasis und führe – sofern in der Umgebung verfügbar – `./gradlew assembleDebug testDebugUnitTest` sowie vorhandene lokale Checks aus (andernfalls als nicht ausführbar kennzeichnen). Erstelle `docs/security/micro-ap-baseline.md` mit tatsächlichem Buildstatus, Grenzen der Umgebung, fehlenden/ungenutzten Tests, relevanten Modulen und offenen Befunden aus den ursprünglichen acht APs. Untersuche nur lesend und füge keine Produktlogik hinzu. Verifiziere insbesondere die aktuellen Implementierungen von VaultHeader/KDF/Recovery, `DocumentStorageService`, P2P-Server, CloudSync, Room-Version, LLM/JNI und Analytics. Markiere jeden Befund als bestätigt, widerlegt oder noch offen und nenne Pfad/Beleg. **Abnahme:** Auditdatei ist reproduzierbar und ehrlich; keine Anwendungslogik geändert. Fehlende Tool-Unterstützung oder Buildfehler werden dokumentiert, nicht kaschiert.
 
@@ -83,29 +83,29 @@
 
 # V – Tresor, Schlüsselableitung und Recovery
 
-## V01 – Vault-Krypto-Inventar und v1-Fixtures (AUDIT/TEST)
+## V01 – Vault-Krypto-Inventar und v1-Fixtures (AUDIT/TEST) — **[ERLEDIGT]**
 **Prompt:** Inventarisiere ausschließlich die aktuelle Vault-Krypto: `VaultHeader`, v1-Serialisierung, Salt/KDF-Parameter, KEK/DEK-Verpackung, Unlock-/Biometriepfade, Recovery, `activeDek` und alle Aufrufer. Lege – ohne produktive Logik zu ändern – synthetische Test-Fixtures für mindestens einen gültigen v1-Header, falsches Passwort und manipulierte Daten an. Dokumentiere das genaue Altformat, damit Kompatibilität später testbar ist. Gib keine echten Schlüssel aus. **Abnahme:** Tests/Fixtures reproduzieren das bestehende Format; keine Formatmigration und kein Entfernen von Altcode in diesem Schritt.
 
-## V02 – Geprüfte Argon2id-Implementierung
+## V02 – Geprüfte Argon2id-Implementierung — **[ERLEDIGT]**
 **Abhängigkeit:** V01.  
 **Prompt:** Ersetze ausschließlich die bisherige Argon2id-Engine durch eine gepflegte, versionsfixierte Bibliotheksimplementierung (z. B. geprüfte Bouncy-Castle-API, nach Kompatibilitätsprüfung). Behalte zunächst die exakt benötigte v1-Ableitung als klar getrennten Legacypfad, sofern sie für Entsperrung alter Vaults erforderlich ist. Für neue Parameter gilt mindestens `m=19 MiB`, `t=2`, `p=1`; Einheiten und API-Semantik verifizieren. Begrenze/validiere Parameter vor der speicherintensiven Ableitung und schütze vor parallelen RAM-Spitzen. Füge bekannte Referenzvektor-Tests hinzu. **Nicht tun:** Headerformat oder Migration ändern. **Abnahme:** Legacy-Fixture bleibt lesbar; korrekte Referenzvektoren; ungültige/überzogene Parameter werden früh abgelehnt.
 
-## V03 – VaultHeader v2: Datenmodell und Parser
+## V03 – VaultHeader v2: Datenmodell und Parser — **[ERLEDIGT]**
 **Abhängigkeit:** V01, V02.  
 **Prompt:** Entwirf und implementiere nur die typisierte v2-Headerstruktur samt strengem Parser/Validator. Speichere explizit Formatversion, KDF-/Algorithmus-ID, Parameter, Salt, IV/Nonce- und Taglängen sowie Vault-ID mit klar definierten Obergrenzen. Unbekannte Versionen, abgeschnittene Daten, unmögliche Längen und ungültige Parameter müssen abgewiesen werden. Bestehende v1-Daten weiter nur lesend unterstützen. Noch keine automatische v1→v2-Migration und keine Änderung an Biometrie oder TOTP. **Abnahme:** Roundtrip-Tests für v2, Negativtests für manipulierte/ungültige Header und Regressionstest für v1.
 
-## V04 – Header-Authentifizierung und AAD
+## V04 – Header-Authentifizierung und AAD — **[ERLEDIGT]**
 **Abhängigkeit:** V03.  
 **Prompt:** Implementiere ausschließlich die AEAD-Operationen zum Verpacken/Öffnen des zufälligen 256-Bit-DEK im v2-Header. Nutze geprüfte AES-GCM/JCA- oder gleichwertige AEAD-Primitiven korrekt; pro Verschlüsselung neuen zufälligen Nonce/IV generieren und niemals wiederverwenden. Lege fest und teste, welche Vault-ID-, Versions- und KDF-Metadaten als AAD gebunden werden. Falscher Schlüssel, falscher AAD oder veränderter Tag müssen fehlschlagen, ohne Teilresultat auszugeben. Keine automatische Migration. **Abnahme:** gültiger Roundtrip; Manipulations- und Nonceformattests; keine geheime Materialausgabe in Logs.
 
-## V05 – TOTP-Entscheidungsvorlage (AUDIT/GATE)
+## V05 – TOTP-Entscheidungsvorlage (AUDIT/GATE) — **[ERLEDIGT]**
 **Prompt:** Untersuche die bestehende TOTP-/Base32-Implementierung, Speicherung des Secrets, UI-Gates und Beziehung zur DEK-Freigabe. Erstelle eine kurze ADR mit zwei Optionen: (A) TOTP entfernen und bestehende Klartext-Secrets geordnet migrieren/entfernen oder (B) überprüfbares Design, bei dem der zweite Faktor tatsächlich kryptografisch den DEK-Zugriff schützt. Berücksichtige RFC 6238, Rate-Limits, Replay, Gerätewechsel und Recovery. Nimm keine Codeänderung vor und entscheide nicht eigenmächtig zwischen den Produktoptionen. **Abnahme:** eindeutige Risiken, Aufwand und Nutzerfolgen; wartet auf Freigabe.
 
 ## V06 – TOTP nur nach freigegebenem Design testen/implementieren
 **Abhängigkeit:** V05 und explizite Auswahl Option B; bei Option A diesen Auftrag überspringen.  
 **Prompt:** Setze nur den in der freigegebenen ADR definierten TOTP-Kern um. Verwende RFC-6238-konforme HMAC-/Base32-Behandlung und offizielle Referenzvektoren einschließlich Zeitfenster. Vergleiche Codes konstantzeitig, begrenze Fehlversuche und verhindere Replay eines akzeptierten Codes im gleichen Zeitfenster. Speichere das Secret nicht im Klartext in Header/Prefs. Noch keine Änderung an UI oder Vault-Migration außer dem für den Kern zwingend nötigen, kompatiblen Adapter. **Abnahme:** Referenzvektoren und Negativtests grün; keine Behauptung echter 2FA, solange die Freigabearchitektur nicht vollständig integriert ist.
 
-## V06A – TOTP entfernen (NUR nach Freigabe Option A)
+## V06A – TOTP entfernen (NUR nach Freigabe Option A) — **[ERLEDIGT]**
 **Abhängigkeit:** V05 und explizite Freigabe zum Entfernen von TOTP; statt V06/V06B ausführen.  
 **Prompt:** Entferne nur den freigegebenen TOTP-Pfad aus UI und Authentifizierungslogik. Vorhandene TOTP-Secrets müssen kontrolliert migriert/entfernt werden; lösche sie erst, wenn der neue Zustand nachweislich gespeichert wurde. Entferne keine anderen Authentifizierungs- oder Recovery-Wege. Aktualisiere Texte so, dass keine nicht mehr vorhandene 2FA behauptet wird. **Abnahme:** Tests für Altzustand, Migration, Neustart und TOTP-Deaktivierung; kein Klartext-Secret verbleibt.
 
@@ -113,10 +113,10 @@
 **Abhängigkeit:** V05/V06 und freigegebener Sicherheitsentwurf.  
 **Prompt:** Integriere den bereits getesteten TOTP-Kern in den echten Vault-Unlock-/DEK-Freigabepfad der genehmigten ADR. Ein erfolgreiches Passwort allein darf den als 2FA geschützten Schlüssel nicht freigeben. Verhindere, dass andere öffentliche APIs oder ein UI-Callback diese Prüfung umgehen. Verknüpfe Replay-/Rate-Limit-Zustand mit S06, ohne parallele Backoff-Implementierung anzulegen. **Abnahme:** End-to-End-Negativtests für Passwort ohne TOTP, falschen/abgelaufenen/wiederverwendeten Code und korrekte Kombination; UI bezeichnet die Funktion erst danach als 2FA.
 
-## V07 – BIP-39-Mnemonic-Validierung
+## V07 – BIP-39-Mnemonic-Validierung — **[ERLEDIGT]**
 **Prompt:** Isoliere die BIP-39-Funktionalität und prüfe Wortliste (genau 2048 Wörter), Entropie, Checksumme und Mnemonic-Validierung anhand offizieller Referenzvektoren. Korrigiere ausschließlich Fehler in diesem Modul; wenn Eigenbau-Logik die Referenzvektoren nicht zuverlässig erfüllt, ersetze sie durch eine geprüfte, kompatible Bibliothek. Erzeuge nur synthetische Testdaten. **Nicht tun:** Shamir, PDF/QR oder Headerformat verändern. **Abnahme:** gültige/ungültige Mnemonics, Grenzfälle und offizielle Vektoren sind getestet.
 
-## V08 – Shamir-Share-Konsistenz
+## V08 – Shamir-Share-Konsistenz — **[ERLEDIGT]**
 **Prompt:** Prüfe den vorhandenen Shamir-2-aus-3-Code und seine Hashspeicherung. Stelle durch Tests sicher, dass die drei gehashten Shares exakt dieselben Bytefolgen sind, die später an den Nutzer ausgegeben werden, und dass jedes zulässige Paar den ursprünglichen synthetischen DEK reproduziert. Verwende offizielle oder klar bezeichnete Referenzvektoren. Ersetze den Eigenbau, falls er nicht belastbar gegen Referenzen besteht. **Nicht tun:** Recovery-PDF oder Verschlüsselungsformat in diesem Schritt ändern. **Abnahme:** jedes gültige Paar rekonstruiert exakt denselben Schlüssel; vertauschte, gekürzte und manipulierte Shares scheitern.
 
 ## V09 – Recovery-Format als ADR (AUDIT/GATE)
