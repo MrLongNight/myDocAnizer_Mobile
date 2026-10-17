@@ -1,0 +1,238 @@
+--- /dev/null	2026-10-17 17:34:59.631237899 +0000
++++ app/src/main/java/com/example/service/VaultHeaderV2.kt	2026-10-17 17:35:11.973660857 +0000
+@@ -0,0 +1,134 @@
++package com.example.service
++
++import android.util.Base64
++import org.json.JSONObject
++import java.util.Locale
++
++/**
++ * Typisierte v2-Headerstruktur für den Zero-Knowledge Tresor mit strengen Obergrenzen und Metadaten.
++ */
++data class VaultHeaderV2(
++    val version: Int = 2,
++    val algorithmId: String = "AES-256-GCM-Argon2id",
++    val vaultId: String,
++    val createdAt: Long,
++    val argon2Iterations: Int,
++    val argon2MemoryKb: Int,
++    val saltBase64: String,
++    val ivBase64: String,
++    val tagLengthBits: Int = 128,
++    val encryptedDekBase64: String,
++    val securityTier: String = "ONE_FACTOR",
++    val factorType: String = "PASSWORD",
++    val autoLockMinutes: Int = 5
++) {
++    fun toJson(): String {
++        return JSONObject().apply {
++            put("version", version)
++            put("algorithmId", algorithmId)
++            put("vaultId", vaultId)
++            put("createdAt", createdAt)
++            put("argon2Iterations", argon2Iterations)
++            put("argon2MemoryKb", argon2MemoryKb)
++            put("saltBase64", saltBase64)
++            put("ivBase64", ivBase64)
++            put("tagLengthBits", tagLengthBits)
++            put("encryptedDekBase64", encryptedDekBase64)
++            put("securityTier", securityTier)
++            put("factorType", factorType)
++            put("autoLockMinutes", autoLockMinutes)
++        }.toString()
++    }
++}
++
++/**
++ * Strikter Parser und Validator für VaultHeader v2.
++ * Fail-Closed: Unbekannte Versionen, abgeschnittene Daten, unmögliche Längen und ungültige Parameter werden strikt abgewiesen.
++ */
++object VaultHeaderParserV2 {
++
++    fun parse(rawJson: String?): VaultHeaderV2? {
++        if (rawJson.isNullOrBlank()) return null
++        return try {
++            val json = JSONObject(rawJson)
++
++            // 1. Versionsprüfung (Muss exakt 2 sein)
++            val version = json.optInt("version", -1)
++            if (version != 2) {
++                return null // Unbekannte oder nicht unterstützte Version abweisen
++            }
++
++            val algorithmId = json.optString("algorithmId", "")
++            if (algorithmId.isBlank() || algorithmId.length > 64) return null
++
++            val vaultId = json.optString("vaultId", "")
++            if (vaultId.isBlank() || vaultId.length > 64 || !vaultId.startsWith("VAULT-")) return null
++
++            val createdAt = json.optLong("createdAt", -1L)
++            if (createdAt <= 0L) return null
++
++            val iterations = json.optInt("argon2Iterations", -1)
++            if (iterations < 1 || iterations > 10) return null // Obergrenze und Untergrenze prüfen
++
++            val memoryKb = json.optInt("argon2MemoryKb", -1)
++            if (memoryKb < 1024 || memoryKb > 262144) return null // 1 MB bis 256 MB Obergrenze
++
++            val saltBase64 = json.optString("saltBase64", "")
++            if (saltBase64.isBlank()) return null
++            val saltBytes = try {
++                Base64.decode(saltBase64, Base64.NO_WRAP)
++            } catch (e: Exception) {
++                return null
++            }
++            if (saltBytes.size != 16) return null // Salt muss exakt 16 Byte sein
++
++            val ivBase64 = json.optString("ivBase64", "")
++            if (ivBase64.isBlank()) return null
++            val ivBytes = try {
++                Base64.decode(ivBase64, Base64.NO_WRAP)
++            } catch (e: Exception) {
++                return null
++            }
++            if (ivBytes.size != 12) return null // AES-GCM IV muss exakt 12 Byte (96 Bit) sein
++
++            val tagLengthBits = json.optInt("tagLengthBits", -1)
++            if (tagLengthBits != 128) return null // Tag muss exakt 128 Bit sein
++
++            val encryptedDekBase64 = json.optString("encryptedDekBase64", "")
++            if (encryptedDekBase64.isBlank()) return null
++            val dekBytes = try {
++                Base64.decode(encryptedDekBase64, Base64.NO_WRAP)
++            } catch (e: Exception) {
++                return null
++            }
++            if (dekBytes.size < 32) return null // Mindestens AES-256 Ciphertext-Länge inklusive Tag
++
++            val securityTier = json.optString("securityTier", "ONE_FACTOR")
++            if (securityTier !in listOf("UNENCRYPTED", "ONE_FACTOR", "TWO_FACTOR")) return null
++
++            val factorType = json.optString("factorType", "PASSWORD")
++            if (factorType !in listOf("NONE", "PASSWORD", "KEYFILE", "PASSWORD_AND_KEYFILE", "PASSWORD_AND_TOTP", "PASSKEY")) return null
++
++            val autoLockMinutes = json.optInt("autoLockMinutes", 5)
++            if (autoLockMinutes < 0 || autoLockMinutes > 1440) return null
++
++            VaultHeaderV2(
++                version = version,
++                algorithmId = algorithmId,
++                vaultId = vaultId,
++                createdAt = createdAt,
++                argon2Iterations = iterations,
++                argon2MemoryKb = memoryKb,
++                saltBase64 = saltBase64,
++                ivBase64 = ivBase64,
++                tagLengthBits = tagLengthBits,
++                encryptedDekBase64 = encryptedDekBase64,
++                securityTier = securityTier,
++                factorType = factorType,
++                autoLockMinutes = autoLockMinutes
++            )
++        } catch (e: Exception) {
++            null
++        }
++    }
++}
+--- /dev/null	2026-10-17 17:34:59.631237899 +0000
++++ app/src/test/java/com/example/VaultHeaderV2Test.kt	2026-10-17 17:35:11.947356742 +0000
+@@ -0,0 +1,98 @@
++package com.example
++
++import android.util.Base64
++import com.example.service.VaultHeaderV2
++import com.example.service.VaultHeaderParserV2
++import org.junit.Assert.*
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [33], manifest = Config.NONE)
++class VaultHeaderV2Test {
++
++    private fun createValidV2Header(): VaultHeaderV2 {
++        val salt16 = ByteArray(16) { 0x01.toByte() }
++        val iv12 = ByteArray(12) { 0x02.toByte() }
++        val dekCipher = ByteArray(48) { 0x03.toByte() }
++
++        return VaultHeaderV2(
++            version = 2,
++            algorithmId = "AES-256-GCM-Argon2id",
++            vaultId = "VAULT-TEST1234",
++            createdAt = 1729177200000L,
++            argon2Iterations = 2,
++            argon2MemoryKb = 19456,
++            saltBase64 = Base64.encodeToString(salt16, Base64.NO_WRAP),
++            ivBase64 = Base64.encodeToString(iv12, Base64.NO_WRAP),
++            tagLengthBits = 128,
++            encryptedDekBase64 = Base64.encodeToString(dekCipher, Base64.NO_WRAP),
++            securityTier = "ONE_FACTOR",
++            factorType = "PASSWORD",
++            autoLockMinutes = 5
++        )
++    }
++
++    @Test
++    fun `test v2 roundtrip serialization and parsing`() {
++        val original = createValidV2Header()
++        val jsonStr = original.toJson()
++
++        val parsed = VaultHeaderParserV2.parse(jsonStr)
++        assertNotNull("Parsed v2 header should not be null", parsed)
++        assertEquals(original.version, parsed?.version)
++        assertEquals(original.vaultId, parsed?.vaultId)
++        assertEquals(original.argon2MemoryKb, parsed?.argon2MemoryKb)
++        assertEquals(original.saltBase64, parsed?.saltBase64)
++        assertEquals(original.ivBase64, parsed?.ivBase64)
++    }
++
++    @Test
++    fun `test v2 parser rejects invalid version`() {
++        val header = createValidV2Header().copy(version = 1)
++        val jsonStr = header.toJson()
++        assertNull("Parser must reject version != 2", VaultHeaderParserV2.parse(jsonStr))
++
++        val headerV3 = createValidV2Header().copy(version = 3)
++        assertNull("Parser must reject version 3", VaultHeaderParserV2.parse(headerV3.toJson()))
++    }
++
++    @Test
++    fun `test v2 parser rejects invalid salt length`() {
++        // Salt with 8 bytes instead of 16
++        val invalidSalt = ByteArray(8) { 0x01.toByte() }
++        val header = createValidV2Header().copy(
++            saltBase64 = Base64.encodeToString(invalidSalt, Base64.NO_WRAP)
++        )
++        assertNull("Parser must reject invalid salt length", VaultHeaderParserV2.parse(header.toJson()))
++    }
++
++    @Test
++    fun `test v2 parser rejects invalid iv length`() {
++        // IV with 16 bytes instead of 12
++        val invalidIv = ByteArray(16) { 0x02.toByte() }
++        val header = createValidV2Header().copy(
++            ivBase64 = Base64.encodeToString(invalidIv, Base64.NO_WRAP)
++        )
++        assertNull("Parser must reject invalid IV length", VaultHeaderParserV2.parse(header.toJson()))
++    }
++
++    @Test
++    fun `test v2 parser rejects out of bounds memory`() {
++        // Memory 512 KB (too low)
++        val headerLow = createValidV2Header().copy(argon2MemoryKb = 512)
++        assertNull("Parser must reject too low memory", VaultHeaderParserV2.parse(headerLow.toJson()))
++
++        // Memory 1 GB (too high)
++        val headerHigh = createValidV2Header().copy(argon2MemoryKb = 1048576)
++        assertNull("Parser must reject too high memory", VaultHeaderParserV2.parse(headerHigh.toJson()))
++    }
++
++    @Test
++    fun `test v2 parser rejects invalid vaultId format`() {
++        val header = createValidV2Header().copy(vaultId = "INVALID-ID")
++        assertNull("Parser must reject vaultId not starting with VAULT-", VaultHeaderParserV2.parse(header.toJson()))
++    }
++}
