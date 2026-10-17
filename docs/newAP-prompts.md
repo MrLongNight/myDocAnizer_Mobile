@@ -119,10 +119,10 @@
 ## V08 – Shamir-Share-Konsistenz — **[ERLEDIGT]**
 **Prompt:** Prüfe den vorhandenen Shamir-2-aus-3-Code und seine Hashspeicherung. Stelle durch Tests sicher, dass die drei gehashten Shares exakt dieselben Bytefolgen sind, die später an den Nutzer ausgegeben werden, und dass jedes zulässige Paar den ursprünglichen synthetischen DEK reproduziert. Verwende offizielle oder klar bezeichnete Referenzvektoren. Ersetze den Eigenbau, falls er nicht belastbar gegen Referenzen besteht. **Nicht tun:** Recovery-PDF oder Verschlüsselungsformat in diesem Schritt ändern. **Abnahme:** jedes gültige Paar rekonstruiert exakt denselben Schlüssel; vertauschte, gekürzte und manipulierte Shares scheitern.
 
-## V09 – Recovery-Format als ADR (AUDIT/GATE)
+## V09 – Recovery-Format als ADR (AUDIT/GATE) — **[ERLEDIGT]**
 **Prompt:** Entwirf ein versioniertes Recovery-Payload für ein Notfall-Kit, ohne es schon zu implementieren. Definiere Entropiequelle, KDF samt Parametern, Salt, AEAD, AAD, Nonce, Versionierung, Authentifizierungsfehler, Export-/Importworkflow und Schutz vor offline kopierten Kits. Ein sechsstelliger PIN reicht nicht als Schutz für ein offline kopierbares Kit. Begründe Passphrase-Anforderungen und Recovery bei Formatversionen. Beschreibe explizit, dass der rohe DEK niemals direkt in PDF, QR, UI, Clipboard oder Logs ausgegeben wird. **Abnahme:** ADR mit Angriffsmodell, Byteformat und Testfällen; Implementierung erst nach Freigabe.
 
-## V10 – Recovery-Payload-Kern
+## V10 – Recovery-Payload-Kern — **[ERLEDIGT]**
 **Abhängigkeit:** V09 und Freigabe der ADR.  
 **Prompt:** Implementiere nur Encode/Decode des genehmigten Recovery-Payload-Formats als eigenständige, testbare Komponente. Schlüsselableitung und Authenticated Encryption ausschließlich über geprüfte Primitive. Versions-/Längenprüfung, falsche Passphrase, veränderte Ciphertextbytes und ungültiger Tag müssen kontrolliert scheitern. Nutze ausschließlich synthetische Schlüssel. Keine PDF-, QR- oder UI-Änderungen in diesem Micro-AP. **Abnahme:** bytegenaue Roundtrip-Tests, Negativtests und kein Roh-DEK in Fehlermeldungen/Logs.
 
@@ -559,6 +559,17 @@ Sofort abbrechen und konkreten Blocker melden, wenn:
 
 | Micro-AP | Status | Patch-Datei | Lokal übernommen | Lokale Tests | Nächster Schritt |
 |---|---|---|---|---|---|
-| M00 | NICHT GESTARTET | – | Nein | – | Baseline/Audit |
+| M00 | ABGENOMMEN | micro-ap-M00.patch | Ja | Bestanden | V01 |
+| V01 | ABGENOMMEN | micro-ap-V01.patch | Ja | Bestanden | V02 |
+| V02 | ABGENOMMEN | micro-ap-V02.patch | Ja | Bestanden | V03 |
+| V03 | ABGENOMMEN | micro-ap-V03.patch | Ja | Bestanden | V04 |
+| V04 | ABGENOMMEN | micro-ap-V04.patch | Ja | Bestanden | V05 |
+| V05 | ABGENOMMEN | micro-ap-V05.patch | Ja | Bestanden | V06A |
+| V06A | ABGENOMMEN | micro-ap-V06A.patch | Ja | Bestanden | V07 |
+| V07 | ABGENOMMEN | micro-ap-V07.patch | Ja | Bestanden | V08 |
+| V08 | ABGENOMMEN | micro-ap-V08.patch | Ja | Bestanden | V09 |
+| V09 | ABGENOMMEN | micro-ap-V09.patch | Ja | Bestanden | V10 |
+| V10 | ABGENOMMEN | micro-ap-V10.patch | Ja | Bestanden | V11 |
+| V11 | NICHT GESTARTET | – | Nein | – | Standardkonforme QR-Kodierung |
 
 Zulässige Statuswerte: `NICHT GESTARTET`, `BLOCKIERT`, `PATCH ERSTELLT`, `MANUELL ÜBERNOMMEN`, `GETESTET`, `ABGENOMMEN`.

@@ -1641,6 +1641,36 @@ class ExampleRobolectricTest {
     if (backupFile.exists()) backupFile.delete()
     if (sampleFile.exists()) sampleFile.delete()
   }
+
+  @Test
+  fun `verify RecoveryPayloadEngine roundtrip and security guarantees`() {
+    val dek = ByteArray(32).apply { java.security.SecureRandom().nextBytes(this) }
+    val passphrase = "SecureRecoveryPassphrase2026!".toCharArray()
+    val wrongPassphrase = "WrongPassphrase!".toCharArray()
+
+    // Encode
+    val serialized = com.example.service.RecoveryPayloadEngine.encodeRecoveryPayload(dek, passphrase)
+    assertNotNull(serialized)
+    assertTrue(serialized.size > 32)
+
+    // Successful decode roundtrip
+    val decryptedDek = com.example.service.RecoveryPayloadEngine.decodeRecoveryPayload(serialized, passphrase)
+    assertNotNull(decryptedDek)
+    assertTrue(decryptedDek.contentEquals(dek))
+
+    // Wrong passphrase must throw SecurityException
+    org.junit.Assert.assertThrows(SecurityException::class.java) {
+      com.example.service.RecoveryPayloadEngine.decodeRecoveryPayload(serialized, wrongPassphrase)
+    }
+
+    // Tampered ciphertext must throw SecurityException
+    val tampered = serialized.clone()
+    tampered[tampered.size - 1] = (tampered[tampered.size - 1].toInt() xor 0xFF).toByte()
+    org.junit.Assert.assertThrows(SecurityException::class.java) {
+      com.example.service.RecoveryPayloadEngine.decodeRecoveryPayload(tampered, passphrase)
+    }
+  }
 }
+
 
 
