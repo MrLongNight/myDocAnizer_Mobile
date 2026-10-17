@@ -279,20 +279,85 @@ object DocumentStorageService {
     }
 
     /**
+     * Erzeugt einen absolut eindeutigen, internen Dateinamen (UUID-basiert).
+     * Der ursprüngliche Name bleibt in den Metadaten (DB) erhalten.
+     */
+    fun generateInternalFileName(extension: String = "pdf", isEncrypted: Boolean = true): String {
+        val uuid = UUID.randomUUID().toString()
+        val suffix = if (isEncrypted) ".enc" else ""
+        return "doc_${uuid}.${extension.removePrefix(".")}$suffix"
+    }
+
+    suspend fun secureSave(
+        context: Context,
+        inputAction: suspend (File) -> Unit,
+        targetDir: File,
+        internalFileName: String,
+        isEncrypted: Boolean,
+        encryptionKey: ByteArray? = null,
+        passwordKey: String? = null
+    ): File = withContext(Dispatchers.IO) {
+        val tempFile = File(context.cacheDir, "temp_save_${UUID.randomUUID()}.tmp")
+        try {
+            // 1. In temporäre Datei schreiben
+            inputAction(tempFile)
+            if (!tempFile.exists() || tempFile.length() == 0L) {
+                throw java.io.IOException("Fehler beim Schreiben der temporären Datei.")
+            }
+
+            // 2. Zielpfad vorbereiten
+            targetDir.mkdirs()
+            val finalFile = File(targetDir, internalFileName)
+
+            // 3. Verschlüsseln oder Verschieben
+            if (isEncrypted) {
+                when {
+                    encryptionKey != null -> encryptFile(tempFile, finalFile, encryptionKey)
+                    !passwordKey.isNullOrBlank() -> encryptFile(tempFile, finalFile, passwordKey)
+                    else -> throw IllegalArgumentException("Weder Encryption-Key noch Passwort für Verschlüsselung vorhanden.")
+                }
+            } else {
+                if (!tempFile.renameTo(finalFile)) {
+                    // Fallback falls renameTo fehlschlägt (z.B. verschiedene Mount-Points)
+                    tempFile.copyTo(finalFile, overwrite = true)
+                }
+            }
+
+            if (!finalFile.exists()) {
+                throw java.io.IOException("Zieldatei konnte nicht finalisiert werden.")
+            }
+            finalFile
+        } finally {
+            if (tempFile.exists()) tempFile.delete()
+        }
+    }
+
+    /**
      * Speichert eine Bilddatei (JPEG oder PNG) direkt im gewählten DMS-Ordner
      */
     suspend fun saveImageFile(
+        context: Context,
         bitmap: Bitmap,
-        outputFile: File,
+        targetDir: File,
+        internalName: String,
+        isEncrypted: Boolean,
+        encryptionKey: ByteArray? = null,
+        passwordKey: String? = null,
         format: Bitmap.CompressFormat = Bitmap.CompressFormat.JPEG,
         quality: Int = 92
-    ): File = withContext(Dispatchers.IO) {
-        outputFile.parentFile?.mkdirs()
-        FileOutputStream(outputFile).use { out ->
-            bitmap.compress(format, quality, out)
+    ): File = secureSave(
+        context = context,
+        targetDir = targetDir,
+        internalFileName = internalName,
+        isEncrypted = isEncrypted,
+        encryptionKey = encryptionKey,
+        passwordKey = passwordKey,
+        inputAction = { tempFile ->
+            FileOutputStream(tempFile).use { out ->
+                bitmap.compress(format, quality, out)
+            }
         }
-        outputFile
-    }
+    )
 
     /**
      * Erstellt ein durchsuchbares Mehrseiten-PDF aus einer Liste von Seiten (Bitmaps)
@@ -305,10 +370,21 @@ object DocumentStorageService {
         docType: String,
         mainCategory: String,
         subCategory: String,
-        outputFile: File,
+        targetDir: File,
+        internalName: String,
+        isEncrypted: Boolean,
+        encryptionKey: ByteArray? = null,
+        passwordKey: String? = null,
         settings: PdfSettings
-    ): File = withContext(Dispatchers.IO) {
-        val document = PdfDocument()
+    ): File = secureSave(
+        context = context,
+        targetDir = targetDir,
+        internalFileName = internalName,
+        isEncrypted = isEncrypted,
+        encryptionKey = encryptionKey,
+        passwordKey = passwordKey,
+        inputAction = { tempFile ->
+            val document = PdfDocument()
 
         // Standard A4 in Points: 595 x 842 Punkte
         val pageWidth = 595
@@ -387,16 +463,14 @@ object DocumentStorageService {
         }
 
         try {
-            outputFile.parentFile?.mkdirs()
-            FileOutputStream(outputFile).use { out ->
+            FileOutputStream(tempFile).use { out ->
                 document.writeTo(out)
             }
         } finally {
             document.close()
         }
-
-        outputFile
     }
+)
 
     /**
      * Erstellt ein formatiertes, durchsuchbares A4-PDF-Dokument aus einer E-Mail mit Kopfdaten (mehrseitige Unterstützung)
@@ -408,13 +482,24 @@ object DocumentStorageService {
         dateStr: String,
         subject: String,
         bodyText: String,
-        outputFile: File,
+        targetDir: File,
+        internalName: String,
+        isEncrypted: Boolean,
+        encryptionKey: ByteArray? = null,
+        passwordKey: String? = null,
         settings: PdfSettings
-    ): File = withContext(Dispatchers.IO) {
-        val document = PdfDocument()
-        val pageWidth = 595
-        val pageHeight = 842
-        var pageNumber = 1
+    ): File = secureSave(
+        context = context,
+        targetDir = targetDir,
+        internalFileName = internalName,
+        isEncrypted = isEncrypted,
+        encryptionKey = encryptionKey,
+        passwordKey = passwordKey,
+        inputAction = { tempFile ->
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+            var pageNumber = 1
 
         val bgPaint = Paint().apply { color = Color.WHITE }
         val footerPaint = Paint().apply {
@@ -529,16 +614,14 @@ object DocumentStorageService {
         document.finishPage(page)
 
         try {
-            outputFile.parentFile?.mkdirs()
-            FileOutputStream(outputFile).use { out ->
+            FileOutputStream(tempFile).use { out ->
                 document.writeTo(out)
             }
         } finally {
             document.close()
         }
-
-        outputFile
     }
+)
 
     private const val PBKDF2_ITERATIONS = 100_000
     private const val KEY_LENGTH_BITS = 256
@@ -567,6 +650,45 @@ object DocumentStorageService {
      * 16-Byte kryptografischem Salt, 12-Byte Zufalls-IV und 128-Bit Authentifizierungs-Tag.
      * Nutzt 64KB Streaming-Puffer, um OutOfMemoryErrors bei großen Dateien zu verhindern.
      */
+    fun encryptFile(inputFile: File, outputFile: File, encryptionKey: ByteArray): File {
+        val salt = ByteArray(SALT_LENGTH_BYTES) // Salt is kept for structure consistency, though DEK is already random
+        val iv = ByteArray(GCM_IV_LENGTH_BYTES)
+        val secureRandom = SecureRandom()
+        secureRandom.nextBytes(salt)
+        secureRandom.nextBytes(iv)
+
+        val secretKey = SecretKeySpec(encryptionKey, "AES")
+
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
+
+        outputFile.parentFile?.mkdirs()
+        FileOutputStream(outputFile).use { fos ->
+            fos.write(salt)
+            fos.write(iv)
+
+            FileInputStream(inputFile).use { fis ->
+                val buffer = ByteArray(64 * 1024)
+                try {
+                    var bytesRead: Int
+                    while (fis.read(buffer).also { bytesRead = it } != -1) {
+                        val outputChunk = cipher.update(buffer, 0, bytesRead)
+                        if (outputChunk != null && outputChunk.isNotEmpty()) {
+                            fos.write(outputChunk)
+                        }
+                    }
+                    val finalChunk = cipher.doFinal()
+                    if (finalChunk != null && finalChunk.isNotEmpty()) {
+                        fos.write(finalChunk)
+                    }
+                } finally {
+                    buffer.fill(0)
+                }
+            }
+        }
+        return outputFile
+    }
+
     fun encryptFile(inputFile: File, outputFile: File, passwordKey: String): File {
         if (passwordKey.isBlank()) {
             throw IllegalArgumentException("Master-Passwort darf für die Verschlüsselung nicht leer sein")
@@ -613,6 +735,60 @@ object DocumentStorageService {
      * Entschlüsselt eine AES-256-GCM Datei (.enc) mit PBKDF2 Schlüsselableitung.
      * Nutzt 64KB Streaming-Puffer für minimale Speichernutzung.
      */
+    fun decryptFile(inputFile: File, outputFile: File, encryptionKey: ByteArray): Boolean {
+        return try {
+            val fileLength = inputFile.length()
+            val minHeaderSize = SALT_LENGTH_BYTES + GCM_IV_LENGTH_BYTES + 16
+            if (fileLength < minHeaderSize) return false
+
+            FileInputStream(inputFile).use { fis ->
+                val salt = ByteArray(SALT_LENGTH_BYTES)
+                var readTotal = 0
+                while (readTotal < SALT_LENGTH_BYTES) {
+                    val r = fis.read(salt, readTotal, SALT_LENGTH_BYTES - readTotal)
+                    if (r == -1) return false
+                    readTotal += r
+                }
+
+                val iv = ByteArray(GCM_IV_LENGTH_BYTES)
+                readTotal = 0
+                while (readTotal < GCM_IV_LENGTH_BYTES) {
+                    val r = fis.read(iv, readTotal, GCM_IV_LENGTH_BYTES - readTotal)
+                    if (r == -1) return false
+                    readTotal += r
+                }
+
+                val secretKey = SecretKeySpec(encryptionKey, "AES")
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
+
+                outputFile.parentFile?.mkdirs()
+                FileOutputStream(outputFile).use { fos ->
+                    val buffer = ByteArray(64 * 1024)
+                    try {
+                        var bytesRead: Int
+                        while (fis.read(buffer).also { bytesRead = it } != -1) {
+                            val outputChunk = cipher.update(buffer, 0, bytesRead)
+                            if (outputChunk != null && outputChunk.isNotEmpty()) {
+                                fos.write(outputChunk)
+                            }
+                        }
+                        val finalChunk = cipher.doFinal()
+                        if (finalChunk != null && finalChunk.isNotEmpty()) {
+                            fos.write(finalChunk)
+                        }
+                    } finally {
+                        buffer.fill(0)
+                    }
+                }
+            }
+            true
+        } catch (e: Exception) {
+            outputFile.delete()
+            false
+        }
+    }
+
     fun decryptFile(inputFile: File, outputFile: File, passwordKey: String): Boolean {
         if (passwordKey.isBlank()) return false
         return try {

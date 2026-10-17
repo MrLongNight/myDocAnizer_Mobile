@@ -59,6 +59,23 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     }
     val syncManager = SyncManager(p2pSyncManager, settingsRepo, viewModelScope)
     val analyticsManager = AnalyticsManager(application, settingsRepo.analyticsEnabled)
+    private val migrationService = DocumentMigrationService(application, documentDao, vaultSecurityManager)
+    
+    private val _migrationResult = MutableStateFlow<DocumentMigrationService.MigrationResult?>(null)
+    val migrationResult = _migrationResult.asStateFlow()
+
+    fun runDocumentMigration() {
+        viewModelScope.launch {
+            val result = migrationService.migrateAllDocuments(syncPasswordKey.value)
+            _migrationResult.value = result
+            AppAuditLogger.log(
+                category = LogCategory.STORAGE_DMS,
+                tag = "Migration",
+                message = "Dokumenten-Migration abgeschlossen: ${result.migrated} migriert, ${result.skipped} übersprungen, ${result.failed} fehlgeschlagen.",
+                details = "Gesamt: ${result.total}"
+            )
+        }
+    }
 
     init {
         AppAuditLogger.init(application)
@@ -891,8 +908,10 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     fun updateBatchItem(item: com.example.model.BatchDocumentItem) = dmsManager.updateBatchItem(item)
     fun removeBatchItem(itemId: String) = dmsManager.removeBatchItem(itemId)
     fun clearBatchQueue() = dmsManager.clearBatchQueue()
-    fun commitBatchItem(item: com.example.model.BatchDocumentItem, onFinished: (DocumentEntity) -> Unit = {}) = dmsManager.commitBatchItem(item, pdfSettings.value, _isColorMode.value, onFinished)
-    fun commitAllBatchItems(onComplete: (Int) -> Unit = {}) = dmsManager.commitAllBatchItems(pdfSettings.value, _isColorMode.value, onComplete)
+    fun commitBatchItem(item: com.example.model.BatchDocumentItem, onFinished: (DocumentEntity) -> Unit = {}) = 
+        dmsManager.commitBatchItem(item, pdfSettings.value, _isColorMode.value, vaultSecurityManager.getActiveDek(), syncPasswordKey.value, onFinished)
+    fun commitAllBatchItems(onComplete: (Int) -> Unit = {}) = 
+        dmsManager.commitAllBatchItems(pdfSettings.value, _isColorMode.value, vaultSecurityManager.getActiveDek(), syncPasswordKey.value, onComplete)
 
     // KI-Regelgenerator: Erstellt DocRule-Vorschläge anhand von Benutzer-Eingaben
     suspend fun generateRulesWithAi(userDescription: String): List<com.example.model.DocRule> {
@@ -1753,13 +1772,16 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     customPath = pdfSettings.value.customStoragePath
                 )
 
-                // 4. Dateinamen erstellen
-                val fileName = DocumentStorageService.formatFileName(sender, title)
-                val targetPdfFile = File(targetDir, fileName)
-
+                // 4. Dateinamen erstellen (Anzeige-Name & Interner Name)
+                val displayName = DocumentStorageService.formatFileName(sender, title)
+                val isEncrypted = true // Standardmäßig verschlüsselt
+                val internalName = DocumentStorageService.generateInternalFileName(isEncrypted = isEncrypted)
+                
                 // 5. Mehrseitiges PDF erstellen
                 val tagsStr = template.defaultTags.joinToString(", ")
-                DocumentStorageService.generatePdf(
+                val encryptionKey = vaultSecurityManager.getActiveDek()
+                
+                val finalFile = DocumentStorageService.generatePdf(
                     context = context,
                     pageBitmaps = processedPages,
                     ocrText = ocrText,
@@ -1767,7 +1789,11 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     docType = template.defaultDocType,
                     mainCategory = template.mainCategory,
                     subCategory = template.subCategory,
-                    outputFile = targetPdfFile,
+                    targetDir = targetDir,
+                    internalName = internalName,
+                    isEncrypted = isEncrypted,
+                    encryptionKey = encryptionKey,
+                    passwordKey = syncPasswordKey.value,
                     settings = pdfSettings.value
                 )
 
@@ -1778,8 +1804,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 val entity = DocumentEntity(
                     title = title,
                     sender = sender,
-                    fileName = fileName,
-                    filePath = targetPdfFile.absolutePath,
+                    fileName = displayName,
+                    filePath = finalFile.absolutePath,
                     mainCategory = template.mainCategory,
                     subCategory = template.subCategory,
                     mainCategoryId = template.mainCategoryId,
@@ -1789,8 +1815,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     ocrText = ocrText,
                     colorMode = if (isColor) "COLOR" else "BW",
                     pageCount = processedPages.size,
-                    fileSizeFormatted = "${(targetPdfFile.length() / 1024).coerceAtLeast(35)} KB",
-                    isEncrypted = true,
+                    fileSizeFormatted = "${(finalFile.length() / 1024).coerceAtLeast(35)} KB",
+                    isEncrypted = isEncrypted,
                     isSynced = false,
                     cancellationDeadline = detectedCancellation,
                     contractEndDate = detectedContractEnd
@@ -2223,11 +2249,13 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     customPath = pdfSettings.value.customStoragePath
                 )
 
-                val fileName = DocumentStorageService.formatFileName(sender, title)
-                val targetPdfFile = File(targetDir, fileName)
+                val displayName = DocumentStorageService.formatFileName(sender, title)
+                val isEncrypted = true
+                val internalName = DocumentStorageService.generateInternalFileName(isEncrypted = isEncrypted)
                 val tagsStr = if (rule.targetTags.isNotEmpty()) rule.targetTags.joinToString(", ") else template.defaultTags.joinToString(", ")
+                val encryptionKey = vaultSecurityManager.getActiveDek()
 
-                DocumentStorageService.generatePdf(
+                val finalFile = DocumentStorageService.generatePdf(
                     context = context,
                     pageBitmaps = listOf(bitmap),
                     ocrText = ocrText,
@@ -2235,7 +2263,11 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     docType = rule.targetDocType.ifBlank { template.defaultDocType },
                     mainCategory = template.mainCategory,
                     subCategory = template.subCategory,
-                    outputFile = targetPdfFile,
+                    targetDir = targetDir,
+                    internalName = internalName,
+                    isEncrypted = isEncrypted,
+                    encryptionKey = encryptionKey,
+                    passwordKey = syncPasswordKey.value,
                     settings = pdfSettings.value
                 )
 
@@ -2248,8 +2280,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 val entity = DocumentEntity(
                     title = title,
                     sender = sender,
-                    fileName = fileName,
-                    filePath = targetPdfFile.absolutePath,
+                    fileName = displayName,
+                    filePath = finalFile.absolutePath,
                     mainCategory = template.mainCategory,
                     subCategory = template.subCategory,
                     mainCategoryId = rule.targetMainCategoryId.ifBlank { template.mainCategoryId },
@@ -2259,8 +2291,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     ocrText = ocrText,
                     colorMode = if (isColor) "COLOR" else "BW",
                     pageCount = 1,
-                    fileSizeFormatted = "${(targetPdfFile.length() / 1024).coerceAtLeast(35)} KB",
-                    isEncrypted = true,
+                    fileSizeFormatted = "${(finalFile.length() / 1024).coerceAtLeast(15)} KB",
+                    isEncrypted = isEncrypted,
                     isSynced = false,
                     cancellationDeadline = detectedCancellation,
                     contractEndDate = detectedContractEnd,
@@ -2325,11 +2357,11 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                             val pw = syncPasswordKey.value
                             if (!pw.isNullOrBlank()) {
                                 val encTarget = File(backupDir, "${entity.fileName}.enc")
-                                DocumentStorageService.encryptFile(targetPdfFile, encTarget, pw)
+                                DocumentStorageService.encryptFile(File(entity.filePath), encTarget, pw)
                             } else {
                                 // Bei unverschlüsseltem Modus direkt eine lokale Sicherheitskopie anlegen
                                 val rawTarget = File(backupDir, entity.fileName)
-                                targetPdfFile.copyTo(rawTarget, overwrite = true)
+                                File(entity.filePath).copyTo(rawTarget, overwrite = true)
                             }
                         } catch (e: Exception) {
                             Log.e("DocAnizerViewModel", "Auto-Mirror fehlgeschlagen: ${e.message}")
@@ -3063,11 +3095,13 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     customPath = pdfSettings.value.customStoragePath
                 )
 
-                val fileName = DocumentStorageService.formatFileName(safeSender, safeTitle)
-                val targetPdfFile = File(targetDir, fileName)
+                val displayName = DocumentStorageService.formatFileName(safeSender, safeTitle)
+                val isEncrypted = true
+                val internalName = DocumentStorageService.generateInternalFileName(isEncrypted = isEncrypted)
                 val tagsStr = template.defaultTags.joinToString(", ")
+                val encryptionKey = vaultSecurityManager.getActiveDek()
 
-                DocumentStorageService.generatePdf(
+                val finalFile = DocumentStorageService.generatePdf(
                     context = context,
                     pageBitmaps = listOf(processed),
                     ocrText = ocrText,
@@ -3075,7 +3109,11 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     docType = template.defaultDocType,
                     mainCategory = template.mainCategory,
                     subCategory = template.subCategory,
-                    outputFile = targetPdfFile,
+                    targetDir = targetDir,
+                    internalName = internalName,
+                    isEncrypted = isEncrypted,
+                    encryptionKey = encryptionKey,
+                    passwordKey = syncPasswordKey.value,
                     settings = pdfSettings.value
                 )
 
@@ -3084,8 +3122,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 val entity = DocumentEntity(
                     title = safeTitle,
                     sender = safeSender,
-                    fileName = fileName,
-                    filePath = targetPdfFile.absolutePath,
+                    fileName = displayName,
+                    filePath = finalFile.absolutePath,
                     mainCategory = template.mainCategory,
                     subCategory = template.subCategory,
                     mainCategoryId = template.mainCategoryId,
@@ -3095,8 +3133,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     ocrText = ocrText,
                     colorMode = if (isColor) "COLOR" else "BW",
                     pageCount = 1,
-                    fileSizeFormatted = "${(targetPdfFile.length() / 1024).coerceAtLeast(30)} KB",
-                    isEncrypted = true,
+                    fileSizeFormatted = "${(finalFile.length() / 1024).coerceAtLeast(35)} KB",
+                    isEncrypted = isEncrypted,
                     isSynced = false,
                     cancellationDeadline = detectedCancellation,
                     contractEndDate = detectedContractEnd
@@ -3146,27 +3184,33 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 customPath = pdfSettings.value.customStoragePath
             )
 
-            val fileName = DocumentStorageService.formatFileName(safeSender, safeTitle)
-            val targetPdfFile = File(targetDir, fileName)
+            val displayName = DocumentStorageService.formatFileName(safeSender, safeTitle)
+            val isEncrypted = true
+            val internalName = DocumentStorageService.generateInternalFileName(isEncrypted = isEncrypted)
+            val encryptionKey = vaultSecurityManager.getActiveDek()
             val tagsList = (template.defaultTags + listOf("#email", "#korrespondenz")).distinct()
             val tagsStr = tagsList.joinToString(", ")
 
-            DocumentStorageService.generateEmailPdf(
+            val finalFile = DocumentStorageService.generateEmailPdf(
                 context = context,
                 sender = safeSender,
                 recipient = recipient,
                 dateStr = dateStr,
                 subject = safeTitle,
                 bodyText = body,
-                outputFile = targetPdfFile,
+                targetDir = targetDir,
+                internalName = internalName,
+                isEncrypted = isEncrypted,
+                encryptionKey = encryptionKey,
+                passwordKey = syncPasswordKey.value,
                 settings = pdfSettings.value
             )
 
             val entity = DocumentEntity(
                 title = safeTitle,
                 sender = safeSender,
-                fileName = fileName,
-                filePath = targetPdfFile.absolutePath,
+                fileName = displayName,
+                filePath = finalFile.absolutePath,
                 mainCategory = template.mainCategory,
                 subCategory = template.subCategory,
                 mainCategoryId = template.mainCategoryId,
@@ -3176,8 +3220,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 ocrText = ocrText,
                 colorMode = "COLOR",
                 pageCount = 1,
-                fileSizeFormatted = "${(targetPdfFile.length() / 1024).coerceAtLeast(20)} KB",
-                isEncrypted = true,
+                fileSizeFormatted = "${(finalFile.length() / 1024).coerceAtLeast(20)} KB",
+                isEncrypted = isEncrypted,
                 isSynced = false
             )
 
@@ -3243,8 +3287,11 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
 
             var finalOcrText = ocrTextProvided
             val extension = if (targetFormat == "IMAGE") "jpg" else "pdf"
-            val fileName = DocumentStorageService.formatFileName(safeSender, safeTitle, extension = extension)
-            val targetFile = File(targetDir, fileName)
+            val displayName = DocumentStorageService.formatFileName(safeSender, safeTitle, extension = extension)
+            val isEncrypted = true
+            val internalName = DocumentStorageService.generateInternalFileName(extension = extension, isEncrypted = isEncrypted)
+            val encryptionKey = vaultSecurityManager.getActiveDek()
+            var finalFile: File? = null
 
             var pageCount = 1
             var processedBmpToRecycle: Bitmap? = null
@@ -3261,7 +3308,15 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     if (finalOcrText.isBlank() && runOcr) {
                         finalOcrText = OcrService.recognizeText(processed, safeSender, safeTitle)
                     }
-                    DocumentStorageService.saveImageFile(processed, targetFile)
+                    finalFile = DocumentStorageService.saveImageFile(
+                        context = context,
+                        bitmap = processed,
+                        targetDir = targetDir,
+                        internalName = internalName,
+                        isEncrypted = isEncrypted,
+                        encryptionKey = encryptionKey,
+                        passwordKey = syncPasswordKey.value
+                    )
                     pageCount = 1
                 } else if (targetFormat == "PDF" && bitmap != null) {
                     // Bild als durchsuchbares PDF archivieren
@@ -3275,7 +3330,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         finalOcrText = OcrService.recognizeText(processed, safeSender, safeTitle)
                     }
                     val tagsStr = tags.joinToString(", ")
-                    DocumentStorageService.generatePdf(
+                    finalFile = DocumentStorageService.generatePdf(
                         context = context,
                         pageBitmaps = listOf(processed),
                         ocrText = finalOcrText,
@@ -3283,25 +3338,40 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         docType = docType,
                         mainCategory = mainCategory,
                         subCategory = subCategory,
-                        outputFile = targetFile,
+                        targetDir = targetDir,
+                        internalName = internalName,
+                        isEncrypted = isEncrypted,
+                        encryptionKey = encryptionKey,
+                        passwordKey = syncPasswordKey.value,
                         settings = pdfSettings.value
                     )
                     pageCount = 1
                 } else if (pdfBytes != null) {
-                    // Reines PDF direkt wegschreiben
-                    targetFile.parentFile?.mkdirs()
-                    targetFile.writeBytes(pdfBytes)
+                    // Reines PDF direkt wegschreiben via secureSave
+                    finalFile = DocumentStorageService.secureSave(
+                        context = context,
+                        targetDir = targetDir,
+                        internalFileName = internalName,
+                        isEncrypted = isEncrypted,
+                        encryptionKey = encryptionKey,
+                        passwordKey = syncPasswordKey.value,
+                        inputAction = { tempFile ->
+                            tempFile.writeBytes(pdfBytes)
+                        }
+                    )
                     pageCount = 1
                 }
 
+                if (finalFile == null) throw java.io.IOException("Datei konnte nicht gespeichert werden.")
+
                 val tagsStr = tags.joinToString(", ")
-                val fileSizeKb = (targetFile.length() / 1024).coerceAtLeast(15)
+                val fileSizeKb = (finalFile.length() / 1024).coerceAtLeast(15)
 
                 val entity = DocumentEntity(
                     title = safeTitle,
                     sender = safeSender,
-                    fileName = fileName,
-                    filePath = targetFile.absolutePath,
+                    fileName = displayName,
+                    filePath = finalFile.absolutePath,
                     mainCategory = mainCategory,
                     subCategory = subCategory,
                     mainCategoryId = mainCategoryId,
@@ -3312,7 +3382,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     colorMode = if (isColor) "COLOR" else "BW",
                     pageCount = pageCount,
                     fileSizeFormatted = "$fileSizeKb KB",
-                    isEncrypted = true,
+                    isEncrypted = isEncrypted,
                     isSynced = false
                 )
 

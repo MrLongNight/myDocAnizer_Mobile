@@ -196,6 +196,18 @@ object P2pSyncSecurityService {
     }
 
     /**
+     * Berechnet einen HMAC-SHA256 für die Authentifizierung von P2P-Requests.
+     */
+    fun calculateHmac(data: String, keyBase64: String): String {
+        val keyBytes = Base64.decode(keyBase64, Base64.NO_WRAP)
+        val secretKey = SecretKeySpec(keyBytes, "HmacSHA256")
+        val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+        mac.init(secretKey)
+        val hmacBytes = mac.doFinal(data.toByteArray(Charsets.UTF_8))
+        return Base64.encodeToString(hmacBytes, Base64.NO_WRAP)
+    }
+
+    /**
      * Generiert ein Text-Zertifikat / PEM-Zertifikats-Header für lokale TLS-Konfiguration.
      */
     fun getLocalRootCaPem(): String {

@@ -156,7 +156,13 @@ class DmsManager(
         _batchQueue.value = emptyList()
     }
 
-    suspend fun commitBatchItemInternal(item: BatchDocumentItem, pdfSettings: PdfSettings, isColorMode: Boolean): DocumentEntity? {
+    suspend fun commitBatchItemInternal(
+        item: BatchDocumentItem,
+        pdfSettings: PdfSettings,
+        isColorMode: Boolean,
+        encryptionKey: ByteArray? = null,
+        passwordKey: String? = null
+    ): DocumentEntity? {
         val bitmaps = item.tempImagePaths.mapNotNull { path ->
             try { BitmapFactory.decodeFile(path) } catch (_: Throwable) { null }
         }
@@ -182,11 +188,12 @@ class DmsManager(
                 customPath = pdfSettings.customStoragePath
             )
 
-            val fileName = DocumentStorageService.formatFileName(sender, title)
-            val targetPdfFile = File(targetDir, fileName)
+            val displayName = DocumentStorageService.formatFileName(sender, title)
+            val isEncrypted = true
+            val internalName = DocumentStorageService.generateInternalFileName(isEncrypted = isEncrypted)
             val tagsStr = item.suggestedTags.joinToString(", ")
 
-            DocumentStorageService.generatePdf(
+            val finalFile = DocumentStorageService.generatePdf(
                 context = application,
                 pageBitmaps = bitmaps,
                 ocrText = item.ocrText,
@@ -194,15 +201,19 @@ class DmsManager(
                 docType = item.suggestedDocType.ifBlank { template.defaultDocType },
                 mainCategory = template.mainCategory,
                 subCategory = template.subCategory,
-                outputFile = targetPdfFile,
+                targetDir = targetDir,
+                internalName = internalName,
+                isEncrypted = isEncrypted,
+                encryptionKey = encryptionKey,
+                passwordKey = passwordKey,
                 settings = pdfSettings
             )
 
             val docEntity = DocumentEntity(
                 title = title,
                 sender = sender,
-                fileName = fileName,
-                filePath = targetPdfFile.absolutePath,
+                fileName = displayName,
+                filePath = finalFile.absolutePath,
                 mainCategory = template.mainCategory,
                 subCategory = template.subCategory,
                 mainCategoryId = item.suggestedMainCategoryId.ifBlank { template.mainCategoryId },
@@ -212,7 +223,8 @@ class DmsManager(
                 ocrText = item.ocrText,
                 colorMode = if (isColorMode) "COLOR" else "BW",
                 pageCount = bitmaps.size,
-                fileSizeFormatted = "${targetPdfFile.length() / 1024} KB"
+                fileSizeFormatted = "${finalFile.length() / 1024} KB",
+                isEncrypted = isEncrypted
             )
             documentDao.insertDocument(docEntity)
             com.example.service.AppAuditLogger.log(
@@ -229,21 +241,34 @@ class DmsManager(
         }
     }
 
-    fun commitBatchItem(item: BatchDocumentItem, pdfSettings: PdfSettings, isColorMode: Boolean, onFinished: (DocumentEntity) -> Unit = {}) {
+    fun commitBatchItem(
+        item: BatchDocumentItem,
+        pdfSettings: PdfSettings,
+        isColorMode: Boolean,
+        encryptionKey: ByteArray? = null,
+        passwordKey: String? = null,
+        onFinished: (DocumentEntity) -> Unit = {}
+    ) {
         scope.launch(Dispatchers.IO) {
-            val docEntity = commitBatchItemInternal(item, pdfSettings, isColorMode)
+            val docEntity = commitBatchItemInternal(item, pdfSettings, isColorMode, encryptionKey, passwordKey)
             if (docEntity != null) {
                 withContext(Dispatchers.Main) { onFinished(docEntity) }
             }
         }
     }
 
-    fun commitAllBatchItems(pdfSettings: PdfSettings, isColorMode: Boolean, onComplete: (Int) -> Unit = {}) {
+    fun commitAllBatchItems(
+        pdfSettings: PdfSettings,
+        isColorMode: Boolean,
+        encryptionKey: ByteArray? = null,
+        passwordKey: String? = null,
+        onComplete: (Int) -> Unit = {}
+    ) {
         scope.launch(Dispatchers.IO) {
             val list = _batchQueue.value.toList()
             var count = 0
             for (item in list) {
-                val doc = commitBatchItemInternal(item, pdfSettings, isColorMode)
+                val doc = commitBatchItemInternal(item, pdfSettings, isColorMode, encryptionKey, passwordKey)
                 if (doc != null) count++
             }
             withContext(Dispatchers.Main) { onComplete(count) }

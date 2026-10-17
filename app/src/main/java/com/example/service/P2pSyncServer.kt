@@ -309,7 +309,7 @@ class P2pSyncServer(
                         put("deviceName", deviceNameProvider())
                         put("role", "Master-Peer")
                         put("version", "2.0")
-                        put("encryption", "Zero-Knowledge AES-256-GCM / TLS 1.3")
+                        put("encryption", "Zero-Knowledge AES-256-GCM / Authentifizierter Token-Sync")
                     }
                     sendJsonResponse(output, 200, json.toString())
                 }
@@ -823,7 +823,8 @@ class P2pSyncServer(
     ) {
         val destDir = File(context.filesDir, "Documents").apply { mkdirs() }
         val safeFileName = File(fileName).name.replace("[^a-zA-Z0-9._-]".toRegex(), "_")
-        val destFile = File(destDir, safeFileName)
+        val tempFile = File(destDir, "${docId}_${safeFileName}.tmp")
+        val destFile = File(destDir, "${docId}_$safeFileName")
 
         if (!destFile.canonicalPath.startsWith(destDir.canonicalPath)) {
             return sendJsonResponse(output, 400, JSONObject().put("error", "Ungültiger Dateiname (Path Traversal)").toString())
@@ -833,7 +834,7 @@ class P2pSyncServer(
         var bytesWritten = 0
 
         try {
-            FileOutputStream(destFile).use { fos ->
+            FileOutputStream(tempFile).use { fos ->
                 if (initialBytes.isNotEmpty()) {
                     fos.write(initialBytes)
                     digest.update(initialBytes)
@@ -851,18 +852,24 @@ class P2pSyncServer(
                 }
             }
         } catch (e: Exception) {
-            destFile.delete()
+            tempFile.delete()
             return sendJsonResponse(output, 500, JSONObject().put("error", "Schreibfehler: ${e.message}").toString())
         }
 
         val actualChecksum = digest.digest().joinToString("") { "%02x".format(it) }
         if (expectedChecksum.isNotBlank() && !actualChecksum.equals(expectedChecksum, ignoreCase = true)) {
-            destFile.delete()
+            tempFile.delete()
             return sendJsonResponse(output, 400, JSONObject().apply {
                 put("error", "Prüfsummenfehler: Datei während der Übertragung beschädigt.")
                 put("expected", expectedChecksum)
                 put("actual", actualChecksum)
             }.toString())
+        }
+
+        if (destFile.exists()) destFile.delete()
+        if (!tempFile.renameTo(destFile)) {
+            tempFile.delete()
+            return sendJsonResponse(output, 500, JSONObject().put("error", "Atomarer Commit der Datei fehlgeschlagen").toString())
         }
 
         sendJsonResponse(output, 200, JSONObject().apply {
@@ -872,11 +879,28 @@ class P2pSyncServer(
         }.toString())
     }
 
-    private fun verifyAuth(headers: Map<String, String>): Boolean {
-        val authHeader = headers["authorization"] ?: return false
-        val token = authHeader.removePrefix("Bearer ").trim()
+    private fun verifyAuth(req: HttpRequestData): Boolean {
+        val signature = req.headers["x-mydoc-signature"] ?: return false
+        val timestampStr = req.headers["x-mydoc-timestamp"] ?: return false
+        val nonce = req.headers["x-mydoc-nonce"] ?: return false
+        
+        // 1. Replay Protection: Zeitfenster von 60 Sekunden
+        val timestamp = timestampStr.toLongOrNull() ?: 0L
+        val now = System.currentTimeMillis()
+        if (Math.abs(now - timestamp) > 60000) {
+            Log.w("P2pSyncServer", "Auth abgelehnt: Request-Zeitstempel zu alt ($timestamp vs $now)")
+            return false
+        }
+        
+        // 2. Signatur prüfen gegen alle gekoppelten Geräte
+        val sigBase = "${req.method}|${req.path}|$timestampStr|$nonce"
         val paired = getPairedDevices()
-        return paired.any { it.isAuthorized && P2pSyncSecurityService.isTokenEqual(it.sharedSecret, token) }
+        
+        return paired.any { dev ->
+            if (!dev.isAuthorized) return@any false
+            val expectedSig = P2pSyncSecurityService.calculateHmac(sigBase, dev.sharedSecret)
+            P2pSyncSecurityService.isTokenEqual(expectedSig, signature)
+        }
     }
 
     private fun sendJsonResponse(output: OutputStream, statusCode: Int, json: String) {
@@ -1327,11 +1351,16 @@ class P2pSyncServer(
          * Sicherheits-Check: Erlaubt nur Verbindungen aus dem privaten lokalen Netzwerk (RFC 1918).
          */
         fun isLocalIp(ip: String): Boolean {
-            return ip == "127.0.0.1" || 
-                   ip == "0:0:0:0:0:0:0:1" ||
-                   ip.startsWith("192.168.") || 
-                   ip.startsWith("10.") || 
-                   (ip.startsWith("172.") && ip.substring(4, 6).toIntOrNull() in 16..31)
+            if (ip == "127.0.0.1" || ip == "0:0:0:0:0:0:0:1" || ip == "::1") return true
+            if (ip.startsWith("192.168.") || ip.startsWith("10.")) return true
+            if (ip.startsWith("172.")) {
+                val parts = ip.split(".")
+                if (parts.size >= 2) {
+                    val second = parts[1].toIntOrNull() ?: 0
+                    return second in 16..31
+                }
+            }
+            return false
         }
     }
 }
