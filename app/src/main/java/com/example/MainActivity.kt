@@ -28,6 +28,9 @@ open class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        try {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        } catch (_: Throwable) {}
         // Init moved to DocAnizerApp.onCreate()
         try {
             handleWidgetIntent(intent)
@@ -64,7 +67,7 @@ open class MainActivity : FragmentActivity() {
                 android.os.Build.DEVICE.startsWith("generic")
 
             androidx.compose.runtime.LaunchedEffect(isAppUnlocked, vaultStatus.isUnencryptedMode) {
-                if (isEmulator) {
+                if (com.example.BuildConfig.DEBUG || isEmulator) {
                     window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
                 } else if (!isAppUnlocked || !vaultStatus.isUnencryptedMode) {
                     window.setFlags(
@@ -83,7 +86,7 @@ open class MainActivity : FragmentActivity() {
                 else -> systemDark
             }
 
-            var showSplash by rememberSaveable { mutableStateOf(true) }
+            var showSplash by rememberSaveable { mutableStateOf(!com.example.BuildConfig.DEBUG) }
 
             MyApplicationTheme(
                 darkTheme = isDark,

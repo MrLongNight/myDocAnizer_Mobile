@@ -1423,7 +1423,7 @@ object Bip39Engine {
     fun entropyToMnemonic(entropy: ByteArray): List<String> {
         val sha256 = MessageDigest.getInstance("SHA-256").digest(entropy)
         val checksumBits = 4 // für 128 Bits Entropie
-        val checksum = (sha256[0].toInt() ushr 4) and 0x0F
+        val checksum = (sha256[0].toInt() and 0xFF) ushr 4
 
         // 132 Bits = 12 x 11-Bit Indizes
         val bits = BooleanArray(132)
@@ -1479,7 +1479,7 @@ object Bip39Engine {
         }
 
         val sha256 = MessageDigest.getInstance("SHA-256").digest(entropy)
-        val expectedChecksum = (sha256[0].toInt() ushr 4) and 0x0F
+        val expectedChecksum = (sha256[0].toInt() and 0xFF) ushr 4
         return checksum == expectedChecksum
     }
 
