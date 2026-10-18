@@ -10,11 +10,11 @@ import org.junit.Test
 
 class LockManagerTest {
     @Test
-    fun `configured vault starts locked even when debug app shell is unlocked`() {
+    fun `configured vault and app content start locked even in debug builds`() {
         LockManager.resetForTests()
         LockManager.initialize(vaultConfigured = true, appLockRequired = false, debugBuild = true)
         assertEquals(VaultSessionLockState.LOCKED, LockManager.snapshot.value.vault)
-        assertEquals(AppSessionLockState.UNLOCKED, LockManager.snapshot.value.app)
+        assertEquals(AppSessionLockState.LOCKED, LockManager.snapshot.value.app)
         assertFalse(LockManager.isVaultUnlocked())
     }
 
