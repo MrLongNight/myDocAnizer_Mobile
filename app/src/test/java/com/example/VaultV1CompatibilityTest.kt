@@ -49,16 +49,27 @@ class VaultV1CompatibilityTest {
     }
 
     @Test
-    fun `test argon2id derivation with reference values`() {
-        // Da Argon2id rechenintensiv ist, prüfen wir hier nur die Konsistenz der Implementierung
+    fun `test legacy argon2id parameters remain deterministic`() {
         val password = "master-password"
         val salt = "fixed-salt-16-bytes".toByteArray().copyOf(16)
-        
-        val key1 = Argon2idEngine.deriveKey(password.toCharArray(), salt, iterations = 1, memoryKb = 1024)
-        val key2 = Argon2idEngine.deriveKey(password.toCharArray(), salt, iterations = 1, memoryKb = 1024)
-        
+
+        val key1 = Argon2idEngine.deriveKey(password.toCharArray(), salt, iterations = 2, memoryKb = 16384)
+        val key2 = Argon2idEngine.deriveKey(password.toCharArray(), salt, iterations = 2, memoryKb = 16384)
+
         assertArrayEquals(key1, key2)
         assertEquals(32, key1.size)
+    }
+
+    @Test
+    fun `test argon2id rejects weak and clamped parameters`() {
+        val password = "master-password".toCharArray()
+        val salt = ByteArray(16) { it.toByte() }
+        assertThrows(IllegalArgumentException::class.java) {
+            Argon2idEngine.deriveKey(password, salt, iterations = 1, memoryKb = 1024)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            Argon2idEngine.deriveKey(password, salt, iterations = 2, memoryKb = 16385)
+        }
     }
 
     @Test
