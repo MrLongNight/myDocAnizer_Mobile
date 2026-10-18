@@ -844,6 +844,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
      * Stellt den DEK aus einer 12-Wörter-Phrase wieder her.
      */
     fun recoverDekWithBip39(words: List<String>): ByteArray? {
+        if (!authenticationBackoff.isAllowed()) return null
+        val result = recoverDekWithBip39Unchecked(words)
+        authenticationBackoff.recordResult(result != null)
+        return result
+    }
+
+    private fun recoverDekWithBip39Unchecked(words: List<String>): ByteArray? {
         val header = _vaultHeader.value ?: return false.let { null }
         if (!validateBip39Mnemonic(words)) return null
         val encRecovery = header.encryptedDekByRecoveryBase64 ?: return null
@@ -1060,7 +1067,17 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /**
      * Stellt den DEK aus dem QR-Payload des Emergency Kits wieder her.
      */
-    fun recoverDekFromEmergencyKit(
+    fun recoverDekFromEmergencyKit(qrPayload: String, recoveryPassphrase: CharArray, expectedVaultId: String): ByteArray? {
+        if (!authenticationBackoff.isAllowed()) {
+            recoveryPassphrase.fill('\u0000')
+            return null
+        }
+        val result = recoverDekFromEmergencyKitUnchecked(qrPayload, recoveryPassphrase, expectedVaultId)
+        authenticationBackoff.recordResult(result != null)
+        return result
+    }
+
+    private fun recoverDekFromEmergencyKitUnchecked(
         qrPayload: String,
         recoveryPassphrase: CharArray,
         expectedVaultId: String
@@ -1128,8 +1145,14 @@ class VaultSecurityManager private constructor(private val context: Context) {
      * Rekonstruiert den 32-Byte DEK aus beliebigen 2 der 3 Shamir-Teilschlüssel.
      */
     fun recoverDekWithShamir(shareA: String, shareB: String): ByteArray? {
-        return ShamirEngine.combine2of3(shareA.trim(), shareB.trim())
+        if (!authenticationBackoff.isAllowed()) return null
+        val result = recoverDekWithShamirUnchecked(shareA, shareB)
+        authenticationBackoff.recordResult(result != null)
+        return result
     }
+
+    private fun recoverDekWithShamirUnchecked(shareA: String, shareB: String): ByteArray? =
+        ShamirEngine.combine2of3(shareA.trim(), shareB.trim())
 
     // =========================================================================
     // 6. ANDROID KEYSTORE BIOMETRISCHE 2FA-BINDUNG
@@ -1384,6 +1407,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
     }
 
     fun recoverDekWithRecoveryCode(code: String): ByteArray? {
+        if (!authenticationBackoff.isAllowed()) return null
+        val result = recoverDekWithRecoveryCodeUnchecked(code)
+        authenticationBackoff.recordResult(result != null)
+        return result
+    }
+
+    private fun recoverDekWithRecoveryCodeUnchecked(code: String): ByteArray? {
         val header = _vaultHeader.value ?: return null
         val encryptedBase64 = header.encryptedDekByRecoveryBase64 ?: return null
         val ivBase64 = header.recoveryDekIvBase64 ?: return null
