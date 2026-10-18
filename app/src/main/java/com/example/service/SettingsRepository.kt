@@ -29,6 +29,13 @@ class SettingsRepository(context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences("mydocanizer_prefs", Context.MODE_PRIVATE)
 
+    init {
+        if (!prefs.getBoolean("cloud_sync_auto_mirror_safe_default_v1", false)) {
+            prefs.edit().putBoolean("cloud_sync_auto_mirror", false)
+                .putBoolean("cloud_sync_auto_mirror_safe_default_v1", true).commit()
+        }
+    }
+
     // Ein-&Ausgaben Erfassung (ehemals Haushaltsbuch)
     private val _enableIncomeExpenseTracking = MutableStateFlow(
         prefs.getBoolean("enable_income_expense_tracking", prefs.getBoolean("enable_household_book", false))
@@ -1223,7 +1230,7 @@ class SettingsRepository(context: Context) {
             webDavPassword = prefs.getString("cloud_sync_webdav_pass", "") ?: "",
             syncTrigger = prefs.getString("cloud_sync_trigger", "AUTO_AFTER_SCAN") ?: "AUTO_AFTER_SCAN",
             syncWifiOnly = prefs.getBoolean("cloud_sync_wifi_only", true),
-            autoMirrorToBackupDir = prefs.getBoolean("cloud_sync_auto_mirror", true),
+            autoMirrorToBackupDir = prefs.getBoolean("cloud_sync_auto_mirror", false),
             isAirGappedStrict = prefs.getBoolean("cloud_sync_air_gapped", false),
             usbSyncWarningOnScan = prefs.getBoolean("cloud_sync_usb_warning", true)
         )
