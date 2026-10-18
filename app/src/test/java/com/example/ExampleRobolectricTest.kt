@@ -1350,6 +1350,14 @@ class ExampleRobolectricTest {
     )
     assertNotNull(recovered)
     assertTrue(recovered!!.contentEquals(setupRes.dek))
+    val fallbackPayloadBase64 = android.util.Base64.encodeToString(payloadBytes, android.util.Base64.NO_WRAP)
+    val recoveredFromFallback = secManager.recoverDekFromEmergencyKit(
+      fallbackPayloadBase64,
+      recoveryPassphrase.toCharArray(),
+      setupRes.vaultId
+    )
+    assertNotNull(recoveredFromFallback)
+    assertTrue(recoveredFromFallback!!.contentEquals(setupRes.dek))
     assertNull(
       secManager.recoverDekFromEmergencyKit(
         String(payloadBytes, Charsets.UTF_8),
@@ -1368,6 +1376,7 @@ class ExampleRobolectricTest {
     pdfBytes.fill(0)
     setupRes.dek.fill(0)
     recovered!!.fill(0)
+    recoveredFromFallback!!.fill(0)
   }
 
   @Test
