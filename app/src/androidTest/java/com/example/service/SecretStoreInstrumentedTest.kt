@@ -59,6 +59,27 @@ class SecretStoreInstrumentedTest {
     }
 
     @Test
+    fun ciphertextCannotBeMovedBetweenSecretNames() {
+        val secret = "synthetic-aad-test".toByteArray(Charsets.UTF_8)
+        assertTrue(store.put("source_name", secret))
+        val prefs = context.getSharedPreferences("mydocanizer_secret_store", Context.MODE_PRIVATE)
+        val encoded = prefs.getString("secret_v1_source_name", null)
+            ?: throw AssertionError("encrypted test payload missing")
+        prefs.edit().putString("secret_v1_destination_name", encoded).commit()
+        assertNull(store.get("destination_name"))
+        secret.fill(0)
+    }
+
+    @Test
+    fun removeDeletesStoredCiphertext() {
+        val secret = "synthetic-remove-test".toByteArray(Charsets.UTF_8)
+        assertTrue(store.put("remove_test", secret))
+        assertTrue(store.remove("remove_test"))
+        assertNull(store.get("remove_test"))
+        secret.fill(0)
+    }
+
+    @Test
     fun missingKeystoreKeyFailsClosed() {
         val secret = "synthetic-key-loss-test".toByteArray(Charsets.UTF_8)
         assertTrue(store.put("key_loss_test", secret))
