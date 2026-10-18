@@ -7,6 +7,7 @@ import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import javax.crypto.Cipher
 
 class BiometricAuthManager(private val context: Context) {
 
@@ -101,4 +102,56 @@ class BiometricAuthManager(private val context: Context) {
             onError("Fehler beim Starten der Authentifizierung: ${e.localizedMessage}")
         }
     }
+    /**
+     * Authentifiziert eine konkrete Android-Keystore-Cipher-Operation.
+     * Der Callback erhält nur die Cipher-Instanz aus dem erfolgreichen CryptoObject.
+     */
+    fun showBiometricPromptForCipher(
+        activity: FragmentActivity,
+        cipher: Cipher,
+        title: String,
+        subtitle: String,
+        onSuccess: (Cipher) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        if (activity.isFinishing || activity.isDestroyed) {
+            onError("Aktivität wurde beendet")
+            return
+        }
+        val prompt = BiometricPrompt(
+            activity,
+            ContextCompat.getMainExecutor(activity),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    val authenticatedCipher = result.cryptoObject?.cipher
+                    if (authenticatedCipher == null) {
+                        onError("Android hat keine authentifizierte Cipher-Operation zurückgegeben")
+                    } else {
+                        onSuccess(authenticatedCipher)
+                    }
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    onError(errString.toString())
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                }
+            }
+        )
+        try {
+            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .setAllowedAuthenticators(BIOMETRIC_STRONG)
+                .build()
+            prompt.authenticate(promptInfo, BiometricPrompt.CryptoObject(cipher))
+        } catch (e: Exception) {
+            onError("Biometrische Schlüsseloperation konnte nicht gestartet werden")
+        }
+    }
+
 }
