@@ -13,6 +13,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -1172,74 +1176,33 @@ class VaultSecurityManager private constructor(private val context: Context) {
         return hash.joinToString("") { "%02x".format(it) }
     }
 
-    private fun generateQrCodeBitmap(text: String, width: Int, height: Int): Bitmap? {
+    internal fun generateQrCodeBitmap(text: String, width: Int, height: Int): Bitmap? {
+        if (text.isBlank() || width <= 0 || height <= 0) return null
+        val payloadBytes = text.toByteArray(Charsets.UTF_8)
+        if (payloadBytes.size > MAX_QR_PAYLOAD_BYTES) return null
         return try {
-            val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(bmp)
-            canvas.drawColor(AndroidColor.WHITE)
-
-            val paint = Paint().apply {
-                color = AndroidColor.BLACK
-                style = Paint.Style.FILL
-            }
-
-            // Deterministischer 29x29 QR-Matrix Generator (Finder- und Timing-Patterns)
-            val modules = 29
-            val matrix = Array(modules) { BooleanArray(modules) }
-
-            fun drawFinder(col: Int, row: Int) {
-                for (r in 0..6) {
-                    for (c in 0..6) {
-                        val isBorder = (r == 0 || r == 6 || c == 0 || c == 6)
-                        val isInner = (r in 2..4 && c in 2..4)
-                        matrix[row + r][col + c] = isBorder || isInner
+            val hints = mapOf(
+                EncodeHintType.CHARACTER_SET to "UTF-8",
+                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
+                EncodeHintType.MARGIN to 4
+            )
+            val matrix = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, width, height, hints)
+            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+                for (y in 0 until height) {
+                    for (x in 0 until width) {
+                        bitmap.setPixel(x, y, if (matrix[x, y]) AndroidColor.BLACK else AndroidColor.WHITE)
                     }
                 }
             }
-            drawFinder(0, 0)
-            drawFinder(modules - 7, 0)
-            drawFinder(0, modules - 7)
-
-            for (r in 0..4) {
-                for (c in 0..4) {
-                    val isBorder = (r == 0 || r == 4 || c == 0 || c == 4)
-                    val isCenter = (r == 2 && c == 2)
-                    matrix[modules - 9 + r][modules - 9 + c] = isBorder || isCenter
-                }
-            }
-
-            for (i in 8 until modules - 8) {
-                matrix[6][i] = (i % 2 == 0)
-                matrix[i][6] = (i % 2 == 0)
-            }
-
-            val hashBytes = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
-            var bitIdx = 0
-            for (r in 0 until modules) {
-                for (c in 0 until modules) {
-                    val inFinder = (r < 8 && c < 8) || (r < 8 && c >= modules - 8) || (r >= modules - 8 && c < 8)
-                    val inTiming = (r == 6 || c == 6)
-                    val inAlign = (r in (modules - 9)..(modules - 5) && c in (modules - 9)..(modules - 5))
-                    if (!inFinder && !inTiming && !inAlign) {
-                        val byteVal = hashBytes[(bitIdx / 8) % hashBytes.size].toInt()
-                        matrix[r][c] = ((byteVal ushr (bitIdx % 8)) and 1) != 0
-                        bitIdx++
-                    }
-                }
-            }
-
-            val moduleSize = width.toFloat() / modules
-            for (r in 0 until modules) {
-                for (c in 0 until modules) {
-                    if (matrix[r][c]) {
-                        canvas.drawRect(c * moduleSize, r * moduleSize, (c + 1) * moduleSize, (r + 1) * moduleSize, paint)
-                    }
-                }
-            }
-            bmp
         } catch (e: Exception) {
             null
+        } finally {
+            payloadBytes.fill(0)
         }
+    }
+
+    companion object {
+        const val MAX_QR_PAYLOAD_BYTES = 2000
     }
 
     // =========================================================================
