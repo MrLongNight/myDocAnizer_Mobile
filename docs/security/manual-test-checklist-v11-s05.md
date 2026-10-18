@@ -80,9 +80,11 @@ Stand: 2026-10-18. **Diese Checkliste ist noch nicht ausgeführt.** Bitte die Te
 
 - [ ] **LEASE-1:** Automatisierte Tests ausführen: Lease-Array muss nach Callback auf null Bytes stehen.
 - [ ] **LEASE-2:** Gesperrter Tresor darf keine Lease liefern.
-- [ ] **LEASE-3:** Parallel eine Lease-Operation starten und sperren. Erwartung: Lock wartet auf den synchronen Lease-Block; danach ist keine neue Lease verfügbar.
+- [ ] **LEASE-3:** Synchrone Lease-Operation parallel starten und sperren. Erwartung: `lockVault()` wartet, bis der synchrone Callback beendet ist; danach ist keine neue Lease verfügbar.
+- [ ] **LEASE-3a:** Suspendierbare Datei-/Batchoperation starten, bis sie eine Key-Lease besitzt, und dann sperren. Erwartung: Lock verhindert sofort neue Leases; die bereits gestartete Operation darf den begrenzten Schreibvorgang abschließen oder kontrolliert abbrechen. Nach Ende/Abbruch muss die Lease-Kopie in `finally` auf null Bytes stehen. Dokumentieren, ob eine Dateioperation nach dem Sperrbefehl noch abgeschlossen wurde.
 - [ ] **LEASE-4:** Dokument-Import, PDF-Erzeugung, Batch-Commit und E-Mail-Import mit gesperrtem Tresor ausprobieren. Erwartung: sichere Ablehnung statt Klartext-/Fallback-Schreiben.
-- [ ] **LEASE-5:** Die noch verbliebenen Aufrufstellen von getActiveDek() sind im Prüfbericht dokumentiert und müssen in Folgearbeiten migriert werden.
+- [ ] **LEASE-5:** Die noch verbliebenen Aufrufstellen von `getActiveDek()` sind im Prüfbericht dokumentiert und müssen in Folgearbeiten migriert werden.
+- [ ] **LEASE-6:** Automatisierten Suspend-Lease-Test ausführen: Operation darf suspendieren, nach Lock werden keine neuen Leases ausgegeben und die bereits erteilte Lease-Kopie wird bei Rückkehr/Abbruch gelöscht.
 
 ## Abnahme
 
