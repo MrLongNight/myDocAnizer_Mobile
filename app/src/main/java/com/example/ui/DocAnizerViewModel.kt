@@ -3366,7 +3366,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     pageCount = 1
                 } else if (pdfBytes != null) {
                     // Reines PDF direkt wegschreiben via secureSave
-                    finalFile = DocumentStorageService.secureSave(
+                    finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                        finalFile = DocumentStorageService.secureSave(
                         context = context,
                         targetDir = targetDir,
                         internalFileName = internalName,
@@ -3377,6 +3378,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                             tempFile.writeBytes(pdfBytes)
                         }
                     )
+                    } ?: throw IllegalStateException("Vault is locked; refusing import write")
                     pageCount = 1
                 }
 
