@@ -182,7 +182,7 @@ Vor der manuellen Abnahme bitte den [Gesamt-Testplan aus Benutzersicht](security
 ## S08 – SecretStore-Grundkomponente — **[KERNKOMPONENTE ERSTELLT – INSTRUMENTATIONSTEST OFFEN]**
 **Prompt:** Baue einen testbaren `SecretStore` für langlebige Geheimnisse. Verwende AES-GCM mit einem nicht exportierbaren Android-Keystore-Key, eindeutiger Nonce, Formatversion und Integritätsprüfung. Dokumentiere die Authentifizierungsbindung des Keys und API-Level-Fallbacks. Ungültiger Tag oder Keystore-Fehler darf niemals Klartextfallback auslösen. In diesem Schritt nur API und Kernkomponente samt synthetischen Tests erstellen; bestehende Prefs noch nicht migrieren. **Abnahme:** Roundtrip, falscher Tag, fehlender/invalidierter Key und Fehlerpfade getestet.
 
-## S09 – Legacy-Secrets verlustfrei migrieren
+## S09 – Legacy-Secrets verlustfrei migrieren — **[BLOCKIERT – S08-TESTLAUF OFFEN]**
 **Abhängigkeit:** S08.  
 **Prompt:** Migriere nur die in S01 konkret aufgelisteten Klartext-Secrets in den SecretStore. Pro Wert: erkennen, verschlüsselt schreiben, entschlüsselten Roundtrip verifizieren und erst danach Original entfernen. Migration muss idempotent sein und bei Fehler den ursprünglichen Wert erhalten, ohne unkontrollierte doppelte Klartextkopien zu hinterlassen. `sync_master_password` erst entfernen, wenn die in D/P/C betroffenen Verbraucher nachweislich umgestellt sind; sonst nur dokumentierte Zwischenstufe mit klarer Restabhängigkeit. **Abnahme:** erster Start, zweiter Start, Prozessabbruch und Keyfehler getestet.
 
