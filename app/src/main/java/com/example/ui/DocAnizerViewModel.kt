@@ -2389,9 +2389,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                                 if (!tempTarget.isFile || tempTarget.length() == 0L) {
                                     throw java.io.IOException("Verschlüsselte Spiegelung ist unvollständig.")
                                 }
-                                if (!tempTarget.renameTo(encTarget)) {
-                                    throw java.io.IOException("Verschlüsselte Spiegelung kann nicht atomar übernommen werden.")
-                                }
+                                // Both files are in the same private directory; rename is atomic on Android/Linux.
+                                android.system.Os.rename(tempTarget.absolutePath, encTarget.absolutePath)
                             } finally {
                                 if (tempTarget.exists()) tempTarget.delete()
                             }
