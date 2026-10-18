@@ -83,18 +83,18 @@
 
 # V – Tresor, Schlüsselableitung und Recovery
 
-## V01 – Vault-Krypto-Inventar und v1-Fixtures (AUDIT/TEST) — **[ERLEDIGT]**
+## V01 – Vault-Krypto-Inventar und v1-Fixtures (AUDIT/TEST) — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Prompt:** Inventarisiere ausschließlich die aktuelle Vault-Krypto: `VaultHeader`, v1-Serialisierung, Salt/KDF-Parameter, KEK/DEK-Verpackung, Unlock-/Biometriepfade, Recovery, `activeDek` und alle Aufrufer. Lege – ohne produktive Logik zu ändern – synthetische Test-Fixtures für mindestens einen gültigen v1-Header, falsches Passwort und manipulierte Daten an. Dokumentiere das genaue Altformat, damit Kompatibilität später testbar ist. Gib keine echten Schlüssel aus. **Abnahme:** Tests/Fixtures reproduzieren das bestehende Format; keine Formatmigration und kein Entfernen von Altcode in diesem Schritt.
 
-## V02 – Geprüfte Argon2id-Implementierung — **[ERLEDIGT]**
+## V02 – Geprüfte Argon2id-Implementierung — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Abhängigkeit:** V01.  
 **Prompt:** Ersetze ausschließlich die bisherige Argon2id-Engine durch eine gepflegte, versionsfixierte Bibliotheksimplementierung (z. B. geprüfte Bouncy-Castle-API, nach Kompatibilitätsprüfung). Behalte zunächst die exakt benötigte v1-Ableitung als klar getrennten Legacypfad, sofern sie für Entsperrung alter Vaults erforderlich ist. Für neue Parameter gilt mindestens `m=19 MiB`, `t=2`, `p=1`; Einheiten und API-Semantik verifizieren. Begrenze/validiere Parameter vor der speicherintensiven Ableitung und schütze vor parallelen RAM-Spitzen. Füge bekannte Referenzvektor-Tests hinzu. **Nicht tun:** Headerformat oder Migration ändern. **Abnahme:** Legacy-Fixture bleibt lesbar; korrekte Referenzvektoren; ungültige/überzogene Parameter werden früh abgelehnt.
 
-## V03 – VaultHeader v2: Datenmodell und Parser — **[ERLEDIGT]**
+## V03 – VaultHeader v2: Datenmodell und Parser — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Abhängigkeit:** V01, V02.  
 **Prompt:** Entwirf und implementiere nur die typisierte v2-Headerstruktur samt strengem Parser/Validator. Speichere explizit Formatversion, KDF-/Algorithmus-ID, Parameter, Salt, IV/Nonce- und Taglängen sowie Vault-ID mit klar definierten Obergrenzen. Unbekannte Versionen, abgeschnittene Daten, unmögliche Längen und ungültige Parameter müssen abgewiesen werden. Bestehende v1-Daten weiter nur lesend unterstützen. Noch keine automatische v1→v2-Migration und keine Änderung an Biometrie oder TOTP. **Abnahme:** Roundtrip-Tests für v2, Negativtests für manipulierte/ungültige Header und Regressionstest für v1.
 
-## V04 – Header-Authentifizierung und AAD — **[ERLEDIGT]**
+## V04 – Header-Authentifizierung und AAD — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Abhängigkeit:** V03.  
 **Prompt:** Implementiere ausschließlich die AEAD-Operationen zum Verpacken/Öffnen des zufälligen 256-Bit-DEK im v2-Header. Nutze geprüfte AES-GCM/JCA- oder gleichwertige AEAD-Primitiven korrekt; pro Verschlüsselung neuen zufälligen Nonce/IV generieren und niemals wiederverwenden. Lege fest und teste, welche Vault-ID-, Versions- und KDF-Metadaten als AAD gebunden werden. Falscher Schlüssel, falscher AAD oder veränderter Tag müssen fehlschlagen, ohne Teilresultat auszugeben. Keine automatische Migration. **Abnahme:** gültiger Roundtrip; Manipulations- und Nonceformattests; keine geheime Materialausgabe in Logs.
 
@@ -113,16 +113,16 @@
 **Abhängigkeit:** V05/V06 und freigegebener Sicherheitsentwurf.  
 **Prompt:** Integriere den bereits getesteten TOTP-Kern in den echten Vault-Unlock-/DEK-Freigabepfad der genehmigten ADR. Ein erfolgreiches Passwort allein darf den als 2FA geschützten Schlüssel nicht freigeben. Verhindere, dass andere öffentliche APIs oder ein UI-Callback diese Prüfung umgehen. Verknüpfe Replay-/Rate-Limit-Zustand mit S06, ohne parallele Backoff-Implementierung anzulegen. **Abnahme:** End-to-End-Negativtests für Passwort ohne TOTP, falschen/abgelaufenen/wiederverwendeten Code und korrekte Kombination; UI bezeichnet die Funktion erst danach als 2FA.
 
-## V07 – BIP-39-Mnemonic-Validierung — **[ERLEDIGT]**
+## V07 – BIP-39-Mnemonic-Validierung — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Prompt:** Isoliere die BIP-39-Funktionalität und prüfe Wortliste (genau 2048 Wörter), Entropie, Checksumme und Mnemonic-Validierung anhand offizieller Referenzvektoren. Korrigiere ausschließlich Fehler in diesem Modul; wenn Eigenbau-Logik die Referenzvektoren nicht zuverlässig erfüllt, ersetze sie durch eine geprüfte, kompatible Bibliothek. Erzeuge nur synthetische Testdaten. **Nicht tun:** Shamir, PDF/QR oder Headerformat verändern. **Abnahme:** gültige/ungültige Mnemonics, Grenzfälle und offizielle Vektoren sind getestet.
 
-## V08 – Shamir-Share-Konsistenz — **[ERLEDIGT]**
+## V08 – Shamir-Share-Konsistenz — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Prompt:** Prüfe den vorhandenen Shamir-2-aus-3-Code und seine Hashspeicherung. Stelle durch Tests sicher, dass die drei gehashten Shares exakt dieselben Bytefolgen sind, die später an den Nutzer ausgegeben werden, und dass jedes zulässige Paar den ursprünglichen synthetischen DEK reproduziert. Verwende offizielle oder klar bezeichnete Referenzvektoren. Ersetze den Eigenbau, falls er nicht belastbar gegen Referenzen besteht. **Nicht tun:** Recovery-PDF oder Verschlüsselungsformat in diesem Schritt ändern. **Abnahme:** jedes gültige Paar rekonstruiert exakt denselben Schlüssel; vertauschte, gekürzte und manipulierte Shares scheitern.
 
-## V09 – Recovery-Format als ADR (AUDIT/GATE) — **[ERLEDIGT]**
+## V09 – Recovery-Format als ADR (AUDIT/GATE) — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Prompt:** Entwirf ein versioniertes Recovery-Payload für ein Notfall-Kit, ohne es schon zu implementieren. Definiere Entropiequelle, KDF samt Parametern, Salt, AEAD, AAD, Nonce, Versionierung, Authentifizierungsfehler, Export-/Importworkflow und Schutz vor offline kopierten Kits. Ein sechsstelliger PIN reicht nicht als Schutz für ein offline kopierbares Kit. Begründe Passphrase-Anforderungen und Recovery bei Formatversionen. Beschreibe explizit, dass der rohe DEK niemals direkt in PDF, QR, UI, Clipboard oder Logs ausgegeben wird. **Abnahme:** ADR mit Angriffsmodell, Byteformat und Testfällen; Implementierung erst nach Freigabe.
 
-## V10 – Recovery-Payload-Kern — **[ERLEDIGT]**
+## V10 – Recovery-Payload-Kern — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Abhängigkeit:** V09 und Freigabe der ADR.  
 **Prompt:** Implementiere nur Encode/Decode des genehmigten Recovery-Payload-Formats als eigenständige, testbare Komponente. Schlüsselableitung und Authenticated Encryption ausschließlich über geprüfte Primitive. Versions-/Längenprüfung, falsche Passphrase, veränderte Ciphertextbytes und ungültiger Tag müssen kontrolliert scheitern. Nutze ausschließlich synthetische Schlüssel. Keine PDF-, QR- oder UI-Änderungen in diesem Micro-AP. **Abnahme:** bytegenaue Roundtrip-Tests, Negativtests und kein Roh-DEK in Fehlermeldungen/Logs.
 
