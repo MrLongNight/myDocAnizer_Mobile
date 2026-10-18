@@ -4,6 +4,9 @@ import android.app.Application
 import android.util.Log
 import com.example.service.AppAuditLogger
 import com.example.service.LogCategory
+import com.example.service.VaultAutoLockObserver
+import com.example.service.VaultSecurityManager
+import androidx.lifecycle.ProcessLifecycleOwner
 
 /**
  * Anwendungs-Klasse für myDocAnizer-Mobile:
@@ -14,6 +17,9 @@ class DocAnizerApp : Application() {
         super.onCreate()
         try {
             AppAuditLogger.init(this)
+            ProcessLifecycleOwner.get().lifecycle.addObserver(
+                VaultAutoLockObserver(VaultSecurityManager.getInstance(this))
+            )
             try {
                 com.example.ui.components.SplashSoundSynthesizer.precompute(this)
             } catch (_: Throwable) {}
