@@ -338,9 +338,11 @@ fun AppLockScreen(
                 OutlinedButton(
                     onClick = { 
                         if (vaultStatus.isUnencryptedMode) {
-                            viewModel.completeVaultUnlock()
+                            if (!viewModel.unlockUnencryptedVault()) {
+                                errorMessage = "Unverschlüsselter Tresor konnte nicht sicher geladen werden."
+                            }
                         } else {
-                            showPasswordDialog = true 
+                            showPasswordDialog = true
                         }
                     },
                     modifier = Modifier
