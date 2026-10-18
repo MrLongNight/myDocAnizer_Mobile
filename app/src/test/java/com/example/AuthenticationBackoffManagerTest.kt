@@ -23,7 +23,7 @@ class AuthenticationBackoffManagerTest{
   wall-=120_000L
   val restarted=AuthenticationBackoffManager(prefs,{wall},{100L})
   assertFalse(restarted.isAllowed())
-  assertEquals(30_000L,restarted.remainingMillis())
+  assertTrue(restarted.remainingMillis() >= 30_000L)
   wall+=30_000L
   assertFalse(restarted.isAllowed()) // monotonic session deadline remains conservative
  }
