@@ -3,6 +3,7 @@ package com.example.service
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
+import android.os.Build
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.security.keystore.KeyGenParameterSpec
@@ -187,7 +188,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
 
     companion object {
         const val KEYSTORE_PROVIDER = "AndroidKeyStore"
-        const val BIOMETRIC_KEY_ALIAS = "myDocAnizer_vault_biometric_key_v1"
+        const val BIOMETRIC_KEY_ALIAS = "myDocAnizer_vault_biometric_key_v2"
         const val DEK_SIZE_BYTES = 32 // AES-256
         const val GCM_IV_SIZE_BYTES = 12
         const val GCM_TAG_SIZE_BITS = 128
@@ -470,7 +471,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             argon2MemoryKb = 19456,
             encryptedDekByPasswordBase64 = Base64.encodeToString(encryptedDekPassword, Base64.NO_WRAP),
             passwordDekIvBase64 = Base64.encodeToString(ivPassword, Base64.NO_WRAP),
-            biometric2FaEnabled = enableBiometrics,
+            biometric2FaEnabled = enableBiometrics && encryptedDekBioBase64 != null,
             encryptedDekByBiometricsBase64 = encryptedDekBioBase64,
             biometricDekIvBase64 = ivBioBase64,
             recoveryMethod = recoveryMethod,
@@ -559,21 +560,81 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /**
      * Entsperrt den Tresor via Android KeyStore Biometrie.
      */
-    fun unlockWithBiometrics(): Boolean {
-        val header = _vaultHeader.value ?: return false
-        if (!header.biometric2FaEnabled) return false
-        val encBio = header.encryptedDekByBiometricsBase64 ?: return false
-        val ivBio = header.biometricDekIvBase64 ?: return false
+    @Deprecated("Use createBiometricUnlockCipher + BiometricPrompt.CryptoObject + completeBiometricUnlock")
+    fun unlockWithBiometrics(): Boolean = false
+
+    /** Creates a Keystore-backed encryption Cipher; the actual encryption requires biometric auth. */
+    fun createBiometricEnrollmentCipher(): Cipher? {
+        if (activeDek == null) return null
         return try {
-            val ciphertext = Base64.decode(encBio, Base64.NO_WRAP)
-            val iv = Base64.decode(ivBio, Base64.NO_WRAP)
-            val dek = decryptDekWithKeyStore(ciphertext, iv)
-            if (dek != null) {
-                activeDek = dek
-                true
-            } else false
+            Cipher.getInstance("AES/GCM/NoPadding").apply {
+                init(Cipher.ENCRYPT_MODE, getOrCreateKeyStoreKey())
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Called only with the Cipher returned by a successful CryptoObject authentication callback. */
+    fun completeBiometricEnrollment(authenticatedCipher: Cipher): Boolean {
+        val header = _vaultHeader.value ?: return false
+        val dek = activeDek ?: return false
+        var encrypted: ByteArray? = null
+        var iv: ByteArray? = null
+        return try {
+            encrypted = authenticatedCipher.doFinal(dek)
+            iv = authenticatedCipher.iv
+            val updated = header.copy(
+                biometric2FaEnabled = true,
+                encryptedDekByBiometricsBase64 = Base64.encodeToString(encrypted, Base64.NO_WRAP),
+                biometricDekIvBase64 = Base64.encodeToString(iv, Base64.NO_WRAP)
+            )
+            saveVaultHeader(updated)
+            true
         } catch (e: Exception) {
             false
+        } finally {
+            encrypted?.fill(0)
+            iv?.fill(0)
+        }
+    }
+
+    /** Prepares the decryption operation to be authorized by BiometricPrompt.CryptoObject. */
+    fun createBiometricUnlockCipher(): Cipher? {
+        val header = _vaultHeader.value ?: return null
+        if (!header.biometric2FaEnabled) return null
+        val ivEncoded = header.biometricDekIvBase64 ?: return null
+        return try {
+            val iv = Base64.decode(ivEncoded, Base64.NO_WRAP)
+            val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
+            val key = (keyStore.getEntry(BIOMETRIC_KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
+                ?: return null
+            Cipher.getInstance("AES/GCM/NoPadding").apply {
+                init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_SIZE_BITS, iv))
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Completes DEK decryption only after Android returns the authenticated CryptoObject Cipher. */
+    fun completeBiometricUnlock(authenticatedCipher: Cipher): Boolean {
+        val header = _vaultHeader.value ?: return false
+        val encryptedBase64 = header.encryptedDekByBiometricsBase64 ?: return false
+        var ciphertext: ByteArray? = null
+        var dek: ByteArray? = null
+        return try {
+            ciphertext = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+            dek = authenticatedCipher.doFinal(ciphertext)
+            if (dek.size != DEK_SIZE_BYTES) return false
+            activeDek?.fill(0)
+            activeDek = dek.copyOf()
+            true
+        } catch (e: Exception) {
+            false
+        } finally {
+            ciphertext?.fill(0)
+            dek?.fill(0)
         }
     }
 
@@ -643,24 +704,20 @@ class VaultSecurityManager private constructor(private val context: Context) {
      */
     fun setBiometricsEnabled(enabled: Boolean): Boolean {
         val header = _vaultHeader.value ?: return false
-        val dek = activeDek ?: return false
+        if (enabled) {
+            // Enabling requires a user-authenticated Cipher and must use the explicit enrollment flow.
+            return false
+        }
         return try {
-            if (enabled) {
-                val bioPair = encryptDekWithKeyStore(dek) ?: return false
-                val updated = header.copy(
-                    biometric2FaEnabled = true,
-                    encryptedDekByBiometricsBase64 = Base64.encodeToString(bioPair.first, Base64.NO_WRAP),
-                    biometricDekIvBase64 = Base64.encodeToString(bioPair.second, Base64.NO_WRAP)
-                )
-                saveVaultHeader(updated)
-            } else {
-                val updated = header.copy(
+            saveVaultHeader(
+                header.copy(
                     biometric2FaEnabled = false,
                     encryptedDekByBiometricsBase64 = null,
                     biometricDekIvBase64 = null
                 )
-                saveVaultHeader(updated)
-            }
+            )
+            val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
+            if (keyStore.containsAlias(BIOMETRIC_KEY_ALIAS)) keyStore.deleteEntry(BIOMETRIC_KEY_ALIAS)
             true
         } catch (e: Exception) {
             false
@@ -983,14 +1040,22 @@ class VaultSecurityManager private constructor(private val context: Context) {
         }
 
         val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE_PROVIDER)
-        val spec = KeyGenParameterSpec.Builder(
+        val specBuilder = KeyGenParameterSpec.Builder(
             BIOMETRIC_KEY_ALIAS,
             KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
         )
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-            .build()
+            .setUserAuthenticationRequired(true)
+            .setInvalidatedByBiometricEnrollment(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            specBuilder.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+        } else {
+            @Suppress("DEPRECATION")
+            specBuilder.setUserAuthenticationValidityDurationSeconds(-1)
+        }
+        val spec = specBuilder.build()
         keyGenerator.init(spec)
         return keyGenerator.generateKey()
     }
