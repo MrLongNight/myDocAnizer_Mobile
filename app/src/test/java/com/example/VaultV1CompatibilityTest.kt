@@ -98,5 +98,7 @@ class VaultV1CompatibilityTest {
         assertArrayEquals(secret, ShamirEngine.combine2of3(shares[0], shares[2]))
         assertArrayEquals(secret, ShamirEngine.combine2of3(shares[1], shares[2]))
         assertNull(ShamirEngine.combine2of3(shares[0], shares[0]))
+        assertNull(ShamirEngine.combine2of3("prefix" + shares[0], shares[1]))
+        assertNull(ShamirEngine.combine2of3(shares[0].dropLast(4), shares[1]))
     }
 }
