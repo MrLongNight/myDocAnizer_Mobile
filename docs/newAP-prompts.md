@@ -4,6 +4,10 @@
 **Ausgangsbasis:** Die acht erweiterten APs aus `myDocAnizer_Expanded_Prompts.md`. Die darin genannten Codebefunde sind Arbeitshypothesen, die im aktuellen Codebestand verifiziert werden müssen.  
 **Ziel:** Große, sicherheitskritische Pakete in kleine, einzeln abnehmbare Änderungen (Micro-APs) zerlegen.
 
+## Zentrale Benutzertest-Checkliste
+
+Vor der manuellen Abnahme bitte den [Gesamt-Testplan aus Benutzersicht](security/benutzer-testplan-gesamt.md) verwenden. Er legt die abhängige Reihenfolge der Tests fest und verknüpft die Detailpläne V01–V10 und V11–S05. **V14 bleibt ausdrücklich blockiert** und darf nicht manuell getestet oder migriert werden, solange die v2-Laufzeitintegration fehlt.
+
 ## Workflow für Google AI Studio + manuelle Patch-Übernahme
 
 1. **Ein Lauf = ein Micro-AP:** Sende den Masterprompt aus Abschnitt 1 zusammen mit genau einem Micro-AP. Keine Sammelaufträge und keine ungefragten Folgearbeiten.
