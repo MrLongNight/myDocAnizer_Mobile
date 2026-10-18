@@ -94,21 +94,20 @@ open class MainActivity : FragmentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleWidgetIntent(intent)
     }
 
     private fun handleWidgetIntent(intent: Intent?) {
         if (intent == null) return
-        val targetTab = intent.getStringExtra("EXTRA_START_TAB")
-        if (!targetTab.isNullOrBlank()) {
-            viewModel.setTargetNavigationTab(targetTab)
-        }
-        val action = intent.getStringExtra("EXTRA_OPEN_ACTION")
-        if (action == "CASH_EXPENSE") {
-            viewModel.setDirectOpenCashTracker(true)
-        }
-        if (intent.getBooleanExtra("EXTRA_OPEN_RECONCILIATION", false)) {
-            viewModel.setDirectOpenReconciliation(true)
-        }
+        val vault = com.example.service.VaultSecurityManager.getInstance(this)
+        // Drop, do not defer, external actions while authentication is incomplete.
+        if (!viewModel.isAppUnlocked.value || (vault.vaultHeader.value != null && !vault.isUnlocked())) return
+        val tab = ExternalIntentPolicy.validTab(runCatching { intent.getStringExtra("EXTRA_START_TAB") }.getOrNull())
+        if (tab != null) viewModel.setTargetNavigationTab(tab)
+        val action = runCatching { intent.getStringExtra("EXTRA_OPEN_ACTION") }.getOrNull()
+        if (ExternalIntentPolicy.isAllowedAction(action)) viewModel.setDirectOpenCashTracker(true)
+        val reconcile = runCatching { intent.getBooleanExtra("EXTRA_OPEN_RECONCILIATION", false) }.getOrDefault(false)
+        if (reconcile) viewModel.setDirectOpenReconciliation(true)
     }
 }
