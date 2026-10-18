@@ -70,10 +70,10 @@ object VaultHeaderParserV2 {
             if (createdAt <= 0L) return null
 
             val iterations = json.optInt("argon2Iterations", -1)
-            if (iterations < 1 || iterations > 10) return null // Obergrenze und Untergrenze prüfen
+            if (iterations < 2 || iterations > 10) return null // Obergrenze und Untergrenze prüfen
 
             val memoryKb = json.optInt("argon2MemoryKb", -1)
-            if (memoryKb < 1024 || memoryKb > 262144) return null // 1 MB bis 256 MB Obergrenze
+            if (memoryKb < 19456 || memoryKb > 262144) return null // Minimum 19 MiB, Obergrenze 256 MiB
 
             val saltBase64 = json.optString("saltBase64", "")
             if (saltBase64.isBlank()) return null
@@ -103,7 +103,7 @@ object VaultHeaderParserV2 {
             } catch (e: Exception) {
                 return null
             }
-            if (dekBytes.size < 32) return null // Mindestens AES-256 Ciphertext-Länge inklusive Tag
+            if (dekBytes.size != 48) return null // 32-Byte-DEK plus 16-Byte-GCM-Tag
 
             val securityTier = json.optString("securityTier", "ONE_FACTOR")
             if (securityTier !in listOf("UNENCRYPTED", "ONE_FACTOR", "TWO_FACTOR")) return null
