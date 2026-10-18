@@ -1798,7 +1798,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 // 5. Mehrseitiges PDF erstellen
                 val tagsStr = template.defaultTags.joinToString(", ")
                 
-                val finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                val finalFile = vaultSecurityManager.withUnlockedKeySuspend { encryptionKey ->
                     DocumentStorageService.generatePdf(
                     context = context,
                     pageBitmaps = processedPages,
@@ -2273,7 +2273,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 val internalName = DocumentStorageService.generateInternalFileName(isEncrypted = isEncrypted)
                 val tagsStr = if (rule.targetTags.isNotEmpty()) rule.targetTags.joinToString(", ") else template.defaultTags.joinToString(", ")
 
-                val finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                val finalFile = vaultSecurityManager.withUnlockedKeySuspend { encryptionKey ->
                     DocumentStorageService.generatePdf(
                     context = context,
                     pageBitmaps = listOf(bitmap),
@@ -3120,7 +3120,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 val internalName = DocumentStorageService.generateInternalFileName(isEncrypted = isEncrypted)
                 val tagsStr = template.defaultTags.joinToString(", ")
 
-                val finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                val finalFile = vaultSecurityManager.withUnlockedKeySuspend { encryptionKey ->
                     DocumentStorageService.generatePdf(
                     context = context,
                     pageBitmaps = listOf(processed),
@@ -3211,7 +3211,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
             val tagsList = (template.defaultTags + listOf("#email", "#korrespondenz")).distinct()
             val tagsStr = tagsList.joinToString(", ")
 
-            val finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+            val finalFile = vaultSecurityManager.withUnlockedKeySuspend { encryptionKey ->
                     DocumentStorageService.generateEmailPdf(
                 context = context,
                 sender = safeSender,
@@ -3329,7 +3329,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     if (finalOcrText.isBlank() && runOcr) {
                         finalOcrText = OcrService.recognizeText(processed, safeSender, safeTitle)
                     }
-                    finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                    finalFile = vaultSecurityManager.withUnlockedKeySuspend { encryptionKey ->
                     DocumentStorageService.saveImageFile(
                         context = context,
                         bitmap = processed,
@@ -3353,7 +3353,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         finalOcrText = OcrService.recognizeText(processed, safeSender, safeTitle)
                     }
                     val tagsStr = tags.joinToString(", ")
-                    finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                    finalFile = vaultSecurityManager.withUnlockedKeySuspend { encryptionKey ->
                     DocumentStorageService.generatePdf(
                         context = context,
                         pageBitmaps = listOf(processed),
@@ -3373,7 +3373,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     pageCount = 1
                 } else if (pdfBytes != null) {
                     // Reines PDF direkt wegschreiben via secureSave
-                    finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                    finalFile = vaultSecurityManager.withUnlockedKeySuspend { encryptionKey ->
                         DocumentStorageService.secureSave(
                         context = context,
                         targetDir = targetDir,
