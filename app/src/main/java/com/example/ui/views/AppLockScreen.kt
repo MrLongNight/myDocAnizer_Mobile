@@ -193,7 +193,7 @@ fun AppLockScreen(
                         }
 
                         if (success) {
-                            viewModel.unlockApp()
+                            viewModel.completeVaultUnlock()
                             showPasswordDialog = false
                         } else {
                             passwordError = "Falsches Passwort oder ungültiger 2. Faktor"
@@ -217,7 +217,7 @@ fun AppLockScreen(
             vaultSecManager = vaultSecManager,
             onRecoverySuccess = { newPassword ->
                 viewModel.setSyncPasswordKey(newPassword)
-                viewModel.unlockApp()
+                viewModel.completeVaultUnlock()
                 showRecoveryDialog = false
             },
             onDismiss = { showRecoveryDialog = false }
@@ -313,7 +313,7 @@ fun AppLockScreen(
                                 }
                             )
                         } else {
-                            viewModel.unlockApp()
+                            errorMessage = "Biometrische Authentifizierung erfordert eine aktive Activity. Nutze das Master-Passwort."
                         }
                     },
                     modifier = Modifier
@@ -338,7 +338,7 @@ fun AppLockScreen(
                 OutlinedButton(
                     onClick = { 
                         if (vaultStatus.isUnencryptedMode) {
-                            viewModel.unlockApp()
+                            viewModel.completeVaultUnlock()
                         } else {
                             showPasswordDialog = true 
                         }
@@ -364,7 +364,7 @@ fun AppLockScreen(
 
                 if (com.example.BuildConfig.DEBUG) {
                     OutlinedButton(
-                        onClick = { viewModel.unlockApp() },
+                        onClick = { viewModel.debugUnlockAppForDevelopment() },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(40.dp)
