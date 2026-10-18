@@ -1252,7 +1252,7 @@ class ExampleRobolectricTest {
     assertEquals(32, dek.size)
 
     val salt = ByteArray(16) { it.toByte() }
-    val kek = secManager.deriveKekArgon2id("TestPass123!", salt, iterations = 1, memoryKb = 128)
+    val kek = secManager.deriveKekArgon2id("TestPass123!", salt, iterations = 2, memoryKb = 19456)
     assertEquals(32, kek.size)
 
     val (ciphertext, iv) = secManager.encryptAesGcm(dek, kek)
