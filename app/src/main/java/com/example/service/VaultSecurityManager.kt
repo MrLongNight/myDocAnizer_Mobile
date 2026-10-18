@@ -269,7 +269,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         password: String,
         salt: ByteArray,
         iterations: Int = 2,
-        memoryKb: Int = 16384 // 16 MB Speicherhärte
+        memoryKb: Int = 19456 // 19 MiB für neue Vaults; Legacy-Parameter werden aus Header geladen
     ): ByteArray {
         return Argon2idEngine.deriveKey(
             password = password.toCharArray(),
@@ -432,7 +432,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             createdAt = createdAt,
             argon2SaltBase64 = Base64.encodeToString(salt, Base64.NO_WRAP),
             argon2Iterations = 2,
-            argon2MemoryKb = 16384,
+            argon2MemoryKb = 19456,
             encryptedDekByPasswordBase64 = Base64.encodeToString(encryptedDekPassword, Base64.NO_WRAP),
             passwordDekIvBase64 = Base64.encodeToString(ivPassword, Base64.NO_WRAP),
             biometric2FaEnabled = enableBiometrics,
@@ -1388,19 +1388,21 @@ object Argon2idEngine {
         memoryKb: Int = 19456, // Mindestens 19 MiB für neue Parameter, kompatibel mit 16384 für Legacy v1
         tagLength: Int = 32
     ): ByteArray {
-        // Strikte Parameter-Validierung zum Schutz vor RAM-Spitzen / Überlastung / fehlerhaften Parametern
-        val safeMemoryKb = memoryKb.coerceIn(1024, 262144) // Zwischen 1 MB und 256 MB begrenzt
-        val safeIterations = iterations.coerceIn(1, 10)
-        
-        if (safeMemoryKb < 1024 || safeIterations < 1) {
-            throw IllegalArgumentException("Ungültige Argon2id-Parameter: memory=$safeMemoryKb KB, iterations=$safeIterations")
+        // V1 uses exactly the historical 16 MiB / t=2 tuple. New parameters
+        // must use at least 19 MiB / t=2. Never silently clamp hostile values.
+        val isLegacyV1 = memoryKb == 16384 && iterations == 2
+        require(isLegacyV1 || (memoryKb in 19456..262144 && iterations in 2..10)) {
+            "Unsupported Argon2id parameters: memory=$memoryKb KB, iterations=$iterations"
         }
+        require(salt.size == 16) { "Argon2id salt must be exactly 16 bytes" }
+        require(tagLength == 32) { "Vault KEK must be exactly 32 bytes" }
+        require(password.isNotEmpty()) { "Password cannot be empty" }
 
         synchronized(argon2Mutex) {
             val builder = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
                 .withVersion(Argon2Parameters.ARGON2_VERSION_13)
-                .withIterations(safeIterations)
-                .withMemoryAsKB(safeMemoryKb)
+                .withIterations(iterations)
+                .withMemoryAsKB(memoryKb)
                 .withParallelism(1)
                 .withSalt(salt)
 
@@ -1409,8 +1411,13 @@ object Argon2idEngine {
             generator.init(params)
 
             val out = ByteArray(tagLength)
-            generator.generateBytes(password, out, 0, out.size)
-            return out
+            try {
+                generator.generateBytes(password, out, 0, out.size)
+                return out
+            } catch (e: Exception) {
+                out.fill(0)
+                throw SecurityException("Argon2id key derivation failed", e)
+            }
         }
     }
 }
