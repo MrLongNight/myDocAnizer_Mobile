@@ -604,8 +604,9 @@ class VaultSecurityManager private constructor(private val context: Context) {
         val header = _vaultHeader.value ?: return null
         if (!header.biometric2FaEnabled) return null
         val ivEncoded = header.biometricDekIvBase64 ?: return null
+        var iv: ByteArray? = null
         return try {
-            val iv = Base64.decode(ivEncoded, Base64.NO_WRAP)
+            iv = Base64.decode(ivEncoded, Base64.NO_WRAP)
             val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
             val key = (keyStore.getEntry(BIOMETRIC_KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
                 ?: return null
@@ -614,6 +615,8 @@ class VaultSecurityManager private constructor(private val context: Context) {
             }
         } catch (e: Exception) {
             null
+        } finally {
+            iv?.fill(0)
         }
     }
 
@@ -1067,8 +1070,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
         val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER)
         keyStore.load(null)
         if (keyStore.containsAlias(BIOMETRIC_KEY_ALIAS)) {
-            val entry = keyStore.getEntry(BIOMETRIC_KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
-            if (entry != null) return entry.secretKey
+            try {
+                val entry = keyStore.getEntry(BIOMETRIC_KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
+                if (entry != null) return entry.secretKey
+            } catch (_: Exception) {
+                // An invalidated key is not reused. A new key may be enrolled only after the user has unlocked the vault.
+            }
+            keyStore.deleteEntry(BIOMETRIC_KEY_ALIAS)
         }
 
         val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE_PROVIDER)
