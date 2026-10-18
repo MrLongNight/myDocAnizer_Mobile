@@ -126,45 +126,45 @@
 **Abhängigkeit:** V09 und Freigabe der ADR.  
 **Prompt:** Implementiere nur Encode/Decode des genehmigten Recovery-Payload-Formats als eigenständige, testbare Komponente. Schlüsselableitung und Authenticated Encryption ausschließlich über geprüfte Primitive. Versions-/Längenprüfung, falsche Passphrase, veränderte Ciphertextbytes und ungültiger Tag müssen kontrolliert scheitern. Nutze ausschließlich synthetische Schlüssel. Keine PDF-, QR- oder UI-Änderungen in diesem Micro-AP. **Abnahme:** bytegenaue Roundtrip-Tests, Negativtests und kein Roh-DEK in Fehlermeldungen/Logs.
 
-## V11 – Standardkonforme QR-Kodierung
+## V11 – Standardkonforme QR-Kodierung — **[PATCH ERSTELLT – LOKALE TESTS OFFEN]**
 **Abhängigkeit:** V10.  
 **Prompt:** Ersetze ausschließlich die derzeitige QR-Matrix-Erzeugung durch eine etablierte QR-Encoding-Bibliothek. Kodiert wird nur das freigegebene verschlüsselte Recovery-Payload, nie der Roh-DEK oder ein unverschlüsselter Schlüssel. Teste, dass ein unabhängiger QR-Decoder das Payload bytegenau zurückliest und beschädigte/zu große Inhalte kontrolliert behandelt werden. **Abnahme:** unabhängiger Decode-Roundtrip im Test; kein selbst gebautes Hash-Bit-Muster als QR-Code.
 
-## V12 – Emergency-PDF sicherstellen
+## V12 – Emergency-PDF sicherstellen — **[PATCH ERSTELLT – PDF-TEXTEXTRAKTION AM GERÄT OFFEN]**
 **Abhängigkeit:** V10, V11.  
 **Prompt:** Ändere ausschließlich die Emergency-Kit-PDF-Ausgabe: Entferne die bisherige Base64-Roh-DEK-Zeile und alle sonstigen direkten Schlüsselkopien. Das Dokument darf nur das genehmigte verschlüsselte Recovery-Payload/den passenden standardkonformen QR-Code und verständliche Anleitungen enthalten. Prüfe den erzeugten PDF-Textlayer und extrahierbaren Inhalt automatisiert auf Roh-DEK, Secret und unerwartete sensible Daten. UI muss Passphrase-/Recovery-Anforderungen klar erklären. **Abnahme:** PDF-Export- und Text-Extraktionstests; kein unverschlüsselter DEK in PDF-Bytes, OCR-Text, QR oder Logs.
 
-## V13 – Biometrie und Keystore getrennt absichern
+## V13 – Biometrie und Keystore getrennt absichern — **[PATCH ERSTELLT – GERÄTETEST OFFEN]**
 **Abhängigkeit:** V03/V04; gemeinsame Schlüsselzustandsintegration später mit S04/S05.  
 **Prompt:** Prüfe und korrigiere nur die Keystore-Key-Erstellung und `BiometricPrompt`-Kryptooperation. Nutze `setUserAuthenticationRequired(true)` und passende Invalidierungsoptionen; StrongBox nur mit dokumentiertem, sicherem Fallback. API-abhängige Methoden nur ab den unterstützten API-Leveln aufrufen. Die Authentifizierung muss die tatsächliche kryptografische Entschlüsselungsoperation schützen, nicht nur eine UI-Abfrage bestätigen. **Nicht tun:** globalen LockManager implementieren. **Abnahme:** Tests/Mocks für Erfolg, Abbruch, Invalidierung und API-Fallback; echte Geräteprüfungen separat ausweisen.
 
-## V14 – Atomare v1→v2-Headermigration
+## V14 – Atomare v1→v2-Headermigration — **[BLOCKIERT – V2-LAUFZEITINTEGRATION FEHLT]**
 **Abhängigkeit:** V02–V04 und vorhandenes v1-Fixture aus V01.  
 **Prompt:** Implementiere ausschließlich die Header-Migration. Lies v1 mit der alten, kompatiblen Ableitung, prüfe erfolgreichen Unlock, verpacke denselben DEK in v2 und schreibe v2 zunächst atomar in eine temporäre Datei/Transaktion. Lies den neuen Header erneut ein und prüfe ihn kryptografisch, bevor das Original ersetzt wird. Bei jedem Fehler bleibt v1 unverändert; keine automatische Neuinitialisierung und kein Datenverlust. Lege erzwungene Fehlerpfade im Test fest. **Abnahme:** Erfolgs- und Rollback-Test mit v1-Fixture, Idempotenz und Nachweis, dass falsches Passwort den Originalheader nicht ändert.
 
-## V15 – Backup-Regeln für Vault-Secrets
+## V15 – Backup-Regeln für Vault-Secrets — **[PATCH ERSTELLT – STRUKTURELLE TESTS OFFEN]**
 **Prompt:** Prüfe `backup_rules.xml` und `data_extraction_rules.xml` für Cloud-Backup sowie Geräteübertragung. Schließe `mydocanizer_vault_security.xml` und andere Keystore-gebundene Geheimnisse ausdrücklich aus, sofern kein freigegebenes, geprüftes verschlüsseltes Exportformat existiert. Entferne keine legitimen Nutzerdateien pauschal; überprüfe jedes Include/Exclude samt tatsächlichem Speicherort. **Abnahme:** automatisierte/strukturelle Tests oder dokumentierte Regelprüfung decken beide Plattformmechanismen ab; keine geheime Vault-Pref wird versehentlich übertragen.
 
 ---
 
 # S – LockManager, sichere Sitzung und SecretStore
 
-## S01 – Lock- und Secret-Inventar (AUDIT)
+## S01 – Lock- und Secret-Inventar (AUDIT) — **[ERLEDIGT – AUDIT DOKUMENTIERT]**
 **Prompt:** Inventarisiere alle App-/Vault-Lock-Flags, `unlockApp`, `unlockVault`, `lockVault`, automatische Sperrung, Biometrie, `activeDek`-Zugriffe und geheime Werte in Prefs/DB/Dateien. Zeichne den bestehenden Zustandsfluss mit Aufrufstellen auf und schlage eine eindeutige Trennung bzw. Beziehung zwischen App-Lock und Vault-Lock vor. Noch keine produktive Änderung. **Abnahme:** Datei `docs/security/lock-secret-inventory.md`; jeder gefundene Geheimnisspeicher und jeder Unlock-Pfad ist referenziert.
 
-## S02 – LockManager als Zustandsautomat
+## S02 – LockManager als Zustandsautomat — **[PATCH ERSTELLT – LOKALE TESTS OFFEN]**
 **Abhängigkeit:** S01.  
 **Prompt:** Implementiere einen testbaren `LockManager` mit typisiertem, zentralem Zustand und ausdrücklich erlaubten Übergängen. Beginne beim Prozessstart fail-closed, wenn ein Vault eingerichtet ist. Activity/ViewModel dürfen keine konkurrierenden Wahrheits-Flags mehr für denselben Vault-Lock erzeugen; halte vorhandene APIs über Adapter kompatibel. Noch keine automatische Hintergrundsperre und keine SecretStore-Migration. **Abnahme:** reine Unit-Tests der Zustandsübergänge; kein unkoordinierter zweiter Manager.
 
-## S03 – Auto-Lock-Lifecycle
+## S03 – Auto-Lock-Lifecycle — **[PATCH ERSTELLT – LOKALE TESTS OFFEN]**
 **Abhängigkeit:** S02.  
 **Prompt:** Verbinde den LockManager mit `ProcessLifecycleOwner` und der vorhandenen Auto-Lock-Einstellung. Messe Zeit mit `SystemClock.elapsedRealtime`; definiere und teste `0` als sofortige Sperre entsprechend der Produktsemantik. Bei Rückkehr aus dem Hintergrund muss vor Anzeige sensibler Inhalte der aktuelle Lockzustand abgefragt werden. Keine Speicherung von DEK oder Passphrase, um die Rückkehr zu beschleunigen. **Abnahme:** Tests für ON_STOP/ON_START, Timeoutgrenze und Prozessneustart; keine UI-Freigabe vor Lockprüfung.
 
-## S04 – Unlock-Bypässe entfernen
+## S04 – Unlock-Bypässe entfernen — **[PATCH ERSTELLT – LOKALE TESTS OFFEN]**
 **Abhängigkeit:** S02 und V13.  
 **Prompt:** Verfolge `AppLockScreen`, `unlockApp()` und alle Aufrufer. Entferne Pfade, die ohne erfolgreiches, überprüfbares Authentifizierungsresultat entsperren – insbesondere Null-Activity-/Boolean-Default-/UI-only-Pfade. Erfolg muss aus dem tatsächlich erfolgreichen Passwort-/Vault- oder `BiometricPrompt.CryptoObject`-Vorgang kommen. Ändere nur Authentifizierungsübergänge und ergänze Negativtests. **Abnahme:** kein erfolgreicher Unlock bei abgebrochener, fehlgeschlagener oder fehlender Authentifizierung.
 
-## S05 – DEK-Leases an Lockstatus binden
+## S05 – DEK-Leases an Lockstatus binden — **[PATCH ERSTELLT – LOKALE TESTS OFFEN]**
 **Abhängigkeit:** V04 und S02.  
 **Prompt:** Ersetze unkontrollierte öffentliche DEK-Getter schrittweise durch eine begrenzte `withUnlockedKey`-/Key-Lease-Schnittstelle oder ein gleichwertig überprüftes Modell. Schlüsselmaterial darf nur während gültigem Unlock-Zustand genutzt werden; mutable Kopien soweit technisch möglich nach Gebrauch bereinigen. Synchronisiere zusammengesetzte Operationen mit `Mutex`/gleichwertiger Koordination. Definiere, was bei Lock während einer Dateioperation geschieht. Migriere nur die Aufrufstellen, die für den Build dieses Schritts nötig sind, und liste verbleibende Verbraucher auf. **Abnahme:** Tests, dass gesperrter Vault keine Entschlüsselung erlaubt und paralleler Lock/Unlock keinen alten Schlüsselzugriff hinterlässt.
 
@@ -560,16 +560,25 @@ Sofort abbrechen und konkreten Blocker melden, wenn:
 | Micro-AP | Status | Patch-Datei | Lokal übernommen | Lokale Tests | Nächster Schritt |
 |---|---|---|---|---|---|
 | M00 | ABGENOMMEN | micro-ap-M00.patch | Ja | Bestanden | V01 |
-| V01 | ABGENOMMEN | micro-ap-V01.patch | Ja | Bestanden | V02 |
-| V02 | ABGENOMMEN | micro-ap-V02.patch | Ja | Bestanden | V03 |
-| V03 | ABGENOMMEN | micro-ap-V03.patch | Ja | Bestanden | V04 |
-| V04 | ABGENOMMEN | micro-ap-V04.patch | Ja | Bestanden | V05 |
-| V05 | ABGENOMMEN | micro-ap-V05.patch | Ja | Bestanden | V06A |
-| V06A | ABGENOMMEN | micro-ap-V06A.patch | Ja | Bestanden | V07 |
-| V07 | ABGENOMMEN | micro-ap-V07.patch | Ja | Bestanden | V08 |
-| V08 | ABGENOMMEN | micro-ap-V08.patch | Ja | Bestanden | V09 |
-| V09 | ABGENOMMEN | micro-ap-V09.patch | Ja | Bestanden | V10 |
-| V10 | ABGENOMMEN | micro-ap-V10.patch | Ja | Bestanden | V11 |
-| V11 | NICHT GESTARTET | – | Nein | – | Standardkonforme QR-Kodierung |
+| V01 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V02 |
+| V02 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V03 |
+| V03 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V04 |
+| V04 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V05 |
+| V05 | BLOCKIERT | – | Ja | Entscheidung offen | Freigabe Option A/B |
+| V06A | BLOCKIERT | – | Nein | Freigabe fehlt | V07 (parallel möglich) |
+| V07 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V08 |
+| V08 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V09 |
+| V09 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V10 |
+| V10 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V11 |
+| V11 | PATCH ERSTELLT | direkt in main | Ja | QR-Roundtrip-Test ergänzt; Lauf offen | V12 |
+| V12 | PATCH ERSTELLT | direkt in main | Ja | PDF-Regressionstest ergänzt; Textlayer-/Gerätetest offen | V13 |
+| V13 | PATCH ERSTELLT | direkt in main | Ja | CryptoObject-Instrumented-Test ergänzt; Gerätetest offen | V14 |
+| V14 | BLOCKIERT | – | Nein | v2 nicht in Runtime integriert | V14-Laufzeitintegration |
+| V15 | PATCH ERSTELLT | direkt in main | Ja | Backup-Regeltests ergänzt; Lauf offen | S01 |
+| S01 | GETESTET | docs/security/lock-secret-inventory.md | Ja | Audit dokumentiert | S02 |
+| S02 | PATCH ERSTELLT | direkt in main | Ja | LockManager-Unit-Tests ergänzt; Lauf offen | S03 |
+| S03 | PATCH ERSTELLT | direkt in main | Ja | Auto-Lock-Tests ergänzt; Lauf offen | S04 |
+| S04 | PATCH ERSTELLT | direkt in main | Ja | Bypass-Pfade entfernt; Negativtests/Build offen | S05 |
+| S05 | PATCH ERSTELLT | direkt in main | Ja | Produktionsaufrufe auf Key-Leases migriert; Testlauf offen | S06 |
 
 Zulässige Statuswerte: `NICHT GESTARTET`, `BLOCKIERT`, `PATCH ERSTELLT`, `MANUELL ÜBERNOMMEN`, `GETESTET`, `ABGENOMMEN`.
