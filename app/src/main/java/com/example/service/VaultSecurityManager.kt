@@ -271,13 +271,18 @@ class VaultSecurityManager private constructor(private val context: Context) {
         iterations: Int = 2,
         memoryKb: Int = 19456 // 19 MiB für neue Vaults; Legacy-Parameter werden aus Header geladen
     ): ByteArray {
-        return Argon2idEngine.deriveKey(
-            password = password.toCharArray(),
-            salt = salt,
-            iterations = iterations,
-            memoryKb = memoryKb,
-            tagLength = 32
-        )
+        val passwordChars = password.toCharArray()
+        return try {
+            Argon2idEngine.deriveKey(
+                password = passwordChars,
+                salt = salt,
+                iterations = iterations,
+                memoryKb = memoryKb,
+                tagLength = 32
+            )
+        } finally {
+            passwordChars.fill('\u0000')
+        }
     }
 
     /**
@@ -502,17 +507,21 @@ class VaultSecurityManager private constructor(private val context: Context) {
             else -> return false
         }
         
+        var kek: ByteArray? = null
         return try {
             val salt = Base64.decode(header.argon2SaltBase64, Base64.NO_WRAP)
-            val kek = deriveKekArgon2id(combinedSecret, salt, header.argon2Iterations, header.argon2MemoryKb)
+            kek = deriveKekArgon2id(combinedSecret, salt, header.argon2Iterations, header.argon2MemoryKb)
             val ciphertext = Base64.decode(header.encryptedDekByPasswordBase64, Base64.NO_WRAP)
             val iv = Base64.decode(header.passwordDekIvBase64, Base64.NO_WRAP)
             val dek = decryptAesGcm(ciphertext, iv, kek)
-            kek.fill(0)
+            activeDek?.fill(0)
             activeDek = dek.copyOf()
+            dek.fill(0)
             true
         } catch (e: Exception) {
             false
+        } finally {
+            kek?.fill(0)
         }
     }
 
