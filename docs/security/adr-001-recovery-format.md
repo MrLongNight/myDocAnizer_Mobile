@@ -20,7 +20,7 @@ Zudem muss das Recovery-Format versioniert, kryptografisch authentifiziert (AES-
 - **KDF für Recovery-Passphrase / Master-Passwort:** 
   - **Argon2id** (v1.3) mit mindestens `m = 19456 KB` (19 MiB), `t = 2`, `p = 1` und einem zufälligen 16-Byte Salt.
   - Alternativ für strukturierte Passphrasen (z. B. BIP-39 Mnemonic): `PBKDF2WithHmacSHA512` mit mindestens 2048 Iterationen zur Seed-Ableitung.
-- **Wichtig:** Ein einfacher 6-stelliger PIN reicht als *alleiniger* Schutz für ein offline kopierbares Notfall-Kit **nicht** aus, da dieser per Brute-Force in Sekunden angreifbar wäre. Notfall-Kits verlangen daher eine starke Passphrase oder eine 12-Wörter-BIP-39-Mnemonic bzw. einen hoch-entropischen Recovery-Code (min. 32 Zeichen).
+- **Wichtig:** Ein einfacher 6-stelliger PIN reicht als *alleiniger* Schutz für ein offline kopierbares Notfall-Kit **nicht** aus, da dieser per Brute-Force in Sekunden angreifbar wäre. Notfall-Kits verlangen daher eine starke Passphrase (mindestens 20 Zeichen; Länge allein ersetzt keine Unvorhersagbarkeit) oder eine 12-Wörter-BIP-39-Mnemonic bzw. einen hoch-entropischen Recovery-Code (mind. 32 Zeichen). Der Recovery-Payload-Kern akzeptiert Passphrasen ab 20 Zeichen.
 
 ### 2.2 Byteformat & Versioniertes Payload (v2)
 Das Recovery-Payload wird als JSON-Struktur (und binär repräsentiert im QR-Code) kodiert:
