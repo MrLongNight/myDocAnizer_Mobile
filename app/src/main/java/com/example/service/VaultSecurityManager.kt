@@ -544,7 +544,6 @@ class VaultSecurityManager private constructor(private val context: Context) {
             val dek = decryptAesGcm(ciphertext, iv, derivedKek)
             activeDek?.fill(0)
             activeDek = dek.copyOf()
-            LockManager.onVaultUnlocked()
             dek.fill(0)
             true
         } catch (e: Exception) {
@@ -631,7 +630,6 @@ class VaultSecurityManager private constructor(private val context: Context) {
             if (dek.size != DEK_SIZE_BYTES) return false
             activeDek?.fill(0)
             activeDek = dek.copyOf()
-            LockManager.onVaultUnlocked()
             true
         } catch (e: Exception) {
             false
@@ -696,7 +694,6 @@ class VaultSecurityManager private constructor(private val context: Context) {
             )
             saveVaultHeader(updatedHeader)
             replaceActiveDek(recoveredDek)
-            LockManager.onVaultUnlocked()
             true
         } catch (e: Exception) {
             false
@@ -743,6 +740,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         synchronized(keyLeaseLock) {
             activeDek?.fill(0)
             activeDek = dek.copyOf()
+            LockManager.onVaultUnlocked()
         }
     }
 
@@ -1298,7 +1296,6 @@ class VaultSecurityManager private constructor(private val context: Context) {
             val iv = Base64.decode(header.recoveryDekIvBase64, Base64.NO_WRAP)
             val dek = decryptAesGcm(ciphertext, iv, kek)
             activeDek = dek.copyOf()
-            LockManager.onVaultUnlocked()
             dek
         } catch (e: Exception) {
             null
