@@ -238,7 +238,7 @@ Vor der manuellen Abnahme bitte den [Gesamt-Testplan aus Benutzersicht](security
 **Abhängigkeit:** D11.  
 **Prompt:** Sorge dafür, dass Restorevalidierung und Schreiben transaktional bzw. über einen Staging-Bereich erfolgen. Ein beschädigter AEAD-Tag, fehlendes Manifest oder fehlerhafte Metadaten darf keinen Teilimport in der Produktivdatenbank hinterlassen. Vermeide blindes `REPLACE`; definiere Konfliktregeln über neue IDs/Merge. UI erhält `wiederhergestellt / übersprungen / fehlgeschlagen` plus nicht sensitive Ursachen. **Abnahme:** erzwungene Fehler in jeder Phase hinterlassen keinen inkonsistenten Zwischenstand.
 
-## D13 – Unverschlüsselten Mirror entfernen und Backupregeln prüfen
+## D13 – Unverschlüsselten Mirror entfernen und Backupregeln prüfen — **[IMPLEMENTIERUNG ERGÄNZT – TESTLAUF OFFEN]**
 **Prompt:** Prüfe den Auto-Mirror/Klartextbackup-Pfad und `backup_rules.xml`/`data_extraction_rules.xml`. Entferne den unverschlüsselten Mirror oder sperre ihn bis zu einer ausdrücklich bestätigten, sichtbaren Nutzerfreigabe und dokumentierten Warnung. Schließe Cache, temporäre Klartextdateien, geheime Prefs, Logs, lokale Backupcontainer und Modelle passend aus; exportiere keine sensiblen Speicherorte pauschal bei Geräteübertragung. **Abnahme:** alle Regeln einzeln begründet; keine unbeabsichtigte Klartextübertragung.
 
 ## D14 – PDF-Textlayer-Verhalten belegen
@@ -584,5 +584,11 @@ Sofort abbrechen und konkreten Blocker melden, wenn:
 | S03 | PATCH ERSTELLT | direkt in main | Ja | Auto-Lock-Tests ergänzt; Lauf offen | S04 |
 | S04 | PATCH ERSTELLT | direkt in main | Ja | Bypass-Pfade entfernt; Negativtests/Build offen | S05 |
 | S05 | PATCH ERSTELLT | direkt in main | Ja | Produktionsaufrufe auf Key-Leases migriert; Testlauf offen | S06 |
+| S06 | PATCH ERSTELLT | direkt in main | Ja | Backoff-Tests ergänzt; Testlauf offen | S07 |
+| S07 | PATCH ERSTELLT | direkt in main | Ja | Screenshot-/Recents-Gerätetest offen | S08 |
+| S08 | PATCH ERSTELLT | direkt in main | Ja | SecretStore-Instrumentationstest ergänzt; Gerätetest offen | S09 |
+| S09 | BLOCKIERT | – | Nein | S08-Testlauf und Verbraucher-Audit offen | S08 prüfen |
+| S10 | PATCH ERSTELLT | direkt in main | Ja | Policy-Tests ergänzt; Widget-Cold-Start-Test offen | D01 |
+| D13 | PATCH ERSTELLT | direkt in main | Ja | Backup-Regeltests erweitert; Build-/Testlauf offen | D14 |
 
 Zulässige Statuswerte: `NICHT GESTARTET`, `BLOCKIERT`, `PATCH ERSTELLT`, `MANUELL ÜBERNOMMEN`, `GETESTET`, `ABGENOMMEN`.
