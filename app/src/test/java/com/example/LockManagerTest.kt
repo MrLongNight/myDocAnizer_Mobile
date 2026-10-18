@@ -6,9 +6,29 @@ import com.example.service.VaultSessionLockState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33], manifest = Config.NONE)
 class LockManagerTest {
+    private val manager by lazy { VaultSecurityManager.getInstance(ApplicationProvider.getApplicationContext<Application>()) }
+
+    @Before
+    fun setUp() {
+        manager.lockVault()
+        LockManager.resetForTests()
+    }
+
+    @After
+    fun tearDown() {
+        manager.lockVault()
+        LockManager.resetForTests()
+    }
     @Test
     fun `configured vault and app content start locked even in debug builds`() {
         LockManager.resetForTests()
