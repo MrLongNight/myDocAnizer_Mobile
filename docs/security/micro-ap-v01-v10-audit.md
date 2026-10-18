@@ -21,8 +21,8 @@
 
 ## Weitere Sicherheitskorrekturen
 
-- KEK wird im Unlock-Pfad auch bei Fehlern gelöscht; der vorherige aktive DEK wird vor dem Ersetzen überschrieben.
-- Beim Ändern des Master-Passworts wird der temporäre KEK auch dann gelöscht, wenn AES-GCM fehlschlägt.
+- KEK wird in Unlock, Vault-Einrichtung, BIP-39-Recovery und Passwortänderung auch bei Fehlern gelöscht; der vorherige aktive DEK wird vor dem Ersetzen überschrieben.
+- Temporäre BIP-39-Seed-/Passwortpuffer werden nach PBKDF2 gelöscht.
 - Neue Vaults verwenden die stärkeren Argon2id-Parameter; bestehende v1-Header mit dem exakt dokumentierten Legacy-Tupel bleiben ableitbar.
 
 ## Dateien
