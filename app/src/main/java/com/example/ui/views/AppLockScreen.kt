@@ -119,7 +119,7 @@ fun AppLockScreen(
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = {
                             val success = if (vaultStatus.isUnencryptedMode) {
-                                true
+                                vaultSecManager.unlockUnencryptedVault()
                             } else {
                                 vaultSecManager.unlockVault(
                                     password = enteredPassword,
@@ -183,7 +183,7 @@ fun AppLockScreen(
                 Button(
                     onClick = {
                         val success = if (vaultStatus.isUnencryptedMode) {
-                            true
+                            vaultSecManager.unlockUnencryptedVault()
                         } else {
                             vaultSecManager.unlockVault(
                                 password = enteredPassword,
