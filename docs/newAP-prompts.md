@@ -1,4 +1,4 @@
-# myDocAnizer-Mobile – granularisierte Coding-Prompts mit Sicherheits-Gates
+@!@ # myDocAnizer-Mobile – granularisierte Coding-Prompts mit Sicherheits-Gates
 
 **Projekt:** `MrLongNight/myDocAnizer_Mobile`  
 **Ausgangsbasis:** Die acht erweiterten APs aus `myDocAnizer_Expanded_Prompts.md`. Die darin genannten Codebefunde sind Arbeitshypothesen, die im aktuellen Codebestand verifiziert werden müssen.  
