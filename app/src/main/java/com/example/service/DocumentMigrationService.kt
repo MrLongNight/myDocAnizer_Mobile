@@ -62,7 +62,7 @@ class DocumentMigrationService(
                 val targetDir = oldFile.parentFile ?: DocumentStorageService.getBaseDocumentsDirectory(context)
 
                 // Lease nur für den eigentlichen Schlüsselgebrauch halten; DAO-Operationen bleiben suspendierbar.
-                val finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                val finalFile = vaultSecurityManager.withUnlockedKeySuspend { encryptionKey ->
                     DocumentStorageService.secureSave(
                         context = context,
                         targetDir = targetDir,
