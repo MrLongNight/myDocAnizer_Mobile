@@ -1646,7 +1646,7 @@ class ExampleRobolectricTest {
   fun `verify RecoveryPayloadEngine v2 roundtrip and security guarantees`() {
     val dek = ByteArray(32).apply { java.security.SecureRandom().nextBytes(this) }
     val passphrase = "SecureRecoveryPassphrase2026!".toCharArray()
-    val wrongPassphrase = "WrongPassphrase!".toCharArray()
+    val wrongPassphrase = "DefinitelyWrongRecoveryPassphrase2026!".toCharArray()
     val vaultId = "VAULT-TEST1234"
 
     val serialized = com.example.service.RecoveryPayloadEngine.encodeRecoveryPayload(dek, passphrase, vaultId)
