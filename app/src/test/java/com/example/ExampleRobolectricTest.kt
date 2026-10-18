@@ -1315,27 +1315,58 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `verify Emergency Kit PDF generation and recovery`() {
+  fun `verify Emergency Kit PDF never contains raw DEK and encrypted payload recovers`() {
     val context = ApplicationProvider.getApplicationContext<Application>()
     val secManager = com.example.service.VaultSecurityManager.getInstance(context)
-
     val setupRes = secManager.initializeVault(
       masterPassword = "MasterPassword2026!",
       enableBiometrics = false,
-      recoveryMethod = com.example.service.VaultRecoveryMethod.EMERGENCY_PDF,
-      emergencyPin = "987654"
+      recoveryMethod = com.example.service.VaultRecoveryMethod.EMERGENCY_PDF
     )
 
+    val recoveryPassphrase = "Synthetic emergency recovery passphrase 2026!"
     val pdfFile = java.io.File(context.cacheDir, "test_emergency_kit.pdf")
-    val generated = secManager.generateEmergencyPdf(pdfFile, "987654")
+    val generated = secManager.generateEmergencyPdf(pdfFile, recoveryPassphrase.toCharArray())
     assertNotNull(generated)
     assertTrue(generated!!.exists())
     assertTrue(generated.length() > 100)
 
+    val pdfBytes = pdfFile.readBytes()
+    val pdfText = String(pdfBytes, Charsets.ISO_8859_1)
     val base64Key = android.util.Base64.encodeToString(setupRes.dek, android.util.Base64.NO_WRAP)
-    val directRecovery = secManager.recoverDekFromEmergencyKit(base64Key)
-    assertNotNull(directRecovery)
-    assertTrue(directRecovery!!.contentEquals(setupRes.dek))
+    assertFalse("PDF must not contain the raw DEK in Base64", pdfText.contains(base64Key))
+    assertFalse("PDF must not print the raw key fallback", pdfText.contains("Manueller Notfall-Wiederherstellungscode"))
+
+    val payloadBytes = com.example.service.RecoveryPayloadEngine.encodeRecoveryPayload(
+      setupRes.dek,
+      recoveryPassphrase.toCharArray(),
+      setupRes.vaultId
+    )
+    val recovered = secManager.recoverDekFromEmergencyKit(
+      String(payloadBytes, Charsets.UTF_8),
+      recoveryPassphrase.toCharArray(),
+      setupRes.vaultId
+    )
+    assertNotNull(recovered)
+    assertTrue(recovered!!.contentEquals(setupRes.dek))
+    assertNull(
+      secManager.recoverDekFromEmergencyKit(
+        String(payloadBytes, Charsets.UTF_8),
+        "Wrong synthetic recovery passphrase 2026!".toCharArray(),
+        setupRes.vaultId
+      )
+    )
+    assertNull(
+      secManager.recoverDekFromEmergencyKit(
+        String(payloadBytes, Charsets.UTF_8),
+        recoveryPassphrase.toCharArray(),
+        "VAULT-OTHER123"
+      )
+    )
+    payloadBytes.fill(0)
+    pdfBytes.fill(0)
+    setupRes.dek.fill(0)
+    recovered.fill(0)
   }
 
   @Test
