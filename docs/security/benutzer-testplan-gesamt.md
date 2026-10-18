@@ -126,6 +126,27 @@ Voraussetzung: Gerät hat eine eingerichtete Gerätesperre und unterstützte sta
 - [ ] **LOCK-10** Prozess im Hintergrund beenden und neu starten. Erwartung: Tresor startet gesperrt.
 - [ ] **LOCK-11** App sperren, dann eine geschützte Aktion starten. Erwartung: kein stiller Fallback und keine Ausgabe geschützter Daten.
 
+## 6A. Authentifizierungs-Backoff und externe Intents (S06/S07/S10)
+
+Diese Prüfungen bauen auf der erfolgreichen Basis aus Abschnitt 2 auf. Für Fehlversuche ausschließlich den entbehrlichen Test-Tresor verwenden.
+
+- [ ] **BACKOFF-01** Automatisierte Tests für `AuthenticationBackoffManagerTest` ausführen. Erwartung: 5. Fehlversuch löst 30 Sekunden aus; danach steigert sich die Sperre auf 1, 5 und 15 Minuten.
+- [ ] **BACKOFF-02** In der Debug-App fünfmal absichtlich falsches Test-Passwort eingeben. Erwartung: während der Sperrfrist werden weitere Unlock-Versuche abgewiesen; korrekte Zugangsdaten umgehen die aktive Sperre nicht.
+- [ ] **BACKOFF-03** App-Prozess während einer aktiven Sperrfrist beenden und erneut starten. Erwartung: die persistierte Deadline bleibt wirksam; keine Abkürzung durch Neustart.
+- [ ] **BACKOFF-04** Geräteuhr während der Sperre zurückstellen. Erwartung: die Sperre wird nicht vorzeitig aufgehoben. Eine konservativ längere Restzeit ist sicherer als ein frühzeitiger Unlock.
+- [ ] **BACKOFF-05** Erfolgreich entsperren und prüfen, dass der Fehlversuchszähler zurückgesetzt wird.
+- [ ] **SCREEN-01** Debug-Build: Screenshots sind gemäß der expliziten Debug-Ausnahme möglich; Release-Build: Screenshots/Screenrecording sensibler App-Inhalte müssen durch `FLAG_SECURE` blockiert sein.
+- [ ] **SCREEN-02** In Release Recents öffnen, während ein Testdokument sichtbar war. Erwartung: keine sensiblen Inhalte in der Aufgabenübersicht.
+- [ ] **SCREEN-03** Tresor auf einer geöffneten Detailansicht sperren und zurückkehren. Erwartung: sensible Inhalte sind nicht mehr sichtbar, bevor erneut entsperrt wurde.
+- [ ] **INTENT-01** Gültiges Widget-Intent mit einem erlaubten Tab und erlaubter Aktion bei entsperrtem Test-Tresor auslösen. Erwartung: nur die freigegebene Navigation/Aktion wird ausgeführt.
+- [ ] **INTENT-02** Unbekannten Tab, unbekannte Aktion und fehlerhafte Extras senden. Erwartung: werden ignoriert, keine Ausnahme und keine Navigation.
+- [ ] **INTENT-03** Gültiges externes Intent bei gesperrtem Tresor auslösen, danach entsperren. Erwartung: die Aktion wird nicht nachträglich automatisch ausgeführt.
+- [ ] **MIRROR-01** Auto-Mirror bleibt standardmäßig deaktiviert. Ohne verfügbaren Verschlüsselungsschlüssel darf auch nach explizitem Aktivieren keine unverschlüsselte Kopie im Backup-Verzeichnis entstehen.
+- [ ] **MIRROR-02** Mit verfügbarem Schlüssel und aktiviertem Auto-Mirror eine Testdatei spiegeln. Erwartung: nur die verschlüsselte `.enc`-Kopie entsteht; keine parallele Klartextkopie.
+- [ ] **MIRROR-03** Verschlüsselung absichtlich fehlschlagen lassen. Erwartung: keine Klartextkopie als Fallback; Fehler wird kontrolliert behandelt.
+
+**Gate 6A:** Wenn BACKOFF-01 nicht bestanden ist, BACKOFF-02 bis BACKOFF-05 nicht als Abnahme werten. Wenn INTENT-03 fehlschlägt oder MIRROR-01 eine Klartextkopie erzeugt, Sicherheitsfehler dokumentieren und keine Release-Abnahme durchführen.
+
 ## 7. Dokumentaktionen und Key-Leases
 
 Diese Tests prüfen, dass die App bei gesperrtem Tresor nicht weiter mit einem alten Schlüssel oder ungeschützten Fallback arbeitet.
@@ -172,7 +193,7 @@ Diese Tests prüfen, dass die App bei gesperrtem Tresor nicht weiter mit einem a
 | CRYPTO — Schlüssel-/Recovery-Bausteine | OFFEN | |
 | REC — Notfall-PDF/QR/Wiederherstellung | OFFEN | |
 | BIO — Biometrie | OFFEN | |
-| LOCK — Sperre und Auto-Lock | OFFEN | |
+| LOCK — Sperre und Auto-Lock | OFFEN |\n| BACKOFF — Fehlversuche und Backoff | OFFEN |\n| SCREEN — Screenshot/Recents | OFFEN |\n| INTENT — externe Widgets/Navigation | OFFEN |\n| MIRROR — verschlüsselte lokale Spiegelung | OFFEN | |
 | LEASE — Dokumentaktionen | OFFEN | |
 | BACKUP — Backup/Restore | OFFEN | |
 | V14 — Header-Migration | BLOCKIERT | Laufzeitintegration fehlt |
