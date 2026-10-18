@@ -176,6 +176,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
 
     private val secureRandom = SecureRandom()
     private val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+    private val authenticationBackoff = AuthenticationBackoffManager(context.applicationContext)
 
     private val _vaultHeader = MutableStateFlow<VaultHeader?>(loadVaultHeader())
     val vaultHeader: StateFlow<VaultHeader?> = _vaultHeader.asStateFlow()
@@ -513,6 +514,17 @@ class VaultSecurityManager private constructor(private val context: Context) {
      * Unterstützt Zero-Knowledge 1-Faktor und 2-Faktor Authentifizierung.
      */
     fun unlockVault(
+        password: String? = null,
+        keyFileToken: String? = null,
+        totpCode: String? = null
+    ): Boolean {
+        if (!authenticationBackoff.isAllowed()) return false
+        val result = unlockVaultUnchecked(password, keyFileToken, totpCode)
+        authenticationBackoff.recordResult(result)
+        return result
+    }
+
+    private fun unlockVaultUnchecked(
         password: String? = null,
         keyFileToken: String? = null,
         totpCode: String? = null
