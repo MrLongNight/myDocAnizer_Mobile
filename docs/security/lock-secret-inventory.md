@@ -36,7 +36,7 @@ Stand: 2026-10-18 — Repository `main`. Dieses Dokument ist das Audit-Ergebnis 
 
 ## 4. DEK-Verbraucher / öffentliche Kopien
 
-Die Produktionsaufrufstellen im `DocAnizerViewModel`, `DmsManager` und `DocumentMigrationService` wurden auf `withUnlockedKey` migriert. Die Lease wird synchron gehalten und im `finally` überschrieben; ein paralleler Lock wartet, bis der Callback endet. `getActiveDek()` bleibt vorerst als veralteter Kompatibilitäts-Getter erhalten und wird noch in bestehenden Tests verwendet; neue Produktionsaufrufe dürfen ihn nicht verwenden.
+Die Produktionsaufrufstellen im `DocAnizerViewModel`, `DmsManager` und `DocumentMigrationService` verwenden für suspendierbare Datei-/Batchoperationen `withUnlockedKeySuspend`; rein synchrone Schlüsseloperationen verwenden `withUnlockedKey`. Beide Varianten geben eine Kopie aus und überschreiben sie in `finally`. Bei `withUnlockedKey` wartet ein paralleler Lock auf das Ende des synchronen Callbacks. Bei `withUnlockedKeySuspend` verhindert ein Lock sofort neue Leases; eine bereits gestartete Operation darf ihren begrenzten Schreibvorgang beenden und überschreibt ihre Kopie unmittelbar bei Rückkehr/Abbruch. `getActiveDek()` bleibt vorerst als veralteter Kompatibilitäts-Getter erhalten und wird noch in bestehenden Tests verwendet; neue Produktionsaufrufe dürfen ihn nicht verwenden.
 
 ## 5. Empfohlene Zustandsdefinition
 
@@ -44,7 +44,7 @@ Die Produktionsaufrufstellen im `DocAnizerViewModel`, `DmsManager` und `Document
 - **Vault-Lock** steuert, ob kryptografische Operationen einen DEK nutzen dürfen.
 - Ein Vault gilt nach Prozessstart, explizitem Sperren, Authentifizierungsabbruch und ungültigem/invalidiertem Keystore-Schlüssel als gesperrt.
 - Entsperren ist nur nach erfolgreicher, überprüfbarer Passwort-/Recovery-Operation oder einer vom Android Keystore authentifizierten Cipher-Operation erlaubt.
-- Bei Lock während einer zusammengesetzten Dateioperation: keine neue Lease ausgeben; laufende Operationen müssen kooperativ abbrechen oder ihre bereits erteilte Lease innerhalb eines begrenzten, dokumentierten Abschnitts beenden. Keine neue DEK-Kopie nach Lock.
+- Bei Lock während einer zusammengesetzten Dateioperation: keine neue Lease ausgeben. Eine bereits erteilte suspendierbare Lease kann eine laufende Speicherung noch abschließen; ihre Kopie wird danach in `finally` gelöscht. Die UI darf nach Lock keine weiteren sensiblen Aktionen starten. Falls ein zukünftiges Produktdesign auch den Abbruch laufender Schreibvorgänge erfordert, braucht es einen eigenen Cancellation-/Rollback-Entwurf.
 - Debug-Verhalten darf keinen Release- oder produktionsähnlichen Sicherheitsstatus vortäuschen.
 
 ## 6. Offene Risiken nach diesem Audit
