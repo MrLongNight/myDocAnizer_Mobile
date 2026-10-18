@@ -8,10 +8,10 @@ Stand: 2026-10-18 — Repository `main`. Dieses Dokument ist das Audit-Ergebnis 
 |---|---|---|
 | Vault-Lock | `VaultSecurityManager.activeDek` | `null` bedeutet gesperrt; nicht persistiert. Das ByteArray wird bei `lockVault()` überschrieben. |
 | Öffentlicher DEK-Zugriff | `VaultSecurityManager.getActiveDek()` | Liefert eine mutable Kopie, die unabhängig vom späteren Lock weiter existieren kann, wenn ein Aufrufer sie nicht löscht. |
-| App-Lock | `DocAnizerViewModel._isAppUnlocked` | Separater MutableStateFlow; kann vom Vault-Zustand abweichen. |
+| App-Lock | `LockManager.appUnlocked` | Zentraler StateFlow; das frühere ViewModel-eigene `_isAppUnlocked` wurde entfernt. App- und Vault-Lock bleiben getrennte Zustände. |
 | App-Lock-Konfiguration | `SettingsRepository.biometricAuthEnabled` | Ist ein App-Setting und allein kein Nachweis einer erfolgreichen Vault-Kryptografieoperation. |
-| App-Start | `DocAnizerViewModel`-Initialisierung | DEBUG startet standardmäßig entsperrt. Außerdem gab es einen Fallback, der ohne verfügbare Activity direkt `unlockApp()` aufruft. |
-| Auto-Lock | `VaultHeader.autoLockMinutes` | Einstellung wird im Header persistiert; im untersuchten Pfad war keine zentrale, monotone Lifecycle-Sperrsteuerung über einen LockManager vorhanden. |
+| App-Start | `LockManager.initialize` über `DocAnizerViewModel` | Ein vorhandener Vault startet fail-closed gesperrt. Debug kann nur den App-Shell-Lock umgehen, nicht den Vault-Lock. Der Null-Activity-Unlock-Bypass wurde entfernt. |
+| Auto-Lock | `VaultAutoLockObserver` + `VaultHeader.autoLockMinutes` | Prozessweiter Observer nutzt `ProcessLifecycleOwner` und `SystemClock.elapsedRealtime`; 0 Minuten sperrt sofort. |
 
 ## 2. Persistierte Geheimnisse und Schlüsselmaterial
 
@@ -29,14 +29,14 @@ Stand: 2026-10-18 — Repository `main`. Dieses Dokument ist das Audit-Ergebnis 
 - `VaultSecurityManager.completeBiometricUnlock(Cipher)`: neuer Pfad, der eine vom erfolgreichen `BiometricPrompt.CryptoObject` zurückgegebene Cipher benötigt.
 - `DocAnizerViewModel.authenticateBiometric(...)`: muss bei Vault-Biometrie den CryptoObject-Pfad verwenden; reine UI-Erfolgsmeldung darf keinen Vault-DEK freigeben.
 - `AppLockScreen`: Passwort-Dialog ruft `unlockVault` auf und markiert anschließend die App als entsperrt. Der frühere allgemeine `unlockApp()`-Aufruf war auch ohne Prüfung auf erfolgreiches Vault-Unlock erreichbar.
-- `AppLockScreen`: früherer Null-Activity-Biometrie-Fallback rief `unlockApp()` auf; dieser Pfad muss fail-closed sein.
+- `AppLockScreen`: Null-Activity-Biometrie-Fallback zeigt jetzt einen Fehler und entsperrt nicht.
 - `AppLockScreen`: Wiederherstellungs-Callback setzt nach erfolgreicher Recovery ein neues Passwort und markiert anschließend die App als entsperrt.
-- `DocAnizerViewModel.lockApp()`: ruft `VaultSecurityManager.lockVault()`; der App-Lock-Status wurde nur abhängig von einer Setting-Flag geändert. App- und Vault-Lock konnten daher auseinanderlaufen.
+- `DocAnizerViewModel.lockApp()`: sperrt Vault und App-Session über den zentralen LockManager.
 - `VaultSecurityManager.lockVault()`: überschreibt den intern gehaltenen DEK und setzt ihn auf `null`.
 
 ## 4. DEK-Verbraucher / öffentliche Kopien
 
-Die Suche nach `getActiveDek()` ergab Aufrufstellen im `DocAnizerViewModel`, unter anderem in Batch-Import/Commit-, Dokument-/Dateioperationen und weiteren DMS-Flows. Jede Rückgabe ist eine separate ByteArray-Kopie und wird nicht automatisch durch `lockVault()` gelöscht. Die schrittweise Migration auf eine Lease-/Callback-API ist S05; nach dem Schritt verbleibende Verbraucher müssen separat aufgelistet bleiben.
+Die Produktionsaufrufstellen im `DocAnizerViewModel`, `DmsManager` und `DocumentMigrationService` wurden auf `withUnlockedKey` migriert. Die Lease wird synchron gehalten und im `finally` überschrieben; ein paralleler Lock wartet, bis der Callback endet. `getActiveDek()` bleibt vorerst als veralteter Kompatibilitäts-Getter erhalten und wird noch in bestehenden Tests verwendet; neue Produktionsaufrufe dürfen ihn nicht verwenden.
 
 ## 5. Empfohlene Zustandsdefinition
 
@@ -49,9 +49,8 @@ Die Suche nach `getActiveDek()` ergab Aufrufstellen im `DocAnizerViewModel`, unt
 
 ## 6. Offene Risiken nach diesem Audit
 
-1. Öffentliche DEK-Kopien und ihre Lebensdauer: S05.
-2. Ein zentraler, typisierter Zustand und fail-closed Prozessstart: S02.
-3. Lifecycle-Auto-Lock mit monotoner Zeit: S03.
-4. Alle Unlock-Bypässe und Null-Activity-Pfade: S04.
+1. Der veraltete öffentliche `getActiveDek()`-Kompatibilitäts-Getter bleibt vorhanden; Folgearbeiten sollen ihn nach Umstellung der Tests entfernen.
+2. Die neuen Lease-/Lock-/Biometriepfade müssen lokal getestet und auf echten Geräten validiert werden.
+3. Die atomare v1→v2-Laufzeitmigration ist separat in `docs/security/v14-migration-blocker.md` blockiert.
 5. Klartext-Legacy-Secret-Migration in einen Keystore-basierten SecretStore: S08/S09.
 6. TOTP bleibt eine separate offene Produktentscheidung in `docs/security/adr-002-totp-decision.md`; dieses Inventar nimmt keine Entscheidung vorweg.
