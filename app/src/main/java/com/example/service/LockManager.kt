@@ -35,7 +35,12 @@ object LockManager {
         } else {
             AppSessionLockState.LOCKED
         }
-        val vaultState = if (vaultConfigured) VaultSessionLockState.LOCKED else VaultSessionLockState.NOT_CONFIGURED
+        val previousVaultState = _snapshot.value.vault
+        val vaultState = when {
+            previousVaultState == VaultSessionLockState.UNLOCKED -> VaultSessionLockState.UNLOCKED
+            vaultConfigured -> VaultSessionLockState.LOCKED
+            else -> VaultSessionLockState.NOT_CONFIGURED
+        }
         _snapshot.value = LockSnapshot(appState, vaultState)
         _appUnlocked.value = appState == AppSessionLockState.UNLOCKED
         initialized = true
