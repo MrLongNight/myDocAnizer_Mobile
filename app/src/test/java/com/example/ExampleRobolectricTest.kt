@@ -14,6 +14,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -1366,7 +1367,7 @@ class ExampleRobolectricTest {
     payloadBytes.fill(0)
     pdfBytes.fill(0)
     setupRes.dek.fill(0)
-    recovered.fill(0)
+    recovered!!.fill(0)
   }
 
   @Test
