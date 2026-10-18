@@ -1830,12 +1830,17 @@ object ShamirEngine {
 
     private fun parseShare(token: String): Pair<Int, ByteArray>? {
         val clean = token.trim()
-        val match = Regex("""MYDOC-S([1-3])-(.+)""").find(clean) ?: return null
+        val match = Regex("""MYDOC-S([1-3])-([A-Za-z0-9+/]+={0,2})""").matchEntire(clean) ?: return null
         val x = match.groupValues[1].toIntOrNull() ?: return null
         val b64 = match.groupValues[2]
         return try {
             val bytes = Base64.decode(b64, Base64.NO_WRAP)
-            Pair(x, bytes)
+            if (bytes.size != 32) {
+                bytes.fill(0)
+                null
+            } else {
+                Pair(x, bytes)
+            }
         } catch (e: Exception) {
             null
         }
