@@ -59,7 +59,7 @@ class SecretStore(context: Context) {
             payload = decoded
             if (decoded.size < 2 + GCM_IV_BYTES + GCM_TAG_BYTES ||
                 decoded[0] != FORMAT_VERSION ||
-                decoded[1].toInt() and 0xff != GCM_IV_BYTES
+                (decoded[1].toInt() and 0xff) != GCM_IV_BYTES
             ) return null
             val iv = decoded.copyOfRange(2, 2 + GCM_IV_BYTES)
             ciphertext = decoded.copyOfRange(2 + GCM_IV_BYTES, decoded.size)
