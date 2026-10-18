@@ -46,6 +46,7 @@ data class VaultHeaderV2(
  * Fail-Closed: Unbekannte Versionen, abgeschnittene Daten, unmögliche Längen und ungültige Parameter werden strikt abgewiesen.
  */
 object VaultHeaderParserV2 {
+    private const val SUPPORTED_ALGORITHM_ID = "AES-256-GCM-Argon2id"
 
     fun parse(rawJson: String?): VaultHeaderV2? {
         if (rawJson.isNullOrBlank()) return null
@@ -59,7 +60,8 @@ object VaultHeaderParserV2 {
             }
 
             val algorithmId = json.optString("algorithmId", "")
-            if (algorithmId.isBlank() || algorithmId.length > 64) return null
+            // This parser implements only this exact v2 algorithm suite. Unknown suites must fail closed.
+            if (algorithmId != SUPPORTED_ALGORITHM_ID) return null
 
             val vaultId = json.optString("vaultId", "")
             if (vaultId.isBlank() || vaultId.length > 64 || !vaultId.startsWith("VAULT-")) return null
