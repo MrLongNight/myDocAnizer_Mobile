@@ -129,7 +129,7 @@ fun AppLockScreen(
                             }
 
                             if (success) {
-                                viewModel.unlockApp()
+                                viewModel.completeVaultUnlock()
                                 showPasswordDialog = false
                             } else {
                                 passwordError = "Falsches Passwort oder ungültiger 2. Faktor"
