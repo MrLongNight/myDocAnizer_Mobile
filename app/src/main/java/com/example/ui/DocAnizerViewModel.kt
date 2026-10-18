@@ -1790,9 +1790,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 
                 // 5. Mehrseitiges PDF erstellen
                 val tagsStr = template.defaultTags.joinToString(", ")
-                val encryptionKey = vaultSecurityManager.getActiveDek()
                 
-                val finalFile = DocumentStorageService.generatePdf(
+                val finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                    DocumentStorageService.generatePdf(
                     context = context,
                     pageBitmaps = processedPages,
                     ocrText = ocrText,
@@ -1807,8 +1807,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     passwordKey = syncPasswordKey.value,
                     settings = pdfSettings.value
                 )
-
-                // Fristen-Erkennung ausführen
+                } ?: throw IllegalStateException("Vault is locked; refusing document write")  // Fristen-Erkennung ausführen
                 val (detectedCancellation, detectedContractEnd) = com.example.service.DeadlineDetectionService.extractPrimaryDeadlines(ocrText)
 
                 // 6. In Room-Datenbank speichern
@@ -2264,9 +2263,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 val isEncrypted = true
                 val internalName = DocumentStorageService.generateInternalFileName(isEncrypted = isEncrypted)
                 val tagsStr = if (rule.targetTags.isNotEmpty()) rule.targetTags.joinToString(", ") else template.defaultTags.joinToString(", ")
-                val encryptionKey = vaultSecurityManager.getActiveDek()
 
-                val finalFile = DocumentStorageService.generatePdf(
+                val finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                    DocumentStorageService.generatePdf(
                     context = context,
                     pageBitmaps = listOf(bitmap),
                     ocrText = ocrText,
@@ -2281,8 +2280,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     passwordKey = syncPasswordKey.value,
                     settings = pdfSettings.value
                 )
-
-                val (detectedCancellation, detectedContractEnd) = com.example.service.DeadlineDetectionService.extractPrimaryDeadlines(ocrText)
+                } ?: throw IllegalStateException("Vault is locked; refusing document write")  val (detectedCancellation, detectedContractEnd) = com.example.service.DeadlineDetectionService.extractPrimaryDeadlines(ocrText)
 
                 val (autoIcon, autoLogo) = com.example.ui.components.detectSuggestedLogoAndIcon(sender, ocrText, template.mainCategory)
                 val finalIcon = rule.targetIcon.ifBlank { autoIcon }
@@ -3110,9 +3108,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 val isEncrypted = true
                 val internalName = DocumentStorageService.generateInternalFileName(isEncrypted = isEncrypted)
                 val tagsStr = template.defaultTags.joinToString(", ")
-                val encryptionKey = vaultSecurityManager.getActiveDek()
 
-                val finalFile = DocumentStorageService.generatePdf(
+                val finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                    DocumentStorageService.generatePdf(
                     context = context,
                     pageBitmaps = listOf(processed),
                     ocrText = ocrText,
@@ -3127,8 +3125,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     passwordKey = syncPasswordKey.value,
                     settings = pdfSettings.value
                 )
-
-                val (detectedCancellation, detectedContractEnd) = com.example.service.DeadlineDetectionService.extractPrimaryDeadlines(ocrText)
+                } ?: throw IllegalStateException("Vault is locked; refusing document write")  val (detectedCancellation, detectedContractEnd) = com.example.service.DeadlineDetectionService.extractPrimaryDeadlines(ocrText)
 
                 val entity = DocumentEntity(
                     title = safeTitle,
@@ -3198,11 +3195,11 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
             val displayName = DocumentStorageService.formatFileName(safeSender, safeTitle)
             val isEncrypted = true
             val internalName = DocumentStorageService.generateInternalFileName(isEncrypted = isEncrypted)
-            val encryptionKey = vaultSecurityManager.getActiveDek()
             val tagsList = (template.defaultTags + listOf("#email", "#korrespondenz")).distinct()
             val tagsStr = tagsList.joinToString(", ")
 
-            val finalFile = DocumentStorageService.generateEmailPdf(
+            val finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                    DocumentStorageService.generateEmailPdf(
                 context = context,
                 sender = safeSender,
                 recipient = recipient,
@@ -3216,8 +3213,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 passwordKey = syncPasswordKey.value,
                 settings = pdfSettings.value
             )
-
-            val entity = DocumentEntity(
+                } ?: throw IllegalStateException("Vault is locked; refusing document write")l entity = DocumentEntity(
                 title = safeTitle,
                 sender = safeSender,
                 fileName = displayName,
