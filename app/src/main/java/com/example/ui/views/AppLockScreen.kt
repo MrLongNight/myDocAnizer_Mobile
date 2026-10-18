@@ -488,11 +488,11 @@ fun VaultRecoveryModal(
                         }
 
                         com.example.service.VaultRecoveryMethod.EMERGENCY_PDF -> {
-                            Text("Scanne den QR-Code des Notfallblatts oder füge den Code hier ein:", style = MaterialTheme.typography.labelSmall)
+                            Text("Scanne den QR-Code des Notfallblatts oder füge das verschlüsselte Recovery-Payload (JSON/Base64) hier ein:", style = MaterialTheme.typography.labelSmall)
                             OutlinedTextField(
                                 value = pdfQrInput,
                                 onValueChange = { pdfQrInput = it; recoveryError = null },
-                                label = { Text("QR-Code Inhalt oder Schlüssel") },
+                                label = { Text("QR-Code-Inhalt / verschlüsseltes Payload") },
                                 minLines = 2,
                                 maxLines = 4,
                                 modifier = Modifier.fillMaxWidth().testTag("input_recovery_pdf_qr")
