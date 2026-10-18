@@ -739,10 +739,28 @@ class VaultSecurityManager private constructor(private val context: Context) {
      */
     fun generateEmergencyPdf(
         outputFile: File,
-        optionalPin: String? = null
+        recoveryPassphrase: CharArray
     ): File? {
-        val header = _vaultHeader.value ?: return null
-        val dek = activeDek ?: return null
+        val header = _vaultHeader.value ?: run {
+            recoveryPassphrase.fill('\u0000')
+            return null
+        }
+        val dek = activeDek ?: run {
+            recoveryPassphrase.fill('\u0000')
+            return null
+        }
+        val qrPayload = try {
+            val bytes = RecoveryPayloadEngine.encodeRecoveryPayload(dek, recoveryPassphrase, header.vaultId)
+            try {
+                String(bytes, Charsets.UTF_8)
+            } finally {
+                bytes.fill(0)
+            }
+        } catch (e: Exception) {
+            return null
+        } finally {
+            recoveryPassphrase.fill('\u0000')
+        }
 
         return try {
             val pdfDoc = PdfDocument()
@@ -804,11 +822,9 @@ class VaultSecurityManager private constructor(private val context: Context) {
             val dateStr = SimpleDateFormat("dd. MMMM yyyy, HH:mm 'Uhr'", Locale.GERMAN).format(Date(header.createdAt))
             canvas.drawText("Tresor-ID: ${header.vaultId}", 36f, 235f, paint)
             canvas.drawText("Erstellungsdatum: $dateStr", 36f, 252f, paint)
-            val pinNotice = if (!optionalPin.isNullOrBlank()) "Ja (geschützt durch 6-stelligen Einrichtungs-PIN)" else "Nein (direkte Wiederherstellung)"
-            canvas.drawText("Zusätzlicher Notfall-PIN: $pinNotice", 36f, 269f, paint)
+            canvas.drawText("Recovery-Passphrase: separat und sicher verwahren (mindestens 20 Zeichen)", 36f, 269f, paint)
 
             // QR-Code Generierung & Zeichnung
-            val qrPayload = buildEmergencyPayload(header.vaultId, dek, optionalPin)
             val qrBitmap = generateQrCodeBitmap(qrPayload, 220, 220)
             if (qrBitmap != null) {
                 // QR-Rahmen
@@ -829,21 +845,16 @@ class VaultSecurityManager private constructor(private val context: Context) {
             canvas.drawText("Scanne diesen QR-Code mit der myDocAnizer-App bei 'Passwort vergessen'", 297f, 548f, paint)
             paint.textAlign = Paint.Align.LEFT
 
-            // Monospace Schlüsselzeile (Fallback bei Kamera-Ausfall)
+            // Keine Schlüsselkopie im PDF: ausschließlich der QR-Code enthält Ciphertext.
             paint.color = AndroidColor.rgb(30, 41, 59)
             paint.isFakeBoldText = true
             paint.textSize = 11f
-            canvas.drawText("Manueller Notfall-Wiederherstellungscode:", 36f, 580f, paint)
-
-            val base64Key = Base64.encodeToString(dek, Base64.NO_WRAP)
-            val formattedKey = base64Key.chunked(4).joinToString("-")
-
-            paint.color = AndroidColor.rgb(241, 245, 249)
-            canvas.drawRoundRect(36f, 595f, 559f, 635f, 8f, 8f, paint)
-            paint.color = AndroidColor.rgb(15, 23, 42)
-            paint.textSize = 10f
-            paint.isFakeBoldText = true
-            canvas.drawText(formattedKey, 50f, 620f, paint)
+            canvas.drawText("Wichtig für die Wiederherstellung:", 36f, 580f, paint)
+            paint.isFakeBoldText = false
+            paint.textSize = 9.5f
+            canvas.drawText("Die Recovery-Passphrase wird NICHT in diesem Dokument gespeichert.", 36f, 598f, paint)
+            canvas.drawText("Ohne diese separate Passphrase kann das verschlüsselte Payload nicht geöffnet werden.", 36f, 614f, paint)
+            canvas.drawText("Der QR-Code enthält nur verschlüsselte Wiederherstellungsdaten.", 36f, 630f, paint)
 
             // Anleitung zur Wiederherstellung
             paint.color = AndroidColor.rgb(30, 41, 59)
@@ -883,8 +894,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 streamBuilder.append("BT\n/F1 14 Tf\n50 780 Td\n(myDocAnizer-Mobile - Notfall-Schluesselblatt) Tj\n")
                 streamBuilder.append("/F1 10 Tf\n0 -25 Td\n(Zero-Knowledge Tresor-Wiederherstellung Emergency Kit) Tj\n")
                 streamBuilder.append("0 -30 Td\n(Tresor-ID: ${header.vaultId}) Tj\n")
-                streamBuilder.append("0 -20 Td\n(Manueller Notfall-Code: ${formattedKey}) Tj\n")
-                streamBuilder.append("0 -20 Td\n(QR-Payload: ${qrPayload.replace("(", "").replace(")", "")}) Tj\n")
+                streamBuilder.append("0 -20 Td\n(Recovery-Payload Base64, verschluesselt: ${payloadBase64}) Tj\n")
                 streamBuilder.append("0 -30 Td\n(Bewahren Sie dieses Blatt physisch sicher auf.) Tj\nET\n")
                 val stream = streamBuilder.toString()
                 val pdfContent = "%PDF-1.4\n" +
@@ -905,43 +915,21 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /**
      * Stellt den DEK aus dem QR-Payload des Emergency Kits wieder her.
      */
-    fun recoverDekFromEmergencyKit(qrPayload: String, optionalPin: String? = null): ByteArray? {
+    fun recoverDekFromEmergencyKit(
+        qrPayload: String,
+        recoveryPassphrase: CharArray,
+        expectedVaultId: String
+    ): ByteArray? {
         return try {
-            val json = JSONObject(qrPayload)
-            val vaultId = json.optString("vaultId")
-            val currentHeader = _vaultHeader.value
-            if (currentHeader != null && vaultId.isNotBlank() && vaultId != currentHeader.vaultId) {
-                // Falsche Tresor-ID
-                return null
-            }
-
-            val encDekBase64 = json.getString("encDek")
-            val isPinProtected = json.optBoolean("pinProtected", false)
-            val rawCipher = Base64.decode(encDekBase64, Base64.NO_WRAP)
-
-            if (isPinProtected) {
-                val pin = optionalPin?.trim() ?: return null
-                val saltBase64 = json.getString("pinSalt")
-                val ivBase64 = json.getString("iv")
-                val salt = Base64.decode(saltBase64, Base64.NO_WRAP)
-                val iv = Base64.decode(ivBase64, Base64.NO_WRAP)
-                val kekPin = deriveKekFromPin(pin, salt)
-                val dek = decryptAesGcm(rawCipher, iv, kekPin)
-                kekPin.fill(0)
-                dek
-            } else {
-                // Direkter Base64-DEK
-                rawCipher
-            }
+            RecoveryPayloadEngine.decodeRecoveryPayload(
+                qrPayload.toByteArray(Charsets.UTF_8),
+                recoveryPassphrase,
+                expectedVaultId
+            )
         } catch (e: Exception) {
-            // Fallback: Eventuell wurde der formatierte Monospace-Code direkt eingegeben
-            try {
-                val clean = qrPayload.replace("-", "").replace(" ", "").trim()
-                val decoded = Base64.decode(clean, Base64.NO_WRAP)
-                if (decoded.size == DEK_SIZE_BYTES) decoded else null
-            } catch (e2: Exception) {
-                null
-            }
+            null
+        } finally {
+            recoveryPassphrase.fill('\u0000')
         }
     }
 
