@@ -40,6 +40,10 @@ class BackupRulesSecurityTest {
         assertTrue(("sharedpref" to "mydocanizer_prefs.xml") in legacyBackup)
         assertTrue(("sharedpref" to "mydocanizer_vault_security.xml") in extractionRules)
         assertTrue(("sharedpref" to "mydocanizer_prefs.xml") in extractionRules)
+        assertTrue(("external" to ".") in extractionRules)
+        assertTrue(("file" to "Models") in extractionRules)
+        assertTrue(("file" to "Temp") in extractionRules)
+        assertTrue(("file" to "tmp") in extractionRules)
     }
 
     @Test
