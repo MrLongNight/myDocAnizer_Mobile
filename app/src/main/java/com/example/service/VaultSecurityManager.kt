@@ -542,8 +542,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             val ciphertext = Base64.decode(header.encryptedDekByPasswordBase64, Base64.NO_WRAP)
             val iv = Base64.decode(header.passwordDekIvBase64, Base64.NO_WRAP)
             val dek = decryptAesGcm(ciphertext, iv, derivedKek)
-            activeDek?.fill(0)
-            activeDek = dek.copyOf()
+            replaceActiveDek(dek)
             dek.fill(0)
             true
         } catch (e: Exception) {
@@ -628,8 +627,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             ciphertext = Base64.decode(encryptedBase64, Base64.NO_WRAP)
             dek = authenticatedCipher.doFinal(ciphertext)
             if (dek.size != DEK_SIZE_BYTES) return false
-            activeDek?.fill(0)
-            activeDek = dek.copyOf()
+            replaceActiveDek(dek)
             true
         } catch (e: Exception) {
             false
@@ -1289,18 +1287,26 @@ class VaultSecurityManager private constructor(private val context: Context) {
 
     fun recoverDekWithRecoveryCode(code: String): ByteArray? {
         val header = _vaultHeader.value ?: return null
-        if (header.encryptedDekByRecoveryBase64 == null || header.recoveryDekIvBase64 == null) return null
+        val encryptedBase64 = header.encryptedDekByRecoveryBase64 ?: return null
+        val ivBase64 = header.recoveryDekIvBase64 ?: return null
+        var kek: ByteArray? = null
+        var ciphertext: ByteArray? = null
+        var iv: ByteArray? = null
+        var dek: ByteArray? = null
         return try {
-            val kek = deriveKekFromRecoveryCode(code)
-            val ciphertext = Base64.decode(header.encryptedDekByRecoveryBase64, Base64.NO_WRAP)
-            val iv = Base64.decode(header.recoveryDekIvBase64, Base64.NO_WRAP)
-            val dek = decryptAesGcm(ciphertext, iv, kek)
-            activeDek = dek.copyOf()
-            dek
+            kek = deriveKekFromRecoveryCode(code)
+            ciphertext = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+            iv = Base64.decode(ivBase64, Base64.NO_WRAP)
+            dek = decryptAesGcm(ciphertext, iv, kek)
+            replaceActiveDek(dek)
+            dek.copyOf()
         } catch (e: Exception) {
             null
         } finally {
-            // KEK and decoded ciphertext are cleaned in the recovery path below.
+            kek?.fill(0)
+            ciphertext?.fill(0)
+            iv?.fill(0)
+            dek?.fill(0)
         }
     }
 
