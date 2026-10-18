@@ -62,12 +62,13 @@ class SecretStore(context: Context) {
                 (decoded[1].toInt() and 0xff) != GCM_IV_BYTES
             ) return null
             val iv = decoded.copyOfRange(2, 2 + GCM_IV_BYTES)
-            ciphertext = decoded.copyOfRange(2 + GCM_IV_BYTES, decoded.size)
+            val encryptedBytes = decoded.copyOfRange(2 + GCM_IV_BYTES, decoded.size)
+            ciphertext = encryptedBytes
             try {
                 Cipher.getInstance(TRANSFORMATION).run {
                     init(Cipher.DECRYPT_MODE, getExistingKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
                     updateAAD(aad(name))
-                    doFinal(ciphertext)
+                    doFinal(encryptedBytes)
                 }
             } finally {
                 iv.fill(0)
