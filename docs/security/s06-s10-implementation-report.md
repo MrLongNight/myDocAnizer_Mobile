@@ -19,6 +19,14 @@ Stand: 2026-10-18. Änderungen wurden direkt auf `main` vorgenommen. Dieser Beri
 - Dateinamen werden auf den Basename begrenzt. Verschlüsselung erfolgt in eine temporäre Datei; erst nach erfolgreicher Erstellung wird sie per Same-Directory-Rename übernommen. Fehlgeschlagene temporäre Dateien werden entfernt.
 - Verschlüsselungsfehler, atomarer Austausch und bestehende Nutzerdateien müssen noch auf Gerät getestet werden.
 
+## D13 – Backupregeln (zusätzliche Änderung am 2026-10-18)
+
+- Die Android-Geräteübertragung hatte bisher pauschale `include`-Regeln für den gesamten Datei-, Datenbank- und SharedPreferences-Bereich. Diese wurden entfernt.
+- Die Geräteübertragung schließt jetzt die Room-Datenbank, interne Dokument-/Scan-/Backup-/Modell-/Temp-Pfade, externe App-Dateien sowie sensible Preferences explizit aus. Ein Gerätewechsel muss über den explizit gestarteten verschlüsselten Export-/Restore-Weg erfolgen.
+- Legacy- und moderne Cloud-Backup-Regeln schließen zusätzlich externe App-Dateien sowie Modell-/Temp-Pfade aus.
+- `BackupRulesSecurityTest` prüft jetzt zusätzlich, dass keine pauschalen Includes für `.` auf Datei-, Datenbank- oder SharedPreferences-Domänen vorhanden sind und dass die neuen Ausschlüsse gesetzt sind.
+- **Wichtig:** Diese XML-Regeln und Tests wurden committed, aber der Gradle-Testlauf und ein echter Android-Geräte-/Restore-Test wurden nicht ausgeführt. Die Regeln müssen vor Release anhand der realen Speicherpfade geprüft werden.
+
 ## Teststatus
 
 - Vorhandene/ergänzte Unit-Tests: `AuthenticationBackoffManagerTest`, `ExternalIntentPolicyTest`.
