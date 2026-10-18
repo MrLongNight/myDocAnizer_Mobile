@@ -28,9 +28,8 @@ open class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try {
-            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-        } catch (_: Throwable) {}
+        if (com.example.BuildConfig.DEBUG) window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        else window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
         // Init moved to DocAnizerApp.onCreate()
         try {
             handleWidgetIntent(intent)
