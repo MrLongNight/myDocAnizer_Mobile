@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.service.LockManager
 import com.example.service.VaultRecoveryMethod
 import com.example.service.VaultSecurityManager
+import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -19,6 +20,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], manifest = Config.NONE)
 class LockLeaseTest {
+    @After
+    fun cleanupVaultSession() {
+        VaultSecurityManager.getInstance(ApplicationProvider.getApplicationContext<Application>()).lockVault()
+        LockManager.resetForTests()
+    }
     @Test
     fun `lease is wiped after callback and no lease is issued while locked`() {
         val context = ApplicationProvider.getApplicationContext<Application>()
