@@ -582,12 +582,14 @@ class VaultSecurityManager private constructor(private val context: Context) {
         var iv: ByteArray? = null
         return try {
             withUnlockedKey { dek ->
-                encrypted = authenticatedCipher.doFinal(dek)
-                iv = authenticatedCipher.iv
+                val encryptedBytes = authenticatedCipher.doFinal(dek)
+                val ivBytes = authenticatedCipher.iv
+                encrypted = encryptedBytes
+                iv = ivBytes
                 val updated = header.copy(
                     biometric2FaEnabled = true,
-                    encryptedDekByBiometricsBase64 = Base64.encodeToString(encrypted, Base64.NO_WRAP),
-                    biometricDekIvBase64 = Base64.encodeToString(iv, Base64.NO_WRAP)
+                    encryptedDekByBiometricsBase64 = Base64.encodeToString(encryptedBytes, Base64.NO_WRAP),
+                    biometricDekIvBase64 = Base64.encodeToString(ivBytes, Base64.NO_WRAP)
                 )
                 saveVaultHeader(updated)
                 true
