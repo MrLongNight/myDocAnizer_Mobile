@@ -35,7 +35,7 @@ class RecoveryPayloadEngineTest {
             ByteArray(32) { 7 }, "Valid recovery passphrase".toCharArray(), vaultId
         )
         assertThrows(SecurityException::class.java) {
-            RecoveryPayloadEngine.decodeRecoveryPayload(encoded, "wrong passphrase".toCharArray(), vaultId)
+            RecoveryPayloadEngine.decodeRecoveryPayload(encoded, "Definitely wrong recovery passphrase 2026".toCharArray(), vaultId)
         }
     }
 
