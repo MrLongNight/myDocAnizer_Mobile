@@ -2373,15 +2373,28 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 if (cloudSyncConfig.value.autoMirrorToBackupDir) {
                     launch(Dispatchers.IO) {
                         try {
-                            val backupDir = File(context.filesDir, "Backups").apply { mkdirs() }
+                            val backupDir = File(context.filesDir, "Backups")
+                            if (!backupDir.isDirectory && !backupDir.mkdirs()) {
+                                throw java.io.IOException("Backup-Verzeichnis kann nicht erstellt werden.")
+                            }
                             val pw = syncPasswordKey.value
                             if (pw.isNullOrBlank()) {
-                                // Never create a plaintext mirror. Opting into mirroring does not
-                                // authorize an unencrypted copy when no encryption key is available.
                                 throw SecurityException("Auto-Mirror benötigt einen verfügbaren Verschlüsselungsschlüssel.")
                             }
-                            val encTarget = File(backupDir, "${entity.fileName}.enc")
-                            DocumentStorageService.encryptFile(File(entity.filePath), encTarget, pw)
+                            val safeFileName = File(entity.fileName).name.ifBlank { entity.id.toString() }
+                            val encTarget = File(backupDir, "$safeFileName.enc")
+                            val tempTarget = File(backupDir, ".mirror-${entity.id}-${UUID.randomUUID()}.tmp")
+                            try {
+                                DocumentStorageService.encryptFile(File(entity.filePath), tempTarget, pw)
+                                if (!tempTarget.isFile || tempTarget.length() == 0L) {
+                                    throw java.io.IOException("Verschlüsselte Spiegelung ist unvollständig.")
+                                }
+                                if (!tempTarget.renameTo(encTarget)) {
+                                    throw java.io.IOException("Verschlüsselte Spiegelung kann nicht atomar übernommen werden.")
+                                }
+                            } finally {
+                                if (tempTarget.exists()) tempTarget.delete()
+                            }
                         } catch (e: Exception) {
                             Log.e("DocAnizerViewModel", "Auto-Mirror fehlgeschlagen: ${e.message}")
                         }
