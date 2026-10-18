@@ -565,7 +565,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
 
     /** Creates a Keystore-backed encryption Cipher; the actual encryption requires biometric auth. */
     fun createBiometricEnrollmentCipher(): Cipher? {
-        if (activeDek == null) return null
+        if (!isUnlocked()) return null
         return try {
             Cipher.getInstance("AES/GCM/NoPadding").apply {
                 init(Cipher.ENCRYPT_MODE, getOrCreateKeyStoreKey())
@@ -578,19 +578,20 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /** Called only with the Cipher returned by a successful CryptoObject authentication callback. */
     fun completeBiometricEnrollment(authenticatedCipher: Cipher): Boolean {
         val header = _vaultHeader.value ?: return false
-        val dek = activeDek ?: return false
         var encrypted: ByteArray? = null
         var iv: ByteArray? = null
         return try {
-            encrypted = authenticatedCipher.doFinal(dek)
-            iv = authenticatedCipher.iv
-            val updated = header.copy(
-                biometric2FaEnabled = true,
-                encryptedDekByBiometricsBase64 = Base64.encodeToString(encrypted, Base64.NO_WRAP),
-                biometricDekIvBase64 = Base64.encodeToString(iv, Base64.NO_WRAP)
-            )
-            saveVaultHeader(updated)
-            true
+            withUnlockedKey { dek ->
+                encrypted = authenticatedCipher.doFinal(dek)
+                iv = authenticatedCipher.iv
+                val updated = header.copy(
+                    biometric2FaEnabled = true,
+                    encryptedDekByBiometricsBase64 = Base64.encodeToString(encrypted, Base64.NO_WRAP),
+                    biometricDekIvBase64 = Base64.encodeToString(iv, Base64.NO_WRAP)
+                )
+                saveVaultHeader(updated)
+                true
+            } ?: false
         } catch (e: Exception) {
             false
         } finally {
@@ -645,27 +646,25 @@ class VaultSecurityManager private constructor(private val context: Context) {
      */
     fun changeMasterPassword(oldPassword: String, newPassword: String): Boolean {
         val header = _vaultHeader.value ?: return false
-        val dek = activeDek ?: run {
-            if (!unlockWithPassword(oldPassword)) return false
-            activeDek ?: return false
-        }
-
+        if (!isUnlocked() && !unlockWithPassword(oldPassword)) return false
         return try {
-            val newSalt = ByteArray(16)
-            secureRandom.nextBytes(newSalt)
-            val newKek = deriveKekArgon2id(newPassword, newSalt, header.argon2Iterations, header.argon2MemoryKb)
-            val encryptedResult = try {
-                encryptAesGcm(dek, newKek)
-            } finally {
-                newKek.fill(0)
-            }
-            val updatedHeader = header.copy(
-                argon2SaltBase64 = Base64.encodeToString(newSalt, Base64.NO_WRAP),
-                encryptedDekByPasswordBase64 = Base64.encodeToString(encryptedResult.first, Base64.NO_WRAP),
-                passwordDekIvBase64 = Base64.encodeToString(encryptedResult.second, Base64.NO_WRAP)
-            )
-            saveVaultHeader(updatedHeader)
-            true
+            withUnlockedKey { dek ->
+                val newSalt = ByteArray(16)
+                secureRandom.nextBytes(newSalt)
+                val newKek = deriveKekArgon2id(newPassword, newSalt, header.argon2Iterations, header.argon2MemoryKb)
+                val encryptedResult = try {
+                    encryptAesGcm(dek, newKek)
+                } finally {
+                    newKek.fill(0)
+                }
+                val updatedHeader = header.copy(
+                    argon2SaltBase64 = Base64.encodeToString(newSalt, Base64.NO_WRAP),
+                    encryptedDekByPasswordBase64 = Base64.encodeToString(encryptedResult.first, Base64.NO_WRAP),
+                    passwordDekIvBase64 = Base64.encodeToString(encryptedResult.second, Base64.NO_WRAP)
+                )
+                saveVaultHeader(updatedHeader)
+                true
+            } ?: false
         } catch (e: Exception) {
             false
         }
@@ -1026,12 +1025,11 @@ class VaultSecurityManager private constructor(private val context: Context) {
      * Teilt den 32-Byte DEK mathematisch in 3 Teile mit einem 2-von-3 Schwellenwert auf.
      */
     fun splitSecretShamir2of3(secret: ByteArray? = null): List<ShamirShare> {
-        val secretForSplit = secret?.copyOf() ?: withUnlockedKey { it.copyOf() }
-            ?: throw IllegalStateException("Vault must be unlocked before creating recovery shares")
-        val shares = try {
-            ShamirEngine.split2of3(secretForSplit)
-        } finally {
-            secretForSplit.fill(0)
+        val shares = if (secret != null) {
+            ShamirEngine.split2of3(secret)
+        } else {
+            withUnlockedKey { lease -> ShamirEngine.split2of3(lease) }
+                ?: throw IllegalStateException("Vault must be unlocked before creating recovery shares")
         }
         return listOf(
             ShamirShare(
