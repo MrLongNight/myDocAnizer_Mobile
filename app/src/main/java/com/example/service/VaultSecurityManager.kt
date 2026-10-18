@@ -1015,13 +1015,14 @@ class VaultSecurityManager private constructor(private val context: Context) {
         var payloadBytes: ByteArray? = null
         return try {
             val supplied = qrPayload.trim()
-            payloadBytes = if (supplied.startsWith("{")) {
+            val decodedPayload = if (supplied.startsWith("{")) {
                 supplied.toByteArray(Charsets.UTF_8)
             } else {
                 Base64.decode(supplied, Base64.NO_WRAP)
             }
+            payloadBytes = decodedPayload
             RecoveryPayloadEngine.decodeRecoveryPayload(
-                payloadBytes,
+                decodedPayload,
                 recoveryPassphrase,
                 expectedVaultId
             )
