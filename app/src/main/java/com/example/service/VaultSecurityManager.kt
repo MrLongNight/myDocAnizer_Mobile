@@ -616,12 +616,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
         val ivEncoded = header.biometricDekIvBase64 ?: return null
         var iv: ByteArray? = null
         return try {
-            iv = Base64.decode(ivEncoded, Base64.NO_WRAP)
+            val decodedIv = Base64.decode(ivEncoded, Base64.NO_WRAP)
+            iv = decodedIv
             val keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
             val key = (keyStore.getEntry(BIOMETRIC_KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
                 ?: return null
             Cipher.getInstance("AES/GCM/NoPadding").apply {
-                init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_SIZE_BITS, iv))
+                init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_SIZE_BITS, decodedIv))
             }
         } catch (e: Exception) {
             null
