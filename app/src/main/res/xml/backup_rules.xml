@@ -14,5 +14,6 @@
     <exclude domain="database" path="mydocanizer_database-shm" />
     <exclude domain="database" path="mydocanizer_database-wal" />
     <exclude domain="sharedpref" path="mydocanizer_prefs.xml" />
+    <exclude domain="sharedpref" path="mydocanizer_vault_security.xml" />
     <exclude domain="sharedpref" path="doc_rules_storage.xml" />
 </full-backup-content>
