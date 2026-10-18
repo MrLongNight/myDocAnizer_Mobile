@@ -37,10 +37,9 @@ class DocumentMigrationService(
         var failed = 0
         val details = mutableListOf<String>()
 
-        val encryptionKey = vaultSecurityManager.getActiveDek()
         val pw = passwordKey ?: ""
-
-        for (doc in allDocs) {
+        val result = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+            for (doc in allDocs) {
             try {
                 val oldFile = File(doc.filePath)
                 val fileName = oldFile.name
@@ -100,6 +99,14 @@ class DocumentMigrationService(
             }
         }
 
-        MigrationResult(allDocs.size, migrated, skipped, failed, details)
+            MigrationResult(allDocs.size, migrated, skipped, failed, details)
+        }
+        result ?: MigrationResult(
+            total = allDocs.size,
+            migrated = 0,
+            skipped = 0,
+            failed = allDocs.size,
+            details = listOf("ABGEBROCHEN: Tresor gesperrt; keine Migration ausgeführt.")
+        )
     }
 }
