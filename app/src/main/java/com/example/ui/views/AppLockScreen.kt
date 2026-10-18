@@ -412,7 +412,7 @@ fun VaultRecoveryModal(
     // Inputs
     var bip39Input by remember { mutableStateOf("") }
     var pdfQrInput by remember { mutableStateOf("") }
-    var pdfPinInput by remember { mutableStateOf("") }
+    var pdfRecoveryPassphrase by remember { mutableStateOf("") }
     var shamirShare1 by remember { mutableStateOf("") }
     var shamirShare2 by remember { mutableStateOf("") }
 
@@ -495,13 +495,14 @@ fun VaultRecoveryModal(
                                 maxLines = 4,
                                 modifier = Modifier.fillMaxWidth().testTag("input_recovery_pdf_qr")
                             )
+                            Text("Gib die separate Recovery-Passphrase ein, die beim PDF-Export festgelegt wurde. Sie steht nicht im PDF und muss mindestens 20 Zeichen lang sein.", style = MaterialTheme.typography.labelSmall)
                             OutlinedTextField(
-                                value = pdfPinInput,
-                                onValueChange = { pdfPinInput = it; recoveryError = null },
-                                label = { Text("Optionaler Notfall-PIN (falls vergeben)") },
+                                value = pdfRecoveryPassphrase,
+                                onValueChange = { pdfRecoveryPassphrase = it; recoveryError = null },
+                                label = { Text("Recovery-Passphrase (mind. 20 Zeichen)") },
                                 singleLine = true,
                                 visualTransformation = PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth().testTag("input_recovery_pdf_pin")
+                                modifier = Modifier.fillMaxWidth().testTag("input_recovery_pdf_passphrase")
                             )
                         }
 
@@ -591,11 +592,25 @@ fun VaultRecoveryModal(
                                     recoveryError = "Bitte den Code oder QR-Inhalt eingeben."
                                     return@Button
                                 }
-                                val dek = vaultSecManager.recoverDekFromEmergencyKit(pdfQrInput.trim(), pdfPinInput.ifBlank { null })
+                                if (pdfRecoveryPassphrase.length < 20) {
+                                    recoveryError = "Die Recovery-Passphrase muss mindestens 20 Zeichen lang sein."
+                                    return@Button
+                                }
+                                val expectedVaultId = vaultSecManager.vaultHeader.value?.vaultId
+                                if (expectedVaultId.isNullOrBlank()) {
+                                    recoveryError = "Kein bestehender Tresorheader gefunden; Recovery wurde abgebrochen."
+                                    return@Button
+                                }
+                                val dek = vaultSecManager.recoverDekFromEmergencyKit(
+                                    pdfQrInput.trim(),
+                                    pdfRecoveryPassphrase.toCharArray(),
+                                    expectedVaultId
+                                )
+                                pdfRecoveryPassphrase = ""
                                 if (dek != null) {
                                     recoveredDek = dek
                                 } else {
-                                    recoveryError = "Wiederherstellung fehlgeschlagen: Ungültiger QR-Code oder falscher PIN."
+                                    recoveryError = "Wiederherstellung fehlgeschlagen: ungültiges Payload, falsche Passphrase oder falsche Tresor-ID."
                                 }
                             }
 
