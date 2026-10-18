@@ -13,6 +13,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -41,6 +45,40 @@ class LockLeaseTest {
         assertTrue(leaseAfterCallback!!.all { it == 0.toByte() })
         manager.lockVault()
         assertNull(manager.withUnlockedKey { it.copyOf() })
+        setup.dek.fill(0)
+    }
+
+    @Test
+    fun `suspend lease supports suspension and wipes copy after lock`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val manager = VaultSecurityManager.getInstance(context)
+        val setup = manager.initializeVault(
+            masterPassword = "SyntheticLeasePassword2026!",
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.NONE
+        )
+        val leaseAcquired = CompletableDeferred<ByteArray>()
+        val finishOperation = CompletableDeferred<Unit>()
+
+        val operation = async(Dispatchers.Default) {
+            manager.withUnlockedKeySuspend { lease ->
+                assertArrayEquals(setup.dek, lease)
+                leaseAcquired.complete(lease)
+                finishOperation.await()
+                "completed"
+            }
+        }
+
+        val leaseReference = leaseAcquired.await()
+        manager.lockVault()
+
+        // A lock denies future leases immediately, while an already-running operation owns
+        // its isolated copy until its finally block wipes it.
+        assertNull(manager.withUnlockedKeySuspend { it.copyOf() })
+        finishOperation.complete(Unit)
+
+        assertTrue(operation.await() == "completed")
+        assertTrue("Suspend lease must be wiped after callback returns", leaseReference.all { it == 0.toByte() })
         setup.dek.fill(0)
     }
 
