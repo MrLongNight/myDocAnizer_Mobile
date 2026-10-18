@@ -41,7 +41,7 @@ class SecretStoreInstrumentedTest {
         assertTrue(store.put("tamper_test", secret))
         val prefs = context.getSharedPreferences("mydocanizer_secret_store", Context.MODE_PRIVATE)
         val encoded = prefs.getString("secret_v1_tamper_test", null)
-        assertTrue(encoded != null)
+            ?: throw AssertionError("encrypted test payload missing")
         val payload = Base64.decode(encoded, Base64.NO_WRAP)
         payload[payload.lastIndex] = (payload.last().toInt() xor 1).toByte()
         prefs.edit().putString("secret_v1_tamper_test", Base64.encodeToString(payload, Base64.NO_WRAP)).commit()
