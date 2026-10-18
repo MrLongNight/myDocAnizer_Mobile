@@ -830,17 +830,15 @@ class VaultSecurityManager private constructor(private val context: Context) {
             recoveryPassphrase.fill('\u0000')
             return null
         }
-        val dek = activeDek ?: run {
-            recoveryPassphrase.fill('\u0000')
-            return null
-        }
         val qrPayload = try {
-            val bytes = RecoveryPayloadEngine.encodeRecoveryPayload(dek, recoveryPassphrase, header.vaultId)
-            try {
-                String(bytes, Charsets.UTF_8)
-            } finally {
-                bytes.fill(0)
-            }
+            withUnlockedKey { dek ->
+                val bytes = RecoveryPayloadEngine.encodeRecoveryPayload(dek, recoveryPassphrase, header.vaultId)
+                try {
+                    String(bytes, Charsets.UTF_8)
+                } finally {
+                    bytes.fill(0)
+                }
+            } ?: return null
         } catch (e: Exception) {
             return null
         } finally {
@@ -1024,8 +1022,14 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /**
      * Teilt den 32-Byte DEK mathematisch in 3 Teile mit einem 2-von-3 Schwellenwert auf.
      */
-    fun splitSecretShamir2of3(secret: ByteArray = activeDek ?: generateRandomDek()): List<ShamirShare> {
-        val shares = ShamirEngine.split2of3(secret)
+    fun splitSecretShamir2of3(secret: ByteArray? = null): List<ShamirShare> {
+        val secretForSplit = secret?.copyOf() ?: withUnlockedKey { it.copyOf() }
+            ?: throw IllegalStateException("Vault must be unlocked before creating recovery shares")
+        val shares = try {
+            ShamirEngine.split2of3(secretForSplit)
+        } finally {
+            secretForSplit.fill(0)
+        }
         return listOf(
             ShamirShare(
                 id = 1,
