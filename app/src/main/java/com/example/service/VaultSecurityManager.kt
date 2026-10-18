@@ -638,10 +638,12 @@ class VaultSecurityManager private constructor(private val context: Context) {
         var ciphertext: ByteArray? = null
         var dek: ByteArray? = null
         return try {
-            ciphertext = Base64.decode(encryptedBase64, Base64.NO_WRAP)
-            dek = authenticatedCipher.doFinal(ciphertext)
-            if (dek.size != DEK_SIZE_BYTES) return false
-            replaceActiveDek(dek)
+            val encryptedBytes = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+            ciphertext = encryptedBytes
+            val decryptedDek = authenticatedCipher.doFinal(encryptedBytes)
+            dek = decryptedDek
+            if (decryptedDek.size != DEK_SIZE_BYTES) return false
+            replaceActiveDek(decryptedDek)
             true
         } catch (e: Exception) {
             false
@@ -1323,12 +1325,16 @@ class VaultSecurityManager private constructor(private val context: Context) {
         var iv: ByteArray? = null
         var dek: ByteArray? = null
         return try {
-            kek = deriveKekFromRecoveryCode(code)
-            ciphertext = Base64.decode(encryptedBase64, Base64.NO_WRAP)
-            iv = Base64.decode(ivBase64, Base64.NO_WRAP)
-            dek = decryptAesGcm(ciphertext, iv, kek)
-            replaceActiveDek(dek)
-            dek.copyOf()
+            val derivedKek = deriveKekFromRecoveryCode(code)
+            kek = derivedKek
+            val encryptedBytes = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+            ciphertext = encryptedBytes
+            val ivBytes = Base64.decode(ivBase64, Base64.NO_WRAP)
+            iv = ivBytes
+            val decryptedDek = decryptAesGcm(encryptedBytes, ivBytes, derivedKek)
+            dek = decryptedDek
+            replaceActiveDek(decryptedDek)
+            decryptedDek.copyOf()
         } catch (e: Exception) {
             null
         } finally {
