@@ -98,14 +98,14 @@
 **Abhängigkeit:** V03.  
 **Prompt:** Implementiere ausschließlich die AEAD-Operationen zum Verpacken/Öffnen des zufälligen 256-Bit-DEK im v2-Header. Nutze geprüfte AES-GCM/JCA- oder gleichwertige AEAD-Primitiven korrekt; pro Verschlüsselung neuen zufälligen Nonce/IV generieren und niemals wiederverwenden. Lege fest und teste, welche Vault-ID-, Versions- und KDF-Metadaten als AAD gebunden werden. Falscher Schlüssel, falscher AAD oder veränderter Tag müssen fehlschlagen, ohne Teilresultat auszugeben. Keine automatische Migration. **Abnahme:** gültiger Roundtrip; Manipulations- und Nonceformattests; keine geheime Materialausgabe in Logs.
 
-## V05 – TOTP-Entscheidungsvorlage (AUDIT/GATE) — **[ERLEDIGT]**
+## V05 – TOTP-Entscheidungsvorlage (AUDIT/GATE) — **[ADR ERSTELLT – ENTSCHEIDUNG OFFEN]**
 **Prompt:** Untersuche die bestehende TOTP-/Base32-Implementierung, Speicherung des Secrets, UI-Gates und Beziehung zur DEK-Freigabe. Erstelle eine kurze ADR mit zwei Optionen: (A) TOTP entfernen und bestehende Klartext-Secrets geordnet migrieren/entfernen oder (B) überprüfbares Design, bei dem der zweite Faktor tatsächlich kryptografisch den DEK-Zugriff schützt. Berücksichtige RFC 6238, Rate-Limits, Replay, Gerätewechsel und Recovery. Nimm keine Codeänderung vor und entscheide nicht eigenmächtig zwischen den Produktoptionen. **Abnahme:** eindeutige Risiken, Aufwand und Nutzerfolgen; wartet auf Freigabe.
 
 ## V06 – TOTP nur nach freigegebenem Design testen/implementieren
 **Abhängigkeit:** V05 und explizite Auswahl Option B; bei Option A diesen Auftrag überspringen.  
 **Prompt:** Setze nur den in der freigegebenen ADR definierten TOTP-Kern um. Verwende RFC-6238-konforme HMAC-/Base32-Behandlung und offizielle Referenzvektoren einschließlich Zeitfenster. Vergleiche Codes konstantzeitig, begrenze Fehlversuche und verhindere Replay eines akzeptierten Codes im gleichen Zeitfenster. Speichere das Secret nicht im Klartext in Header/Prefs. Noch keine Änderung an UI oder Vault-Migration außer dem für den Kern zwingend nötigen, kompatiblen Adapter. **Abnahme:** Referenzvektoren und Negativtests grün; keine Behauptung echter 2FA, solange die Freigabearchitektur nicht vollständig integriert ist.
 
-## V06A – TOTP entfernen (NUR nach Freigabe Option A) — **[ERLEDIGT]**
+## V06A – TOTP entfernen (NUR nach Freigabe Option A) — **[BLOCKIERT – FREIGABE FEHLT]**
 **Abhängigkeit:** V05 und explizite Freigabe zum Entfernen von TOTP; statt V06/V06B ausführen.  
 **Prompt:** Entferne nur den freigegebenen TOTP-Pfad aus UI und Authentifizierungslogik. Vorhandene TOTP-Secrets müssen kontrolliert migriert/entfernt werden; lösche sie erst, wenn der neue Zustand nachweislich gespeichert wurde. Entferne keine anderen Authentifizierungs- oder Recovery-Wege. Aktualisiere Texte so, dass keine nicht mehr vorhandene 2FA behauptet wird. **Abnahme:** Tests für Altzustand, Migration, Neustart und TOTP-Deaktivierung; kein Klartext-Secret verbleibt.
 
