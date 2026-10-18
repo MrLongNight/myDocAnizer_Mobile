@@ -761,14 +761,36 @@ class VaultSecurityManager private constructor(private val context: Context) {
     }
 
     /**
-     * Executes a synchronous crypto/storage operation with a temporary key lease.
-     * Lock waits for the current lease block to finish; the lease copy is wiped before returning.
+     * Executes a synchronous operation with a temporary key lease.
+     * The monitor is held for the callback, so lockVault() waits for this operation to finish.
      * Callers must not retain the supplied ByteArray beyond the callback.
      */
     fun <T> withUnlockedKey(operation: (ByteArray) -> T): T? = synchronized(keyLeaseLock) {
         if (activeDek == null || !LockManager.isVaultUnlocked()) return@synchronized null
         val lease = activeDek!!.copyOf()
         try {
+            operation(lease)
+        } finally {
+            lease.fill(0)
+        }
+    }
+
+    /**
+     * Executes a suspendable storage operation with a temporary key lease.
+     *
+     * A JVM monitor must not be held across suspension because a coroutine can resume on a
+     * different thread. The key is therefore copied atomically while the vault is unlocked,
+     * then wiped in finally when the full operation completes. A lock request prevents new
+     * leases immediately; an operation which already acquired a lease may finish its in-flight
+     * work, after which its private key copy is wiped.
+     */
+    suspend fun <T> withUnlockedKeySuspend(operation: suspend (ByteArray) -> T): T? {
+        val lease = synchronized(keyLeaseLock) {
+            val dek = activeDek
+            if (dek == null || !LockManager.isVaultUnlocked()) null else dek.copyOf()
+        } ?: return null
+
+        return try {
             operation(lease)
         } finally {
             lease.fill(0)
@@ -1322,6 +1344,23 @@ class VaultSecurityManager private constructor(private val context: Context) {
             sb.append(chars[idx])
         }
         return sb.toString()
+    }
+
+    /**
+     * Legacy v1 Emergency-PIN KDF. Retain the original parameters for compatibility with
+     * the existing v1 header format; new Emergency-PDF kits use RecoveryPayloadEngine instead.
+     */
+    private fun deriveKekFromPin(pin: String, salt: ByteArray): ByteArray {
+        val pinChars = pin.toCharArray()
+        val spec = PBEKeySpec(pinChars, salt, 50_000, 256)
+        return try {
+            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+                .generateSecret(spec)
+                .encoded
+        } finally {
+            spec.clearPassword()
+            pinChars.fill('\u0000')
+        }
     }
 
     fun deriveKekFromRecoveryCode(code: String): ByteArray {
