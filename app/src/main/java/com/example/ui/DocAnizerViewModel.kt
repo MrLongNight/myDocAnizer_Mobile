@@ -919,10 +919,10 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     fun updateBatchItem(item: com.example.model.BatchDocumentItem) = dmsManager.updateBatchItem(item)
     fun removeBatchItem(itemId: String) = dmsManager.removeBatchItem(itemId)
     fun clearBatchQueue() = dmsManager.clearBatchQueue()
-    fun commitBatchItem(item: com.example.model.BatchDocumentItem, onFinished: (DocumentEntity) -> Unit = {}) = 
-        dmsManager.commitBatchItem(item, pdfSettings.value, _isColorMode.value, vaultSecurityManager.getActiveDek(), syncPasswordKey.value, onFinished)
-    fun commitAllBatchItems(onComplete: (Int) -> Unit = {}) = 
-        dmsManager.commitAllBatchItems(pdfSettings.value, _isColorMode.value, vaultSecurityManager.getActiveDek(), syncPasswordKey.value, onComplete)
+    fun commitBatchItem(item: com.example.model.BatchDocumentItem, onFinished: (DocumentEntity) -> Unit = {}) =
+        dmsManager.commitBatchItem(item, pdfSettings.value, _isColorMode.value, syncPasswordKey.value, onFinished)
+    fun commitAllBatchItems(onComplete: (Int) -> Unit = {}) =
+        dmsManager.commitAllBatchItems(pdfSettings.value, _isColorMode.value, syncPasswordKey.value, onComplete)
 
     // KI-Regelgenerator: Erstellt DocRule-Vorschläge anhand von Benutzer-Eingaben
     suspend fun generateRulesWithAi(userDescription: String): List<com.example.model.DocRule> {
