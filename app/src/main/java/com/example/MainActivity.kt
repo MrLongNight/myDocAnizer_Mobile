@@ -44,38 +44,9 @@ open class MainActivity : FragmentActivity() {
             val isAppUnlocked by viewModel.isAppUnlocked.collectAsStateWithLifecycle()
             val vaultStatus by viewModel.vaultStatus.collectAsStateWithLifecycle()
 
-            val isEmulator = android.os.Build.FINGERPRINT.contains("generic", ignoreCase = true) ||
-                android.os.Build.FINGERPRINT.contains("emulator", ignoreCase = true) ||
-                android.os.Build.FINGERPRINT.contains("cuttlefish", ignoreCase = true) ||
-                android.os.Build.FINGERPRINT.startsWith("unknown") ||
-                android.os.Build.HARDWARE.contains("ranchu", ignoreCase = true) ||
-                android.os.Build.HARDWARE.contains("goldfish", ignoreCase = true) ||
-                android.os.Build.HARDWARE.contains("cuttlefish", ignoreCase = true) ||
-                android.os.Build.HARDWARE.contains("qemu", ignoreCase = true) ||
-                android.os.Build.HARDWARE.contains("vbox", ignoreCase = true) ||
-                android.os.Build.MODEL.contains("sdk", ignoreCase = true) ||
-                android.os.Build.MODEL.contains("cuttlefish", ignoreCase = true) ||
-                android.os.Build.MODEL.contains("google_sdk", ignoreCase = true) ||
-                android.os.Build.MODEL.contains("emulator", ignoreCase = true) ||
-                android.os.Build.MODEL.contains("Android SDK", ignoreCase = true) ||
-                android.os.Build.PRODUCT.contains("sdk", ignoreCase = true) ||
-                android.os.Build.PRODUCT.contains("cuttlefish", ignoreCase = true) ||
-                android.os.Build.BOARD.contains("cuttlefish", ignoreCase = true) ||
-                android.os.Build.MANUFACTURER.contains("Genymotion", ignoreCase = true) ||
-                android.os.Build.BRAND.startsWith("generic") ||
-                android.os.Build.DEVICE.startsWith("generic")
-
             androidx.compose.runtime.LaunchedEffect(isAppUnlocked, vaultStatus.isUnencryptedMode) {
-                if (com.example.BuildConfig.DEBUG || isEmulator) {
-                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-                } else if (!isAppUnlocked || !vaultStatus.isUnencryptedMode) {
-                    window.setFlags(
-                        android.view.WindowManager.LayoutParams.FLAG_SECURE,
-                        android.view.WindowManager.LayoutParams.FLAG_SECURE
-                    )
-                } else {
-                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
-                }
+                if (com.example.BuildConfig.DEBUG) window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                else window.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
             }
 
             val systemDark = isSystemInDarkTheme()
