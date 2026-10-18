@@ -513,6 +513,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
      * Entsperrt den Tresor mit den gewählten Faktoren (Passwort, Schlüsseldatei, TOTP).
      * Unterstützt Zero-Knowledge 1-Faktor und 2-Faktor Authentifizierung.
      */
+    @Synchronized
     fun unlockVault(
         password: String? = null,
         keyFileToken: String? = null,
@@ -843,6 +844,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /**
      * Stellt den DEK aus einer 12-Wörter-Phrase wieder her.
      */
+    @Synchronized
     fun recoverDekWithBip39(words: List<String>): ByteArray? {
         if (!authenticationBackoff.isAllowed()) return null
         val result = recoverDekWithBip39Unchecked(words)
@@ -1067,6 +1069,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /**
      * Stellt den DEK aus dem QR-Payload des Emergency Kits wieder her.
      */
+    @Synchronized
     fun recoverDekFromEmergencyKit(qrPayload: String, recoveryPassphrase: CharArray, expectedVaultId: String): ByteArray? {
         if (!authenticationBackoff.isAllowed()) {
             recoveryPassphrase.fill('\u0000')
@@ -1144,6 +1147,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /**
      * Rekonstruiert den 32-Byte DEK aus beliebigen 2 der 3 Shamir-Teilschlüssel.
      */
+    @Synchronized
     fun recoverDekWithShamir(shareA: String, shareB: String): ByteArray? {
         if (!authenticationBackoff.isAllowed()) return null
         val result = recoverDekWithShamirUnchecked(shareA, shareB)
@@ -1406,6 +1410,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         return factory.generateSecret(spec).encoded
     }
 
+    @Synchronized
     fun recoverDekWithRecoveryCode(code: String): ByteArray? {
         if (!authenticationBackoff.isAllowed()) return null
         val result = recoverDekWithRecoveryCodeUnchecked(code)
