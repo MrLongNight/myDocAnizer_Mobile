@@ -374,6 +374,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         var recoverySaltBase64: String? = null
         var emergencyChecksum: String? = null
         var shareHashes: List<String> = emptyList()
+        var generatedShamirShares: List<ShamirShare>? = null
         var hasPin = false
         var pinSaltBase64: String? = null
         var recCodeHash: String? = null
@@ -408,8 +409,12 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 emergencyChecksum = calculateSha256(dek)
             }
             VaultRecoveryMethod.SHAMIR_2_OF_3 -> {
-                val shares = splitSecretShamir2of3(dek)
-                shareHashes = shares.map { calculateSha256(it.token.toByteArray(Charsets.UTF_8)) }
+                // Hash exactly the share tokens returned to the caller; generating a
+                // second random set here would make the persisted hashes unusable.
+                generatedShamirShares = splitSecretShamir2of3(dek)
+                shareHashes = generatedShamirShares!!.map {
+                    calculateSha256(it.token.toByteArray(Charsets.UTF_8))
+                }
             }
             VaultRecoveryMethod.RECOVERY_CODE -> {
                 val code = recoveryCode ?: generateRecoveryCode()
@@ -461,7 +466,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             vaultId = vaultId,
             dek = dek,
             bip39Words = if (recoveryMethod == VaultRecoveryMethod.BIP39_WORDS) (bip39Words ?: generateBip39Mnemonic()) else null,
-            shamirShares = if (recoveryMethod == VaultRecoveryMethod.SHAMIR_2_OF_3) splitSecretShamir2of3(dek) else null,
+            shamirShares = generatedShamirShares,
             totpSecret = totpSecret,
             keyFileToken = keyFileToken,
             recoveryCode = if (recoveryMethod == VaultRecoveryMethod.RECOVERY_CODE) (recoveryCode ?: generateRecoveryCode()) else null
