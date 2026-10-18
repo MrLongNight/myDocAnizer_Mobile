@@ -776,7 +776,7 @@ data class CloudSyncConfig(
     val webDavPassword: String = "",
     val syncTrigger: String = "AUTO_AFTER_SCAN", // "AUTO_AFTER_SCAN", "DAILY", "MANUAL"
     val syncWifiOnly: Boolean = true,
-    val autoMirrorToBackupDir: Boolean = true, // Automatisches lokales Backup-Spiegeln bei jedem Scan
+    val autoMirrorToBackupDir: Boolean = false, // Opt-in; never use an unencrypted mirror fallback
     val isAirGappedStrict: Boolean = false, // Keine Netzwerk-Kommunikation erlaubt
     val usbSyncWarningOnScan: Boolean = true // Automatischer Hinweis beim Scannen, wenn USB-Sync aussteht
 )
