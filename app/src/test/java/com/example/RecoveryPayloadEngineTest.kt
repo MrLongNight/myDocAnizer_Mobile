@@ -81,10 +81,10 @@ class RecoveryPayloadEngineTest {
     @Test
     fun `rejects non 256 bit DEKs and invalid vault IDs`() {
         assertThrows(IllegalArgumentException::class.java) {
-            RecoveryPayloadEngine.encodeRecoveryPayload(ByteArray(16), "passphrase".toCharArray(), vaultId)
+            RecoveryPayloadEngine.encodeRecoveryPayload(ByteArray(16), "A sufficiently long recovery passphrase".toCharArray(), vaultId)
         }
         assertThrows(IllegalArgumentException::class.java) {
-            RecoveryPayloadEngine.encodeRecoveryPayload(ByteArray(32), "passphrase".toCharArray(), "invalid")
+            RecoveryPayloadEngine.encodeRecoveryPayload(ByteArray(32), "A sufficiently long recovery passphrase".toCharArray(), "invalid")
         }
     }
 }
