@@ -3305,7 +3305,6 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
             val displayName = DocumentStorageService.formatFileName(safeSender, safeTitle, extension = extension)
             val isEncrypted = true
             val internalName = DocumentStorageService.generateInternalFileName(extension = extension, isEncrypted = isEncrypted)
-            val encryptionKey = vaultSecurityManager.getActiveDek()
             var finalFile: File? = null
 
             var pageCount = 1
@@ -3323,7 +3322,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     if (finalOcrText.isBlank() && runOcr) {
                         finalOcrText = OcrService.recognizeText(processed, safeSender, safeTitle)
                     }
-                    finalFile = DocumentStorageService.saveImageFile(
+                    finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                    DocumentStorageService.saveImageFile(
                         context = context,
                         bitmap = processed,
                         targetDir = targetDir,
@@ -3332,6 +3332,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         encryptionKey = encryptionKey,
                         passwordKey = syncPasswordKey.value
                     )
+                } ?: throw IllegalStateException("Vault is locked; refusing import write")
                     pageCount = 1
                 } else if (targetFormat == "PDF" && bitmap != null) {
                     // Bild als durchsuchbares PDF archivieren
@@ -3345,7 +3346,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         finalOcrText = OcrService.recognizeText(processed, safeSender, safeTitle)
                     }
                     val tagsStr = tags.joinToString(", ")
-                    finalFile = DocumentStorageService.generatePdf(
+                    finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                    DocumentStorageService.generatePdf(
                         context = context,
                         pageBitmaps = listOf(processed),
                         ocrText = finalOcrText,
@@ -3360,6 +3362,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         passwordKey = syncPasswordKey.value,
                         settings = pdfSettings.value
                     )
+                } ?: throw IllegalStateException("Vault is locked; refusing import write")
                     pageCount = 1
                 } else if (pdfBytes != null) {
                     // Reines PDF direkt wegschreiben via secureSave
