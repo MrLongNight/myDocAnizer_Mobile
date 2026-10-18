@@ -566,13 +566,15 @@ class VaultSecurityManager private constructor(private val context: Context) {
             val newSalt = ByteArray(16)
             secureRandom.nextBytes(newSalt)
             val newKek = deriveKekArgon2id(newPassword, newSalt, header.argon2Iterations, header.argon2MemoryKb)
-            val (newEncryptedDek, newIv) = encryptAesGcm(dek, newKek)
-            newKek.fill(0)
-
+            val encryptedResult = try {
+                encryptAesGcm(dek, newKek)
+            } finally {
+                newKek.fill(0)
+            }
             val updatedHeader = header.copy(
                 argon2SaltBase64 = Base64.encodeToString(newSalt, Base64.NO_WRAP),
-                encryptedDekByPasswordBase64 = Base64.encodeToString(newEncryptedDek, Base64.NO_WRAP),
-                passwordDekIvBase64 = Base64.encodeToString(newIv, Base64.NO_WRAP)
+                encryptedDekByPasswordBase64 = Base64.encodeToString(encryptedResult.first, Base64.NO_WRAP),
+                passwordDekIvBase64 = Base64.encodeToString(encryptedResult.second, Base64.NO_WRAP)
             )
             saveVaultHeader(updatedHeader)
             true
