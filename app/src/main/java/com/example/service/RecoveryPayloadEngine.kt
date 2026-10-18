@@ -2,6 +2,7 @@ package com.example.service
 
 import android.util.Base64
 import org.json.JSONObject
+import org.json.JSONTokener
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
@@ -64,7 +65,11 @@ object RecoveryPayloadEngine {
                     "Invalid recovery payload size"
                 }
                 val json = try {
-                    JSONObject(String(data, StandardCharsets.UTF_8))
+                    val tokener = JSONTokener(String(data, StandardCharsets.UTF_8))
+                    val value = tokener.nextValue()
+                    require(value is JSONObject) { "Recovery payload must be a JSON object" }
+                    require(tokener.nextClean() == '\u0000') { "Trailing data after recovery payload" }
+                    value
                 } catch (e: Exception) {
                     throw IllegalArgumentException("Invalid recovery payload encoding", e)
                 }
