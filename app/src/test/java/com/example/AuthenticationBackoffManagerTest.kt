@@ -5,6 +5,9 @@ import com.example.service.AuthenticationBackoffManager
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -26,6 +29,17 @@ class AuthenticationBackoffManagerTest{
   assertTrue(restarted.remainingMillis() >= 30_000L)
   wall+=30_000L
   assertFalse(restarted.isAllowed()) // monotonic session deadline remains conservative
+ }
+ @Test fun concurrentFailuresDoNotLoseCounterUpdates(){
+  val workers=10
+  val start=CountDownLatch(1)
+  val pool=Executors.newFixedThreadPool(workers)
+  repeat(workers){pool.submit{start.await();manager.recordFailure()}}
+  start.countDown()
+  pool.shutdown()
+  assertTrue(pool.awaitTermination(5,TimeUnit.SECONDS))
+  assertEquals(workers,manager.failureCountForTests())
+  assertFalse(manager.isAllowed())
  }
  @Test fun failureCounterAndDeadlinePersist(){
   repeat(4){manager.recordFailure()}
