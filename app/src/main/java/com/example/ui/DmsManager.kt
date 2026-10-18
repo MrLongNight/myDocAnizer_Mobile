@@ -251,7 +251,7 @@ class DmsManager(
         onFinished: (DocumentEntity) -> Unit = {}
     ) {
         scope.launch(Dispatchers.IO) {
-            val docEntity = vaultSecurityManager.withUnlockedKey { lease ->
+            val docEntity = vaultSecurityManager.withUnlockedKeySuspend { lease ->
                 commitBatchItemInternal(item, pdfSettings, isColorMode, lease, passwordKey)
             }
             if (docEntity != null) {
@@ -272,7 +272,7 @@ class DmsManager(
             val list = _batchQueue.value.toList()
             var count = 0
             for (item in list) {
-                val doc = vaultSecurityManager.withUnlockedKey { lease ->
+                val doc = vaultSecurityManager.withUnlockedKeySuspend { lease ->
                     commitBatchItemInternal(item, pdfSettings, isColorMode, lease, passwordKey)
                 }
                 if (doc == null) {
