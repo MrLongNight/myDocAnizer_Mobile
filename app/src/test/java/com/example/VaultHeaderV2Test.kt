@@ -60,6 +60,25 @@ class VaultHeaderV2Test {
     }
 
     @Test
+    fun `test v2 parser rejects unsupported algorithm and weak parameters`() {
+        assertNull(
+            VaultHeaderParserV2.parse(
+                createValidV2Header().copy(algorithmId = "AES-128-CBC").toJson()
+            )
+        )
+        assertNull(
+            VaultHeaderParserV2.parse(
+                createValidV2Header().copy(argon2Iterations = 1).toJson()
+            )
+        )
+        assertNull(
+            VaultHeaderParserV2.parse(
+                createValidV2Header().copy(argon2MemoryKb = 16384).toJson()
+            )
+        )
+    }
+
+    @Test
     fun `test v2 parser rejects invalid salt length`() {
         // Salt with 8 bytes instead of 16
         val invalidSalt = ByteArray(8) { 0x01.toByte() }
