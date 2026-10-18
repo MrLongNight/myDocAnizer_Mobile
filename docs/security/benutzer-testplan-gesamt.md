@@ -166,9 +166,10 @@ Diese Tests prüfen, dass die App bei gesperrtem Tresor nicht weiter mit einem a
 - [ ] **BACKUP-01** Unit-Test `BackupRulesSecurityTest` ausführen.
 - [ ] **BACKUP-02** In der tatsächlich installierten APK prüfen, dass Manifest und Backup-Regeln zusammenpassen.
 - [ ] **BACKUP-03** Prüfen, dass `mydocanizer_vault_security.xml` und `mydocanizer_prefs.xml` von Cloud-Backup ausgeschlossen sind.
-- [ ] **BACKUP-04** Prüfen, dass dieselben sensiblen Preferences von Geräteübertragung ausgeschlossen sind und nicht pauschal alle legitimen Dokumente ausgeschlossen wurden.
+- [ ] **BACKUP-04** Prüfen, dass sensible Preferences, Room-Datenbank, Dokument-/Scan-/Backup-Verzeichnisse und externe Dateien bei der automatischen Geräteübertragung ausgeschlossen sind. Der Gerätewechsel muss über den ausdrücklich gestarteten, verschlüsselten Export/Restore erfolgen.
 - [ ] **BACKUP-05** Falls Testgerät/Android-Backup verfügbar: Backup/Restore oder Geräteübertragung durchführen. Erwartung: keine Übertragung von Vault-Headern oder Keystore-gebundenen Geheimnissen; nach Restore sicherer Zustand, keine unberechtigte Entsperrung.
 - [ ] **BACKUP-06** Ergebnis der statischen Regeln und des echten Geräte-/Restore-Tests getrennt dokumentieren. Ein XML-Unit-Test allein beweist nicht den tatsächlichen System-Backupablauf.
+- [ ] **BACKUP-07** Prüfen, dass Modell-/Temp-Verzeichnisse und der externe App-Dateibereich vom Cloud-Backup ausgeschlossen sind; Cache-Temporärdateien werden separat als Cache behandelt.
 
 ## 9. Header v1→v2 Migration: bewusst nicht ausführen
 
