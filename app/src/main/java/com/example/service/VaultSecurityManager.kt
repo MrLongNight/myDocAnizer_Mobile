@@ -950,7 +950,12 @@ class VaultSecurityManager private constructor(private val context: Context) {
             paint.color = AndroidColor.rgb(100, 116, 139)
             paint.textSize = 9f
             paint.textAlign = Paint.Align.CENTER
-            canvas.drawText("Scanne diesen QR-Code mit der myDocAnizer-App bei 'Passwort vergessen'", 297f, 548f, paint)
+            val recoveryPrompt = if (qrBitmap != null) {
+                "Scanne diesen QR-Code mit der myDocAnizer-App bei 'Passwort vergessen'"
+            } else {
+                "Kopiere das verschlüsselte Base64-Payload in die Recovery-Eingabe"
+            }
+            canvas.drawText(recoveryPrompt, 297f, 548f, paint)
             paint.textAlign = Paint.Align.LEFT
 
             // Keine Schlüsselkopie im PDF: ausschließlich der QR-Code enthält Ciphertext.
