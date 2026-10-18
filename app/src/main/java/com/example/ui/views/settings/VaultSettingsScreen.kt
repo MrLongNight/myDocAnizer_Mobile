@@ -29,8 +29,10 @@ import androidx.core.content.FileProvider
 import androidx.credentials.CredentialManager
 import androidx.credentials.CreatePasswordRequest
 import androidx.credentials.exceptions.CreateCredentialCancellationException
+import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.launch
 import com.example.service.ShamirShare
+import com.example.service.BiometricAuthManager
 import com.example.service.VaultFactorType
 import com.example.service.VaultRecoveryMethod
 import com.example.service.VaultSecurityManager
@@ -785,14 +787,45 @@ fun VaultSettingsScreen(
                     Switch(
                         checked = vaultStatus.biometric2FaEnabled,
                         onCheckedChange = { enable ->
-                            val success = vaultSecManager.setBiometricsEnabled(enable)
-                            if (success) {
-                                viewModel.setBiometricAuthEnabled(enable)
-                                actionFeedbackMessage = if (enable) "✅ Biometrie (2FA) aktiviert." else "Biometrie deaktiviert."
-                                actionIsError = false
+                            if (!enable) {
+                                val success = vaultSecManager.setBiometricsEnabled(false)
+                                if (success) {
+                                    viewModel.setBiometricAuthEnabled(false)
+                                    actionFeedbackMessage = "Biometrischer Tresor-Unlock deaktiviert."
+                                    actionIsError = false
+                                } else {
+                                    actionFeedbackMessage = "Biometrie konnte nicht deaktiviert werden."
+                                    actionIsError = true
+                                }
                             } else {
-                                actionFeedbackMessage = "❌ Biometrie konnte nicht umgeschaltet werden."
-                                actionIsError = true
+                                val activity = context as? FragmentActivity
+                                val cipher = vaultSecManager.createBiometricEnrollmentCipher()
+                                if (activity == null || cipher == null) {
+                                    actionFeedbackMessage = "Biometrie benötigt einen entsperrten Tresor und eine aktive FragmentActivity."
+                                    actionIsError = true
+                                } else {
+                                    BiometricAuthManager(context).showBiometricPromptForCipher(
+                                        activity = activity,
+                                        cipher = cipher,
+                                        title = "Tresor-Biometrie aktivieren",
+                                        subtitle = "Bestätige die tatsächliche Verschlüsselung des Tresor-Schlüssels",
+                                        onSuccess = { authenticatedCipher ->
+                                            val success = vaultSecManager.completeBiometricEnrollment(authenticatedCipher)
+                                            if (success) {
+                                                viewModel.setBiometricAuthEnabled(true)
+                                                actionFeedbackMessage = "Biometrischer Tresor-Unlock aktiviert."
+                                                actionIsError = false
+                                            } else {
+                                                actionFeedbackMessage = "Biometrische Schlüsselbindung fehlgeschlagen."
+                                                actionIsError = true
+                                            }
+                                        },
+                                        onError = { message ->
+                                            actionFeedbackMessage = "Biometrie abgebrochen/fehlgeschlagen: $message"
+                                            actionIsError = true
+                                        }
+                                    )
+                                }
                             }
                         },
                         modifier = Modifier.testTag("switch_vault_biometrics")
