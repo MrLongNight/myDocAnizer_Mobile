@@ -388,9 +388,16 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     /** Marks the app session unlocked only after the caller completed a real vault unlock. */
     fun completeVaultUnlock(): Boolean {
         val status = vaultSecurityManager.vaultStatus.value
-        if (!status.isUnencryptedMode && !vaultSecurityManager.isUnlocked()) return false
+        val hasVaultHeader = vaultSecurityManager.vaultHeader.value != null
+        if (hasVaultHeader && !vaultSecurityManager.isUnlocked()) return false
+        if (!hasVaultHeader && !status.isUnencryptedMode) return false
         LockManager.onAppUnlockedAfterAuthentication()
         return true
+    }
+
+    fun unlockUnencryptedVault(): Boolean {
+        if (!vaultSecurityManager.unlockUnencryptedVault()) return false
+        return completeVaultUnlock()
     }
 
     /** Deliberately isolated debug-only escape hatch; never available in release builds. */
