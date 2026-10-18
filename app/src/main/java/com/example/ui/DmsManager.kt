@@ -276,8 +276,11 @@ class DmsManager(
                     commitBatchItemInternal(item, pdfSettings, isColorMode, lease, passwordKey)
                 }
                 if (doc == null) {
-                    Log.w("DmsManager", "Batch commit stopped: vault locked or key lease unavailable")
-                    break
+                    if (!vaultSecurityManager.isUnlocked()) {
+                        Log.w("DmsManager", "Batch commit stopped: vault locked or key lease unavailable")
+                        break
+                    }
+                    continue
                 }
                 count++
             }
