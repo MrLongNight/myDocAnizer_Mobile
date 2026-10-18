@@ -934,6 +934,17 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 paint.style = Paint.Style.FILL
 
                 canvas.drawBitmap(qrBitmap, 187f, 300f, null)
+                qrBitmap.recycle()
+            } else {
+                paint.color = AndroidColor.rgb(30, 41, 59)
+                paint.textSize = 8f
+                paint.isFakeBoldText = true
+                canvas.drawText("QR nicht verfügbar — verschlüsseltes Payload (Base64):", 36f, 300f, paint)
+                paint.isFakeBoldText = false
+                val payloadBase64 = Base64.encodeToString(qrPayload.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+                payloadBase64.chunked(72).take(12).forEachIndexed { index, line ->
+                    canvas.drawText(line, 36f, 318f + index * 14f, paint)
+                }
             }
 
             paint.color = AndroidColor.rgb(100, 116, 139)
