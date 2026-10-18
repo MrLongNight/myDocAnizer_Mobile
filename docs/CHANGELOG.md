@@ -2,6 +2,17 @@
 
 All notable changes to **myDocAnizer-Mobile** are documented here.
 
+## [Unreleased] - 2026-10-18 (Sicherheits-Härtung)
+
+### Tresor-Authentifizierung und externe Intents
+- Gemeinsamer persistenter Backoff für Passwort-/TOTP-/Recovery-Versuche; Authentifizierungsaufrufe gegen parallele Versuche serialisiert.
+- Allowlist für externe Widget-Navigation und Aktionen; externe Aktionen während unvollständiger Authentifizierung werden verworfen.
+- Auto-Mirror ist standardmäßig deaktiviert und erstellt ohne verfügbaren Verschlüsselungsschlüssel keine Klartextkopie.
+
+### Keystore-SecretStore
+- Neue versionierte AES-GCM-Grundkomponente für langlebige Secrets mit Android-Keystore-Schlüssel, AAD pro Secret-Namen und fail-closed Verhalten.
+- Unit-/Instrumentationstests ergänzt. Build-, Test- und Gerätelauf für diese Änderungen sind noch offen; siehe `docs/security/s06-s10-implementation-report.md`.
+
 ## [2.8.0] - 2026-10-15 (UI-Optimierung, Hardware-LLM Autodownload & Stabilität)
 
 ### 🤖 Hardware-Empfohlenes LLM Autodownload beim Überspringen des Einrichtungsassistenten
