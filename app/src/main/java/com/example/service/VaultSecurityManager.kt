@@ -185,6 +185,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
 
     // RAM-sicherer Data Encryption Key (DEK) während der aktive Session
     private var activeDek: ByteArray? = null
+    private val keyLeaseLock = Any()
 
     companion object {
         const val KEYSTORE_PROVIDER = "AndroidKeyStore"
@@ -491,7 +492,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         )
 
         saveVaultHeader(header)
-        activeDek = dek.copyOf()
+        replaceActiveDek(dek)
 
         return VaultSetupResult(
             vaultId = vaultId,
@@ -694,7 +695,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 passwordDekIvBase64 = Base64.encodeToString(newIv, Base64.NO_WRAP)
             )
             saveVaultHeader(updatedHeader)
-            activeDek = recoveredDek.copyOf()
+            replaceActiveDek(recoveredDek)
             LockManager.onVaultUnlocked()
             true
         } catch (e: Exception) {
@@ -731,14 +732,41 @@ class VaultSecurityManager private constructor(private val context: Context) {
      * Schließt die Sitzung und überschreibt den DEK im Arbeitsspeicher (RAM-Hygiene).
      */
     fun lockVault() {
-        activeDek?.fill(0)
-        activeDek = null
-        LockManager.onVaultLocked()
+        synchronized(keyLeaseLock) {
+            activeDek?.fill(0)
+            activeDek = null
+            LockManager.onVaultLocked()
+        }
     }
 
-    fun isUnlocked(): Boolean = activeDek != null && LockManager.isVaultUnlocked()
+    private fun replaceActiveDek(dek: ByteArray) {
+        synchronized(keyLeaseLock) {
+            activeDek?.fill(0)
+            activeDek = dek.copyOf()
+        }
+    }
 
-    fun getActiveDek(): ByteArray? = if (isUnlocked()) activeDek?.copyOf() else null
+    fun isUnlocked(): Boolean = synchronized(keyLeaseLock) {
+        activeDek != null && LockManager.isVaultUnlocked()
+    }
+
+    /**
+     * Executes a synchronous crypto/storage operation with a temporary key lease.
+     * Lock waits for the current lease block to finish; the lease copy is wiped before returning.
+     * Callers must not retain the supplied ByteArray beyond the callback.
+     */
+    fun <T> withUnlockedKey(operation: (ByteArray) -> T): T? = synchronized(keyLeaseLock) {
+        if (activeDek == null || !LockManager.isVaultUnlocked()) return@synchronized null
+        val lease = activeDek!!.copyOf()
+        try {
+            operation(lease)
+        } finally {
+            lease.fill(0)
+        }
+    }
+
+    @Deprecated("Prefer withUnlockedKey so temporary key copies are wiped after use")
+    fun getActiveDek(): ByteArray? = withUnlockedKey { it.copyOf() }
 
     // =========================================================================
     // 3. RECOVERY-OPTION A: 12-WÖRTER-PHRASE (BIP-39 MNEMONIC SEED)
