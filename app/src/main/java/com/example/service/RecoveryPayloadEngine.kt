@@ -33,6 +33,7 @@ object RecoveryPayloadEngine {
     private const val ARGON2_MEMORY_KB = 19456
     private const val ARGON2_PARALLELISM = 1
     private const val MAX_SERIALIZED_BYTES = 16 * 1024
+    private const val MIN_PASSPHRASE_CHARS = 20
 
     data class RecoveryPayload(
         val version: Int,
@@ -123,7 +124,9 @@ object RecoveryPayloadEngine {
      * incompatible payload with an implicit algorithm change.
      */
     private fun deriveKey(passphrase: CharArray, salt: ByteArray): ByteArray {
-        require(passphrase.isNotEmpty()) { "Passphrase cannot be empty" }
+        require(passphrase.size >= MIN_PASSPHRASE_CHARS) {
+            "Recovery passphrase must contain at least $MIN_PASSPHRASE_CHARS characters"
+        }
         val encoded = StandardCharsets.UTF_8.newEncoder()
             .onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)
@@ -190,7 +193,9 @@ object RecoveryPayloadEngine {
         passphrase: CharArray,
         expectedVaultId: String
     ): ByteArray {
-        require(passphrase.isNotEmpty()) { "Passphrase cannot be empty" }
+        require(passphrase.size >= MIN_PASSPHRASE_CHARS) {
+            "Recovery passphrase must contain at least $MIN_PASSPHRASE_CHARS characters"
+        }
         require(isValidVaultId(expectedVaultId)) { "Invalid expected vault ID" }
         val payload = RecoveryPayload.deserialize(serializedPayload)
         if (payload.vaultId != expectedVaultId) {
