@@ -30,7 +30,10 @@ object LockManager {
     @Synchronized
     fun initialize(vaultConfigured: Boolean, appLockRequired: Boolean, debugBuild: Boolean) {
         if (initialized) return
-        val appState = if (!appLockRequired || debugBuild) {
+        val appState = if (vaultConfigured) {
+            // A configured vault must be unlocked before protected app content is shown.
+            AppSessionLockState.LOCKED
+        } else if (!appLockRequired || debugBuild) {
             AppSessionLockState.UNLOCKED
         } else {
             AppSessionLockState.LOCKED
