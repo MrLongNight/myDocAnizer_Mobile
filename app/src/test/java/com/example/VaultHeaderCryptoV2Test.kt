@@ -31,6 +31,14 @@ class VaultHeaderCryptoV2Test {
     }
 
     @Test
+    fun `each header gets a fresh random IV`() {
+        val first = newHeader()
+        val second = newHeader()
+        assertFalse(first.ivBase64 == second.ivBase64)
+        assertFalse(first.saltBase64 == second.saltBase64)
+    }
+
+    @Test
     fun `wrong password is rejected`() {
         val header = newHeader()
         org.junit.Assert.assertThrows(SecurityException::class.java) {
