@@ -510,10 +510,11 @@ class VaultSecurityManager private constructor(private val context: Context) {
         var kek: ByteArray? = null
         return try {
             val salt = Base64.decode(header.argon2SaltBase64, Base64.NO_WRAP)
-            kek = deriveKekArgon2id(combinedSecret, salt, header.argon2Iterations, header.argon2MemoryKb)
+            val derivedKek = deriveKekArgon2id(combinedSecret, salt, header.argon2Iterations, header.argon2MemoryKb)
+            kek = derivedKek
             val ciphertext = Base64.decode(header.encryptedDekByPasswordBase64, Base64.NO_WRAP)
             val iv = Base64.decode(header.passwordDekIvBase64, Base64.NO_WRAP)
-            val dek = decryptAesGcm(ciphertext, iv, kek)
+            val dek = decryptAesGcm(ciphertext, iv, derivedKek)
             activeDek?.fill(0)
             activeDek = dek.copyOf()
             dek.fill(0)
