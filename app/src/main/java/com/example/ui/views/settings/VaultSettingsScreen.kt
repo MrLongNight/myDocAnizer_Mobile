@@ -1,6 +1,7 @@
 package com.example.ui.views.settings
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -43,6 +44,12 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private tailrec fun Context.findFragmentActivity(): FragmentActivity? = when (this) {
+    is FragmentActivity -> this
+    is ContextWrapper -> baseContext.findFragmentActivity()
+    else -> null
+}
 
 /**
  * Dedizierter Einstellungs-Bildschirm für Tresor-Sicherheit, Master-Passwort-Verwaltung,
@@ -798,7 +805,7 @@ fun VaultSettingsScreen(
                                     actionIsError = true
                                 }
                             } else {
-                                val activity = context as? FragmentActivity
+                                val activity = context.findFragmentActivity()
                                 val cipher = vaultSecManager.createBiometricEnrollmentCipher()
                                 if (activity == null || cipher == null) {
                                     actionFeedbackMessage = "Biometrie benötigt einen entsperrten Tresor und eine aktive FragmentActivity."
