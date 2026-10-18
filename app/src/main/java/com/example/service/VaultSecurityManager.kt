@@ -191,6 +191,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         const val DEK_SIZE_BYTES = 32 // AES-256
         const val GCM_IV_SIZE_BYTES = 12
         const val GCM_TAG_SIZE_BITS = 128
+        const val MAX_QR_PAYLOAD_BYTES = 2000
 
         @Volatile
         private var INSTANCE: VaultSecurityManager? = null
@@ -1201,9 +1202,6 @@ class VaultSecurityManager private constructor(private val context: Context) {
         }
     }
 
-    companion object {
-        const val MAX_QR_PAYLOAD_BYTES = 2000
-    }
 
     // =========================================================================
     // 8. 2FA (TOTP, SCHLÜSSELDATEI & NOTFALL-SCHLÜSSEL)
