@@ -16,7 +16,8 @@ Stand: 2026-10-18. Änderungen wurden direkt auf `main` vorgenommen. Dieser Beri
 
 - Der Default für `autoMirrorToBackupDir` ist `false`; `SettingsRepository` deaktiviert den alten Mirror-Standard einmalig.
 - Der Auto-Mirror-Pfad erstellt keine unverschlüsselte Kopie mehr, wenn kein Verschlüsselungsschlüssel verfügbar ist. In diesem Fall wird kontrolliert abgebrochen.
-- Verschlüsselungsfehler, Datei-Zielverhalten und bestehende Nutzerdateien müssen noch auf Gerät getestet werden.
+- Dateinamen werden auf den Basename begrenzt. Verschlüsselung erfolgt in eine temporäre Datei; erst nach erfolgreicher Erstellung wird sie per Same-Directory-Rename übernommen. Fehlgeschlagene temporäre Dateien werden entfernt.
+- Verschlüsselungsfehler, atomarer Austausch und bestehende Nutzerdateien müssen noch auf Gerät getestet werden.
 
 ## Teststatus
 
