@@ -22,10 +22,13 @@ class BackupRulesSecurityTest {
     }
 
     @Test
-    fun `cloud backup excludes vault security preferences`() {
-        val excluded = exclusions(R.xml.backup_rules) + exclusions(R.xml.data_extraction_rules)
-        assertTrue(("sharedpref" to "mydocanizer_vault_security.xml") in excluded)
-        assertTrue(("sharedpref" to "mydocanizer_prefs.xml") in excluded)
+    fun `legacy and modern cloud backup rules exclude vault security preferences`() {
+        val legacyBackup = exclusions(R.xml.backup_rules)
+        val extractionRules = exclusions(R.xml.data_extraction_rules)
+        assertTrue(("sharedpref" to "mydocanizer_vault_security.xml") in legacyBackup)
+        assertTrue(("sharedpref" to "mydocanizer_prefs.xml") in legacyBackup)
+        assertTrue(("sharedpref" to "mydocanizer_vault_security.xml") in extractionRules)
+        assertTrue(("sharedpref" to "mydocanizer_prefs.xml") in extractionRules)
     }
 
     @Test
