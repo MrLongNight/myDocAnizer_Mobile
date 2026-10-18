@@ -12,6 +12,7 @@ import com.example.service.DocumentStorageService
 import com.example.service.LlmService
 import com.example.service.OcrService
 import com.example.service.SettingsRepository
+import com.example.service.VaultSecurityManager
 import com.example.service.llm.CustomFieldHarmonizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,7 @@ class DmsManager(
     private val settingsRepo: SettingsRepository,
     private val llmService: LlmService,
     private val scope: CoroutineScope,
+    private val vaultSecurityManager: VaultSecurityManager = VaultSecurityManager.getInstance(application),
     private val onDocSaved: () -> Unit
 ) {
     // Documents
@@ -245,14 +247,17 @@ class DmsManager(
         item: BatchDocumentItem,
         pdfSettings: PdfSettings,
         isColorMode: Boolean,
-        encryptionKey: ByteArray? = null,
         passwordKey: String? = null,
         onFinished: (DocumentEntity) -> Unit = {}
     ) {
         scope.launch(Dispatchers.IO) {
-            val docEntity = commitBatchItemInternal(item, pdfSettings, isColorMode, encryptionKey, passwordKey)
+            val docEntity = vaultSecurityManager.withUnlockedKey { lease ->
+                commitBatchItemInternal(item, pdfSettings, isColorMode, lease, passwordKey)
+            }
             if (docEntity != null) {
                 withContext(Dispatchers.Main) { onFinished(docEntity) }
+            } else {
+                Log.w("DmsManager", "Batch item not committed: vault is locked or key lease unavailable")
             }
         }
     }
@@ -260,17 +265,19 @@ class DmsManager(
     fun commitAllBatchItems(
         pdfSettings: PdfSettings,
         isColorMode: Boolean,
-        encryptionKey: ByteArray? = null,
         passwordKey: String? = null,
         onComplete: (Int) -> Unit = {}
     ) {
         scope.launch(Dispatchers.IO) {
             val list = _batchQueue.value.toList()
-            var count = 0
-            for (item in list) {
-                val doc = commitBatchItemInternal(item, pdfSettings, isColorMode, encryptionKey, passwordKey)
-                if (doc != null) count++
-            }
+            val count = vaultSecurityManager.withUnlockedKey { lease ->
+                var committed = 0
+                for (item in list) {
+                    val doc = commitBatchItemInternal(item, pdfSettings, isColorMode, lease, passwordKey)
+                    if (doc != null) committed++
+                }
+                committed
+            } ?: 0
             withContext(Dispatchers.Main) { onComplete(count) }
         }
     }
