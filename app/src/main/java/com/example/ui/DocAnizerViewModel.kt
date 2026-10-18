@@ -3374,7 +3374,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 } else if (pdfBytes != null) {
                     // Reines PDF direkt wegschreiben via secureSave
                     finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
-                        finalFile = DocumentStorageService.secureSave(
+                        DocumentStorageService.secureSave(
                         context = context,
                         targetDir = targetDir,
                         internalFileName = internalName,
