@@ -1,6 +1,6 @@
 # Implementierungsbericht V11–S05
 
-Stand: 2026-10-18. Alle Änderungen in diesem Bericht wurden direkt in main vorgenommen. Der Nutzer hatte vor diesen Änderungen einen erfolgreichen Build und App-Start gemeldet; dieser Build deckt die nachfolgenden Commits nicht ab. Ein neuer Build-/Unit-Testlauf wurde hier nicht ausgeführt.
+Stand: 2026-10-18. Alle Änderungen in diesem Bericht wurden direkt in main vorgenommen. Der Nutzer hatte vor diesen Änderungen einen erfolgreichen Build und App-Start gemeldet; dieser Build deckt die nachfolgenden Commits nicht ab. Ein neuer Build-/Unit-Testlauf wurde hier zunächst nicht ausgeführt. Am 18.10.2026 meldete der Nutzer anschließend Compilerfehler an suspendierbaren Speicheroperationen und einen fehlenden Legacy-PIN-KDF; entsprechende Korrekturen wurden auf main committed, müssen aber noch erneut gebaut und getestet werden.
 
 | Arbeitspaket | Ergebnis | Offene Abnahme |
 |---|---|---|
@@ -13,7 +13,7 @@ Stand: 2026-10-18. Alle Änderungen in diesem Bericht wurden direkt in main vorg
 | S02 LockManager | Zentraler typisierter App-/Vault-Lock-State; vorhandener Vault startet fail-closed; ViewModel-eigenes Wahrheits-Flag entfernt. | Unit-Tests ausführen und Start/Unlock/Lock auf Gerät prüfen. |
 | S03 Auto-Lock | ProcessLifecycleOwner-Observer mit SystemClock.elapsedRealtime; 0 Minuten sperrt sofort; Timer wird beim Zurückkehren ausgewertet. | Unit-Tests und Hintergrund-/Vordergrund-Gerätetests ausführen. |
 | S04 Bypässe | Allgemeiner unlockApp()-Pfad, Null-Activity-Entsperrung und UI-only Biometrie als Vault-Authentifizierung entfernt. Debug-Freigabe bleibt auf Debug-Build beschränkt und gibt keinen Vault-DEK frei. | Negative Tests für falsches Passwort, Abbruch, fehlende Activity, Recovery und Release-Build ausführen. |
-| S05 Key-Leases | withUnlockedKey hält eine synchrone Lease, bereinigt die temporäre Kopie und koordiniert Lock. Batch-Commit, Dokument-/E-Mail-PDF, Bild-/PDF-Import und Dokumentmigration wurden auf Leases umgestellt. getActiveDek() bleibt deprecated für Legacy-/Testkompatibilität. | Unit-Tests ausführen; verbliebene Testverwendungen des Getters später entfernen. |
+| S05 Key-Leases | `withUnlockedKey` schützt synchrone Operationen; `withUnlockedKeySuspend` stellt für suspendierbare Datei-/Batchoperationen eine Kopie bereit, die nach Ende/Abbruch gelöscht wird. Lock verhindert sofort neue suspendierbare Leases; ein bereits laufender Schreibvorgang kann noch abschließen. Fehlender `deriveKekFromPin`-Helper wurde mit den dokumentierten v1-Parametern (PBKDF2-HMAC-SHA256, 50.000 Iterationen, 256 Bit) wiederhergestellt. | Unit-Tests und Build ausführen; Legacy-/Testverwendungen von `getActiveDek()` später entfernen. Die Änderungen sind noch nicht build-verifiziert. |
 
 ## Geänderte bzw. neue Hauptdateien
 
