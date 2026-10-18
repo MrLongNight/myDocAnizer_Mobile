@@ -373,40 +373,34 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Biometrische Autorisierung (Fingerabdruck, Face Unlock, PIN)
     val biometricAuthEnabled: StateFlow<Boolean> = settingsRepo.biometricAuthEnabled
-    private val _isAppUnlocked = MutableStateFlow(
-        if (com.example.BuildConfig.DEBUG) {
-            true
-        } else if (!settingsRepo.biometricAuthEnabled.value) {
-            true
-        } else {
-            val hasHardware = biometricAuthManager.checkBiometricAvailability() == BiometricAuthManager.BiometricHardwareStatus.AVAILABLE
-            val hasPassword = settingsRepo.syncPasswordKey.value.isNotBlank()
-            // Falls weder Hardware vorhanden/registriert ist noch ein separates Passwort gesetzt wurde, direkt entsperren
-            !hasHardware && !hasPassword
-        }
+    private val lockManagerInitialized = LockManager.initialize(
+        vaultConfigured = vaultSecurityManager.vaultHeader.value != null,
+        appLockRequired = settingsRepo.biometricAuthEnabled.value,
+        debugBuild = BuildConfig.DEBUG
     )
-    val isAppUnlocked: StateFlow<Boolean> = _isAppUnlocked.asStateFlow()
+    val isAppUnlocked: StateFlow<Boolean> = LockManager.appUnlocked
 
     fun setBiometricAuthEnabled(enabled: Boolean) {
         settingsRepo.setBiometricAuthEnabled(enabled)
-        if (!enabled) {
-            _isAppUnlocked.value = true
-        }
+        if (!enabled) LockManager.onAppUnlockedAfterAuthentication()
     }
 
-    fun unlockApp() {
-        val pass = syncPasswordKey.value
-        if (pass.isNotBlank() && !vaultSecurityManager.isUnlocked()) {
-            vaultSecurityManager.unlockWithPassword(pass)
-        }
-        _isAppUnlocked.value = true
+    /** Marks the app session unlocked only after the caller completed a real vault unlock. */
+    fun completeVaultUnlock(): Boolean {
+        val status = vaultSecurityManager.vaultStatus.value
+        if (!status.isUnencryptedMode && !vaultSecurityManager.isUnlocked()) return false
+        LockManager.onAppUnlockedAfterAuthentication()
+        return true
+    }
+
+    /** Deliberately isolated debug-only escape hatch; never available in release builds. */
+    fun debugUnlockAppForDevelopment() {
+        if (BuildConfig.DEBUG) LockManager.onAppUnlockedAfterAuthentication()
     }
 
     fun lockApp() {
         vaultSecurityManager.lockVault()
-        if (biometricAuthEnabled.value) {
-            _isAppUnlocked.value = false
-        }
+        LockManager.onAppLocked()
     }
 
     fun getBiometricStatusLabel(): String = biometricAuthManager.getHardwareStatusLabel()
@@ -430,7 +424,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 subtitle = "Biometrische Authentifizierung schützt die tatsächliche Schlüsselentschlüsselung",
                 onSuccess = { authenticatedCipher ->
                     if (vaultSecurityManager.completeBiometricUnlock(authenticatedCipher)) {
-                        _isAppUnlocked.value = true
+                        LockManager.onAppUnlockedAfterAuthentication()
                         onSuccess()
                     } else {
                         onError("Tresor konnte mit dem authentifizierten Schlüssel nicht entsperrt werden.")
@@ -439,17 +433,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 onError = onError
             )
         } else {
-            // Separater App-Lock: keine Aussage über die kryptografische Freigabe des Tresor-DEK.
-            biometricAuthManager.showBiometricPrompt(
-                activity = activity,
-                title = "myDocAnizer entsperren",
-                subtitle = "Authentifiziere dich für den App-Lock",
-                onSuccess = {
-                    _isAppUnlocked.value = true
-                    onSuccess()
-                },
-                onError = onError
-            )
+            onError("Biometrisches Entsperren ist erst nach kryptografischer Tresor-Bindung verfügbar. Nutze das Master-Passwort.")
         }
     }
 
