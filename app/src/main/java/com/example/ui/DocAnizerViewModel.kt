@@ -1807,7 +1807,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     passwordKey = syncPasswordKey.value,
                     settings = pdfSettings.value
                 )
-                } ?: throw IllegalStateException("Vault is locked; refusing document write")  // Fristen-Erkennung ausführen
+                } ?: throw IllegalStateException("Vault is locked; refusing document write")
+
+                // Fristen-Erkennung ausführen
                 val (detectedCancellation, detectedContractEnd) = com.example.service.DeadlineDetectionService.extractPrimaryDeadlines(ocrText)
 
                 // 6. In Room-Datenbank speichern
@@ -2280,7 +2282,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     passwordKey = syncPasswordKey.value,
                     settings = pdfSettings.value
                 )
-                } ?: throw IllegalStateException("Vault is locked; refusing document write")  val (detectedCancellation, detectedContractEnd) = com.example.service.DeadlineDetectionService.extractPrimaryDeadlines(ocrText)
+                } ?: throw IllegalStateException("Vault is locked; refusing document write")
+
+                val (detectedCancellation, detectedContractEnd) = com.example.service.DeadlineDetectionService.extractPrimaryDeadlines(ocrText)
 
                 val (autoIcon, autoLogo) = com.example.ui.components.detectSuggestedLogoAndIcon(sender, ocrText, template.mainCategory)
                 val finalIcon = rule.targetIcon.ifBlank { autoIcon }
@@ -3213,7 +3217,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 passwordKey = syncPasswordKey.value,
                 settings = pdfSettings.value
             )
-                } ?: throw IllegalStateException("Vault is locked; refusing document write")l entity = DocumentEntity(
+                } ?: throw IllegalStateException("Vault is locked; refusing document write")
+
+            val entity = DocumentEntity(
                 title = safeTitle,
                 sender = safeSender,
                 fileName = displayName,
