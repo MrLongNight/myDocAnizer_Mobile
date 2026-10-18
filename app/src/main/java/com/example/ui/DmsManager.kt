@@ -270,14 +270,17 @@ class DmsManager(
     ) {
         scope.launch(Dispatchers.IO) {
             val list = _batchQueue.value.toList()
-            val count = vaultSecurityManager.withUnlockedKey { lease ->
-                var committed = 0
-                for (item in list) {
-                    val doc = commitBatchItemInternal(item, pdfSettings, isColorMode, lease, passwordKey)
-                    if (doc != null) committed++
+            var count = 0
+            for (item in list) {
+                val doc = vaultSecurityManager.withUnlockedKey { lease ->
+                    commitBatchItemInternal(item, pdfSettings, isColorMode, lease, passwordKey)
                 }
-                committed
-            } ?: 0
+                if (doc == null) {
+                    Log.w("DmsManager", "Batch commit stopped: vault locked or key lease unavailable")
+                    break
+                }
+                count++
+            }
             withContext(Dispatchers.Main) { onComplete(count) }
         }
     }
