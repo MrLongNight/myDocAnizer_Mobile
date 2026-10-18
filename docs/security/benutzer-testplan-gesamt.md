@@ -130,7 +130,7 @@ Voraussetzung: Gerät hat eine eingerichtete Gerätesperre und unterstützte sta
 
 Diese Prüfungen bauen auf der erfolgreichen Basis aus Abschnitt 2 auf. Für Fehlversuche ausschließlich den entbehrlichen Test-Tresor verwenden.
 
-- [ ] **BACKOFF-01** Automatisierte Tests für `AuthenticationBackoffManagerTest` ausführen. Erwartung: 5. Fehlversuch löst 30 Sekunden aus; danach steigert sich die Sperre auf 1, 5 und 15 Minuten.
+- [ ] **SECRET-01** Instrumentationstests `SecretStoreInstrumentedTest` auf echtem Android-Gerät ausführen: verschlüsselter Roundtrip, manipulierte Daten, fehlender Keystore-Key und ungültiger Name. Erwartung: Fehler führen immer zu `null`/Ablehnung, niemals Klartextfallback.\n- [ ] **SECRET-02** Prüfen, dass `mydocanizer_secret_store` nur verschlüsselte Payloads enthält; keine synthetischen Test-Secrets als Klartextwert.\n- [ ] **BACKOFF-01** Automatisierte Tests für `AuthenticationBackoffManagerTest` ausführen. Erwartung: 5. Fehlversuch löst 30 Sekunden aus; danach steigert sich die Sperre auf 1, 5 und 15 Minuten.
 - [ ] **BACKOFF-02** In der Debug-App fünfmal absichtlich falsches Test-Passwort eingeben. Erwartung: während der Sperrfrist werden weitere Unlock-Versuche abgewiesen; korrekte Zugangsdaten umgehen die aktive Sperre nicht.
 - [ ] **BACKOFF-03** App-Prozess während einer aktiven Sperrfrist beenden und erneut starten. Erwartung: die persistierte Deadline bleibt wirksam; keine Abkürzung durch Neustart.
 - [ ] **BACKOFF-04** Geräteuhr während der Sperre zurückstellen. Erwartung: die Sperre wird nicht vorzeitig aufgehoben. Eine konservativ längere Restzeit ist sicherer als ein frühzeitiger Unlock.
@@ -193,7 +193,7 @@ Diese Tests prüfen, dass die App bei gesperrtem Tresor nicht weiter mit einem a
 | CRYPTO — Schlüssel-/Recovery-Bausteine | OFFEN | |
 | REC — Notfall-PDF/QR/Wiederherstellung | OFFEN | |
 | BIO — Biometrie | OFFEN | |
-| LOCK — Sperre und Auto-Lock | OFFEN |\n| BACKOFF — Fehlversuche und Backoff | OFFEN |\n| SCREEN — Screenshot/Recents | OFFEN |\n| INTENT — externe Widgets/Navigation | OFFEN |\n| MIRROR — verschlüsselte lokale Spiegelung | OFFEN | |
+| LOCK — Sperre und Auto-Lock | OFFEN |\n| SECRET — Keystore-SecretStore | OFFEN |\n| BACKOFF — Fehlversuche und Backoff | OFFEN |\n| SCREEN — Screenshot/Recents | OFFEN |\n| INTENT — externe Widgets/Navigation | OFFEN |\n| MIRROR — verschlüsselte lokale Spiegelung | OFFEN | |
 | LEASE — Dokumentaktionen | OFFEN | |
 | BACKUP — Backup/Restore | OFFEN | |
 | V14 — Header-Migration | BLOCKIERT | Laufzeitintegration fehlt |
