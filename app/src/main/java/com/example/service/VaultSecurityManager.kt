@@ -900,7 +900,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             paint.isFakeBoldText = false
             paint.textSize = 9.5f
             paint.color = AndroidColor.rgb(60, 60, 60)
-            canvas.drawText("Dieses Blatt enthält den Haupt-Entschlüsselungsschlüssel für deinen myDocAnizer Dokumenten-Tresor.", 50f, 148f, paint)
+            canvas.drawText("Dieses Blatt enthält nur verschlüsselte Recovery-Daten, keinen Klartext-Schlüssel.", 50f, 148f, paint)
             canvas.drawText("Bewahre dieses Dokument ausschließlich physisch (z. B. im Heimtresor oder Bankschließfach) auf.", 50f, 163f, paint)
             canvas.drawText("Niemals per E-Mail, Chat oder unverschlüsselt in der Cloud teilen!", 50f, 178f, paint)
 
@@ -962,7 +962,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             canvas.drawText("1. Öffne die myDocAnizer App auf deinem Smartphone.", 36f, 685f, paint)
             canvas.drawText("2. Tippe auf dem Sperrbildschirm auf 'Passwort vergessen? Tresor wiederherstellen'.", 36f, 702f, paint)
             canvas.drawText("3. Wähle 'Notfall-PDF' und scanne den obenstehenden QR-Code oder tippe den Code ein.", 36f, 719f, paint)
-            canvas.drawText("4. Gib ggf. deinen Notfall-PIN ein und vergebe anschließend sofort ein neues Master-Passwort.", 36f, 736f, paint)
+            canvas.drawText("4. Gib deine separat verwahrte Recovery-Passphrase ein und vergebe ein neues Master-Passwort.", 36f, 736f, paint)
 
             // Footer
             paint.color = AndroidColor.rgb(148, 163, 184)
@@ -1012,15 +1012,23 @@ class VaultSecurityManager private constructor(private val context: Context) {
         recoveryPassphrase: CharArray,
         expectedVaultId: String
     ): ByteArray? {
+        var payloadBytes: ByteArray? = null
         return try {
+            val supplied = qrPayload.trim()
+            payloadBytes = if (supplied.startsWith("{")) {
+                supplied.toByteArray(Charsets.UTF_8)
+            } else {
+                Base64.decode(supplied, Base64.NO_WRAP)
+            }
             RecoveryPayloadEngine.decodeRecoveryPayload(
-                qrPayload.toByteArray(Charsets.UTF_8),
+                payloadBytes,
                 recoveryPassphrase,
                 expectedVaultId
             )
         } catch (e: Exception) {
             null
         } finally {
+            payloadBytes?.fill(0)
             recoveryPassphrase.fill('\u0000')
         }
     }
