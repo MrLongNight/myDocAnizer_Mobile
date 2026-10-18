@@ -1,5 +1,8 @@
 package com.example
 
+import android.app.Application
+import androidx.test.core.app.ApplicationProvider
+import com.example.service.VaultSecurityManager
 import com.example.service.AppSessionLockState
 import com.example.service.LockManager
 import com.example.service.VaultSessionLockState
