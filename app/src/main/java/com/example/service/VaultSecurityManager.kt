@@ -355,8 +355,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
         }
         
         val kekPassword = deriveKekArgon2id(combinedSecret, salt)
-        val (encryptedDekPassword, ivPassword) = encryptAesGcm(dek, kekPassword)
-        kekPassword.fill(0)
+        val encryptedPasswordResult = try {
+            encryptAesGcm(dek, kekPassword)
+        } finally {
+            kekPassword.fill(0)
+        }
+        val encryptedDekPassword = encryptedPasswordResult.first
+        val ivPassword = encryptedPasswordResult.second
 
         // 2. Biometrischer 2. Faktor via KeyStore
         var encryptedDekBioBase64: String? = null
@@ -392,8 +397,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 val words = bip39Words ?: generateBip39Mnemonic()
                 val recoverySalt = "myDocAnizer-bip39-salt".toByteArray(Charsets.UTF_8)
                 val kekRecovery = deriveKekFromBip39(words)
-                val (encDek, iv) = encryptAesGcm(dek, kekRecovery)
-                kekRecovery.fill(0)
+                val recoveryResult = try {
+                    encryptAesGcm(dek, kekRecovery)
+                } finally {
+                    kekRecovery.fill(0)
+                }
+                val encDek = recoveryResult.first
+                val iv = recoveryResult.second
                 encDekRecoveryBase64 = Base64.encodeToString(encDek, Base64.NO_WRAP)
                 recoveryIvBase64 = Base64.encodeToString(iv, Base64.NO_WRAP)
                 recoverySaltBase64 = Base64.encodeToString(recoverySalt, Base64.NO_WRAP)
@@ -406,8 +416,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
                     secureRandom.nextBytes(pinSalt)
                     pinSaltBase64 = Base64.encodeToString(pinSalt, Base64.NO_WRAP)
                     val kekPin = deriveKekFromPin(emergencyPin, pinSalt)
-                    val (encPinDek, pinIv) = encryptAesGcm(dek, kekPin)
-                    kekPin.fill(0)
+                    val pinResult = try {
+                        encryptAesGcm(dek, kekPin)
+                    } finally {
+                        kekPin.fill(0)
+                    }
+                    val encPinDek = pinResult.first
+                    val pinIv = pinResult.second
                     encDekRecoveryBase64 = Base64.encodeToString(encPinDek, Base64.NO_WRAP)
                     recoveryIvBase64 = Base64.encodeToString(pinIv, Base64.NO_WRAP)
                 }
@@ -424,8 +439,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
             VaultRecoveryMethod.RECOVERY_CODE -> {
                 val code = recoveryCode ?: generateRecoveryCode()
                 val kekRecovery = deriveKekFromRecoveryCode(code)
-                val (encDek, iv) = encryptAesGcm(dek, kekRecovery)
-                kekRecovery.fill(0)
+                val recoveryResult = try {
+                    encryptAesGcm(dek, kekRecovery)
+                } finally {
+                    kekRecovery.fill(0)
+                }
+                val encDek = recoveryResult.first
+                val iv = recoveryResult.second
                 encDekRecoveryBase64 = Base64.encodeToString(encDek, Base64.NO_WRAP)
                 recoveryIvBase64 = Base64.encodeToString(iv, Base64.NO_WRAP)
                 recCodeHash = calculateSha256(code.replace("-", "").trim().uppercase(Locale.ROOT).toByteArray(Charsets.UTF_8))
@@ -592,8 +612,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
             val newSalt = ByteArray(16)
             secureRandom.nextBytes(newSalt)
             val newKek = deriveKekArgon2id(newPassword, newSalt, header.argon2Iterations, header.argon2MemoryKb)
-            val (newEncryptedDek, newIv) = encryptAesGcm(recoveredDek, newKek)
-            newKek.fill(0)
+            val newEncryptedResult = try {
+                encryptAesGcm(recoveredDek, newKek)
+            } finally {
+                newKek.fill(0)
+            }
+            val newEncryptedDek = newEncryptedResult.first
+            val newIv = newEncryptedResult.second
 
             val updatedHeader = header.copy(
                 argon2SaltBase64 = Base64.encodeToString(newSalt, Base64.NO_WRAP),
@@ -688,11 +713,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
 
         return try {
             val kekRecovery = deriveKekFromBip39(words)
-            val ciphertext = Base64.decode(encRecovery, Base64.NO_WRAP)
-            val iv = Base64.decode(ivRecovery, Base64.NO_WRAP)
-            val dek = decryptAesGcm(ciphertext, iv, kekRecovery)
-            kekRecovery.fill(0)
-            dek
+            try {
+                val ciphertext = Base64.decode(encRecovery, Base64.NO_WRAP)
+                val iv = Base64.decode(ivRecovery, Base64.NO_WRAP)
+                decryptAesGcm(ciphertext, iv, kekRecovery)
+            } finally {
+                kekRecovery.fill(0)
+            }
         } catch (e: Exception) {
             null
         }
