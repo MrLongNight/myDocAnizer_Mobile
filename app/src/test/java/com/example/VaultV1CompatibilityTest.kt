@@ -41,7 +41,25 @@ class VaultV1CompatibilityTest {
         assertEquals(19456, json.getInt("argon2MemoryKb"))
         assertEquals(16, Base64.decode(json.getString("argon2Salt"), Base64.NO_WRAP).size)
         assertEquals(12, Base64.decode(json.getString("ivPassword"), Base64.NO_WRAP).size)
-        assertEquals(48, Base64.decode(json.getString("encDekPassword"), Base64.NO_WRAP).size)
+        val encryptedDek = Base64.decode(json.getString("encDekPassword"), Base64.NO_WRAP)
+        assertEquals(48, encryptedDek.size)
+
+        val header = manager.vaultHeader.value ?: error("Expected generated vault header")
+        val salt = Base64.decode(header.argon2SaltBase64, Base64.NO_WRAP)
+        val iv = Base64.decode(header.passwordDekIvBase64, Base64.NO_WRAP)
+        val kek = manager.deriveKekArgon2id(
+            password, salt, iterations = header.argon2Iterations, memoryKb = header.argon2MemoryKb
+        )
+        try {
+            val tampered = encryptedDek.clone().apply {
+                this[0] = (this[0].toInt() xor 1).toByte()
+            }
+            assertThrows(Exception::class.java) {
+                manager.decryptAesGcm(tampered, iv, kek)
+            }
+        } finally {
+            kek.fill(0)
+        }
 
         manager.lockVault()
         assertFalse(manager.unlockWithPassword("DefinitelyWrongLegacyPassword2026!"))
