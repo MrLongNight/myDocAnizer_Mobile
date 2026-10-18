@@ -31,6 +31,7 @@ class VaultAutoLockObserver(
         val minutes = configuredMinutes()
         backgroundStartedAt = nowElapsedRealtime()
         if (minutes <= 0) {
+            backgroundStartedAt = null
             lockAction()
             return
         }
@@ -40,6 +41,7 @@ class VaultAutoLockObserver(
                 val startedAt = backgroundStartedAt ?: return
                 val elapsed = (nowElapsedRealtime() - startedAt).coerceAtLeast(0L)
                 if (elapsed >= timeoutMs) {
+                    backgroundStartedAt = null
                     lockAction()
                     pendingLock = null
                 } else {
