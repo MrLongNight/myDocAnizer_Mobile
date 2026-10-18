@@ -36,18 +36,15 @@ class DocumentMigrationService(
         var skipped = 0
         var failed = 0
         val details = mutableListOf<String>()
-
         val pw = passwordKey ?: ""
-        val result = vaultSecurityManager.withUnlockedKey { encryptionKey ->
-            for (doc in allDocs) {
+
+        for ((index, doc) in allDocs.withIndex()) {
             try {
                 val oldFile = File(doc.filePath)
                 val fileName = oldFile.name
-                
-                // Prüfen ob bereits migriert (Interne ID Struktur: doc_uuid...)
-                val isAlreadyMigrated = fileName.startsWith("doc_") && 
-                                        (fileName.endsWith(".enc") || !doc.isEncrypted)
-                
+
+                val isAlreadyMigrated = fileName.startsWith("doc_") &&
+                    (fileName.endsWith(".enc") || !doc.isEncrypted)
                 if (isAlreadyMigrated) {
                     skipped++
                     continue
@@ -59,39 +56,43 @@ class DocumentMigrationService(
                     continue
                 }
 
-                // Migration durchführen
                 val isEncrypted = doc.isEncrypted
                 val extension = oldFile.extension.ifBlank { "pdf" }.replace("enc", "pdf")
                 val internalName = DocumentStorageService.generateInternalFileName(extension, isEncrypted)
                 val targetDir = oldFile.parentFile ?: DocumentStorageService.getBaseDocumentsDirectory(context)
-                
-                val finalFile = DocumentStorageService.secureSave(
-                    context = context,
-                    targetDir = targetDir,
-                    internalFileName = internalName,
-                    isEncrypted = isEncrypted,
-                    encryptionKey = encryptionKey,
-                    passwordKey = pw,
-                    inputAction = { tempFile ->
-                        oldFile.copyTo(tempFile, overwrite = true)
-                    }
-                )
 
-                // Datenbank aktualisieren
+                // Lease nur für den eigentlichen Schlüsselgebrauch halten; DAO-Operationen bleiben suspendierbar.
+                val finalFile = vaultSecurityManager.withUnlockedKey { encryptionKey ->
+                    DocumentStorageService.secureSave(
+                        context = context,
+                        targetDir = targetDir,
+                        internalFileName = internalName,
+                        isEncrypted = isEncrypted,
+                        encryptionKey = encryptionKey,
+                        passwordKey = pw,
+                        inputAction = { tempFile ->
+                            oldFile.copyTo(tempFile, overwrite = true)
+                        }
+                    )
+                }
+
+                if (finalFile == null) {
+                    val remaining = allDocs.size - index
+                    failed += remaining
+                    details.add("ABGEBROCHEN: Tresor gesperrt; keine weiteren Dokumente migriert.")
+                    break
+                }
+
                 val updatedDoc = doc.copy(
                     filePath = finalFile.absolutePath,
                     fileSizeFormatted = "${(finalFile.length() / 1024).coerceAtLeast(1)} KB"
                 )
                 documentDao.updateDocument(updatedDoc)
 
-                // Altes File löschen
-                if (oldFile.absolutePath != finalFile.absolutePath) {
-                    oldFile.delete()
-                }
+                if (oldFile.absolutePath != finalFile.absolutePath) oldFile.delete()
 
                 migrated++
                 details.add("OK: ${doc.title} -> $internalName")
-
             } catch (e: Exception) {
                 Log.e("DocumentMigration", "Fehler bei Migration von ${doc.title}: ${e.message}", e)
                 failed++
@@ -99,14 +100,6 @@ class DocumentMigrationService(
             }
         }
 
-            MigrationResult(allDocs.size, migrated, skipped, failed, details)
-        }
-        result ?: MigrationResult(
-            total = allDocs.size,
-            migrated = 0,
-            skipped = 0,
-            failed = allDocs.size,
-            details = listOf("ABGEBROCHEN: Tresor gesperrt; keine Migration ausgeführt.")
-        )
+        MigrationResult(allDocs.size, migrated, skipped, failed, details)
     }
 }
