@@ -144,6 +144,8 @@ Diese Prüfungen bauen auf der erfolgreichen Basis aus Abschnitt 2 auf. Für Feh
 - [ ] **MIRROR-01** Auto-Mirror bleibt standardmäßig deaktiviert. Ohne verfügbaren Verschlüsselungsschlüssel darf auch nach explizitem Aktivieren keine unverschlüsselte Kopie im Backup-Verzeichnis entstehen.
 - [ ] **MIRROR-02** Mit verfügbarem Schlüssel und aktiviertem Auto-Mirror eine Testdatei spiegeln. Erwartung: nur die verschlüsselte `.enc`-Kopie entsteht; keine parallele Klartextkopie.
 - [ ] **MIRROR-03** Verschlüsselung absichtlich fehlschlagen lassen. Erwartung: keine Klartextkopie als Fallback; Fehler wird kontrolliert behandelt.
+- [ ] **MIRROR-04** Auto-Mirror mit einem Dateinamen testen, der Verzeichnistrenner bzw. `..` enthält. Erwartung: Ziel bleibt im privaten `Backups`-Verzeichnis; kein Pfad außerhalb wird angelegt.
+- [ ] **MIRROR-05** Während einer bestehenden verschlüsselten Spiegelung einen Fehler vor dem Commit provozieren. Erwartung: temporäre Datei wird entfernt; die vorherige vollständige `.enc`-Datei bleibt erhalten.
 
 **Gate 6A:** Wenn BACKOFF-01 nicht bestanden ist, BACKOFF-02 bis BACKOFF-05 nicht als Abnahme werten. Wenn INTENT-03 fehlschlägt oder MIRROR-01 eine Klartextkopie erzeugt, Sicherheitsfehler dokumentieren und keine Release-Abnahme durchführen.
 
