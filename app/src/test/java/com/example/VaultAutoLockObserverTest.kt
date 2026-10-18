@@ -5,6 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.service.VaultAutoLockObserver
 import com.example.service.VaultRecoveryMethod
 import com.example.service.VaultSecurityManager
+import com.example.service.LockManager
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -16,6 +18,11 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], manifest = Config.NONE)
 class VaultAutoLockObserverTest {
+    @After
+    fun cleanupVaultSession() {
+        VaultSecurityManager.getInstance(ApplicationProvider.getApplicationContext<Application>()).lockVault()
+        LockManager.resetForTests()
+    }
     @Test
     fun `zero timeout locks immediately on background`() {
         val manager = VaultSecurityManager.getInstance(ApplicationProvider.getApplicationContext<Application>())
