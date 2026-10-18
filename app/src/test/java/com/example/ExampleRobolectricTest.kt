@@ -1643,31 +1643,35 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `verify RecoveryPayloadEngine roundtrip and security guarantees`() {
+  fun `verify RecoveryPayloadEngine v2 roundtrip and security guarantees`() {
     val dek = ByteArray(32).apply { java.security.SecureRandom().nextBytes(this) }
     val passphrase = "SecureRecoveryPassphrase2026!".toCharArray()
     val wrongPassphrase = "WrongPassphrase!".toCharArray()
+    val vaultId = "VAULT-TEST1234"
 
-    // Encode
-    val serialized = com.example.service.RecoveryPayloadEngine.encodeRecoveryPayload(dek, passphrase)
+    val serialized = com.example.service.RecoveryPayloadEngine.encodeRecoveryPayload(dek, passphrase, vaultId)
     assertNotNull(serialized)
     assertTrue(serialized.size > 32)
 
-    // Successful decode roundtrip
-    val decryptedDek = com.example.service.RecoveryPayloadEngine.decodeRecoveryPayload(serialized, passphrase)
-    assertNotNull(decryptedDek)
+    val decryptedDek = com.example.service.RecoveryPayloadEngine.decodeRecoveryPayload(serialized, passphrase, vaultId)
     assertTrue(decryptedDek.contentEquals(dek))
 
-    // Wrong passphrase must throw SecurityException
     org.junit.Assert.assertThrows(SecurityException::class.java) {
-      com.example.service.RecoveryPayloadEngine.decodeRecoveryPayload(serialized, wrongPassphrase)
+      com.example.service.RecoveryPayloadEngine.decodeRecoveryPayload(serialized, wrongPassphrase, vaultId)
+    }
+    org.junit.Assert.assertThrows(SecurityException::class.java) {
+      com.example.service.RecoveryPayloadEngine.decodeRecoveryPayload(serialized, passphrase, "VAULT-OTHER123")
     }
 
-    // Tampered ciphertext must throw SecurityException
-    val tampered = serialized.clone()
-    tampered[tampered.size - 1] = (tampered[tampered.size - 1].toInt() xor 0xFF).toByte()
+    val payload = com.example.service.RecoveryPayloadEngine.RecoveryPayload.deserialize(serialized)
+    val tampered = payload.copy(ciphertext = payload.ciphertext.clone().apply {
+      this[0] = (this[0].toInt() xor 0xFF).toByte()
+    }).serialize()
     org.junit.Assert.assertThrows(SecurityException::class.java) {
-      com.example.service.RecoveryPayloadEngine.decodeRecoveryPayload(tampered, passphrase)
+      com.example.service.RecoveryPayloadEngine.decodeRecoveryPayload(tampered, passphrase, vaultId)
+    }
+    org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+      com.example.service.RecoveryPayloadEngine.RecoveryPayload.deserialize(serialized + byteArrayOf(0x41))
     }
   }
 }
