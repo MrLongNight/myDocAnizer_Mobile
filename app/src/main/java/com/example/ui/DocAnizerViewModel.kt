@@ -416,16 +416,41 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        biometricAuthManager.showBiometricPrompt(
-            activity = activity,
-            title = "myDocAnizer entsperren",
-            subtitle = "Authentifiziere dich per Fingerabdruck, Gesicht oder PIN",
-            onSuccess = {
-                _isAppUnlocked.value = true
-                onSuccess()
-            },
-            onError = onError
-        )
+        val header = vaultSecurityManager.vaultHeader.value
+        if (header?.biometric2FaEnabled == true) {
+            val cipher = vaultSecurityManager.createBiometricUnlockCipher()
+            if (cipher == null) {
+                onError("Biometrischer Schlüssel fehlt, wurde invalidiert oder ist nicht verfügbar. Entsperre mit dem Master-Passwort.")
+                return
+            }
+            biometricAuthManager.showBiometricPromptForCipher(
+                activity = activity,
+                cipher = cipher,
+                title = "myDocAnizer-Tresor entsperren",
+                subtitle = "Biometrische Authentifizierung schützt die tatsächliche Schlüsselentschlüsselung",
+                onSuccess = { authenticatedCipher ->
+                    if (vaultSecurityManager.completeBiometricUnlock(authenticatedCipher)) {
+                        _isAppUnlocked.value = true
+                        onSuccess()
+                    } else {
+                        onError("Tresor konnte mit dem authentifizierten Schlüssel nicht entsperrt werden.")
+                    }
+                },
+                onError = onError
+            )
+        } else {
+            // Separater App-Lock: keine Aussage über die kryptografische Freigabe des Tresor-DEK.
+            biometricAuthManager.showBiometricPrompt(
+                activity = activity,
+                title = "myDocAnizer entsperren",
+                subtitle = "Authentifiziere dich für den App-Lock",
+                onSuccess = {
+                    _isAppUnlocked.value = true
+                    onSuccess()
+                },
+                onError = onError
+            )
+        }
     }
 
     // Delegated to DmsManager (Rules)
