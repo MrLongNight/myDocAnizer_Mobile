@@ -70,6 +70,9 @@ fun VaultSettingsScreen(
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showAuthForRecoveryDialog by remember { mutableStateOf(false) }
     var isRecoveryUnlocked by remember { mutableStateOf(false) }
+    var showEmergencyPdfPassphraseDialog by remember { mutableStateOf(false) }
+    var emergencyRecoveryPassphrase by remember { mutableStateOf("") }
+    var emergencyRecoveryPassphraseConfirm by remember { mutableStateOf("") }
 
     var actionFeedbackMessage by remember { mutableStateOf<String?>(null) }
     var actionIsError by remember { mutableStateOf(false) }
@@ -99,6 +102,92 @@ fun VaultSettingsScreen(
                 isRecoveryUnlocked = true
                 actionFeedbackMessage = "🔓 Wiederherstellungsbereich für diese Sitzung freigeschaltet."
                 actionIsError = false
+            }
+        )
+    }
+
+    if (showEmergencyPdfPassphraseDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showEmergencyPdfPassphraseDialog = false
+                emergencyRecoveryPassphrase = ""
+                emergencyRecoveryPassphraseConfirm = ""
+            },
+            title = { Text("Recovery-Passphrase für Notfall-PDF") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Das PDF enthält ausschließlich verschlüsselte Recovery-Daten. Lege eine separate, unvorhersagbare Passphrase mit mindestens 20 Zeichen fest und bewahre sie getrennt vom PDF auf."
+                    )
+                    OutlinedTextField(
+                        value = emergencyRecoveryPassphrase,
+                        onValueChange = { emergencyRecoveryPassphrase = it },
+                        label = { Text("Recovery-Passphrase") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = emergencyRecoveryPassphraseConfirm,
+                        onValueChange = { emergencyRecoveryPassphraseConfirm = it },
+                        label = { Text("Passphrase wiederholen") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true
+                    )
+                    if (emergencyRecoveryPassphrase.isNotEmpty() &&
+                        emergencyRecoveryPassphrase.length < 20
+                    ) {
+                        Text("Mindestens 20 Zeichen erforderlich.", color = MaterialTheme.colorScheme.error)
+                    }
+                    if (emergencyRecoveryPassphraseConfirm.isNotEmpty() &&
+                        emergencyRecoveryPassphrase != emergencyRecoveryPassphraseConfirm
+                    ) {
+                        Text("Die Passphrasen stimmen nicht überein.", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = emergencyRecoveryPassphrase.length >= 20 &&
+                        emergencyRecoveryPassphrase == emergencyRecoveryPassphraseConfirm,
+                    onClick = {
+                        val target = File(context.cacheDir, "myDocAnizer_Notfall_Emergency_Kit.pdf")
+                        val file = vaultSecManager.generateEmergencyPdf(
+                            target,
+                            emergencyRecoveryPassphrase.toCharArray()
+                        )
+                        emergencyRecoveryPassphrase = ""
+                        emergencyRecoveryPassphraseConfirm = ""
+                        showEmergencyPdfPassphraseDialog = false
+                        if (file != null) {
+                            try {
+                                val uri = FileProvider.getUriForFile(
+                                    context, "${context.packageName}.fileprovider", file
+                                )
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "application/pdf"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Notfall-PDF drucken / exportieren"))
+                                actionFeedbackMessage = "Verschlüsseltes Notfall-PDF wurde erzeugt."
+                                actionIsError = false
+                            } catch (e: Exception) {
+                                actionFeedbackMessage = "PDF erzeugt: ${file.name}"
+                                actionIsError = false
+                            }
+                        } else {
+                            actionFeedbackMessage = "Notfall-PDF konnte nicht erzeugt werden."
+                            actionIsError = true
+                        }
+                    }
+                ) { Text("PDF erzeugen") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showEmergencyPdfPassphraseDialog = false
+                    emergencyRecoveryPassphrase = ""
+                    emergencyRecoveryPassphraseConfirm = ""
+                }) { Text("Abbrechen") }
             }
         )
     }
@@ -791,23 +880,7 @@ fun VaultSettingsScreen(
                                     Text("Notfall-Schlüsseldatei (Emergency Kit):", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                                     Text("Drucke das Notfallblatt erneut aus oder sichere es an einem sicheren physischen Ort.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Button(
-                                        onClick = {
-                                            val target = File(context.cacheDir, "myDocAnizer_Notfall_Emergency_Kit.pdf")
-                                            val file = vaultSecManager.generateEmergencyPdf(target)
-                                            if (file != null) {
-                                                try {
-                                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                                                    val intent = Intent(Intent.ACTION_SEND).apply {
-                                                        type = "application/pdf"
-                                                        putExtra(Intent.EXTRA_STREAM, uri)
-                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                    }
-                                                    context.startActivity(Intent.createChooser(intent, "Notfall-PDF drucken / exportieren"))
-                                                } catch (e: Exception) {
-                                                    actionFeedbackMessage = "PDF erzeugt: ${file.name}"
-                                                }
-                                            }
-                                        },
+                                        onClick = { showEmergencyPdfPassphraseDialog = true },
                                         modifier = Modifier.fillMaxWidth().testTag("btn_reexport_emergency_pdf")
                                     ) {
                                         Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
