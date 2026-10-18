@@ -887,9 +887,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             // Robuster Headless / Robolectric Fallback
             try {
                 outputFile.parentFile?.mkdirs()
-                val qrPayload = buildEmergencyPayload(header.vaultId, dek, optionalPin)
-                val base64Key = Base64.encodeToString(dek, Base64.NO_WRAP)
-                val formattedKey = base64Key.chunked(4).joinToString("-")
+                val payloadBase64 = Base64.encodeToString(qrPayload.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
                 val streamBuilder = StringBuilder()
                 streamBuilder.append("BT\n/F1 14 Tf\n50 780 Td\n(myDocAnizer-Mobile - Notfall-Schluesselblatt) Tj\n")
                 streamBuilder.append("/F1 10 Tf\n0 -25 Td\n(Zero-Knowledge Tresor-Wiederherstellung Emergency Kit) Tj\n")
@@ -933,34 +931,6 @@ class VaultSecurityManager private constructor(private val context: Context) {
         }
     }
 
-    private fun buildEmergencyPayload(vaultId: String, dek: ByteArray, optionalPin: String?): String {
-        val json = JSONObject()
-        json.put("app", "myDocAnizer")
-        json.put("v", 1)
-        json.put("vaultId", vaultId)
-        if (!optionalPin.isNullOrBlank()) {
-            val salt = ByteArray(16)
-            secureRandom.nextBytes(salt)
-            val kekPin = deriveKekFromPin(optionalPin, salt)
-            val (enc, iv) = encryptAesGcm(dek, kekPin)
-            kekPin.fill(0)
-            json.put("pinProtected", true)
-            json.put("pinSalt", Base64.encodeToString(salt, Base64.NO_WRAP))
-            json.put("iv", Base64.encodeToString(iv, Base64.NO_WRAP))
-            json.put("encDek", Base64.encodeToString(enc, Base64.NO_WRAP))
-        } else {
-            json.put("pinProtected", false)
-            json.put("encDek", Base64.encodeToString(dek, Base64.NO_WRAP))
-        }
-        return json.toString()
-    }
-
-    private fun deriveKekFromPin(pin: String, salt: ByteArray): ByteArray {
-        val spec = PBEKeySpec(pin.toCharArray(), salt, 50000, 256)
-        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-        val secret = factory.generateSecret(spec)
-        return secret.encoded
-    }
 
     // =========================================================================
     // 5. RECOVERY-OPTION C: SHAMIR’S SECRET SHARING (2 VON 3 SCHWELLENWERT)
