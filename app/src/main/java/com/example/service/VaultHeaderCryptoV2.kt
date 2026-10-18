@@ -125,7 +125,7 @@ object VaultHeaderCryptoV2 {
             .onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)
             .encode(CharBuffer.wrap(password))
-        val passBytes = ByteArray(encoded.remaining()).also(encoded::get)
+        val passBytes = ByteArray(encoded.remaining()).also { encoded.get(it) }
         if (encoded.hasArray()) encoded.array().fill(0)
         val result = ByteArray(KEY_BYTES)
         try {
