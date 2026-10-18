@@ -1259,7 +1259,7 @@ fun SecurityWizardStep(
                     HorizontalDivider()
                     Text("Automatische Tresor-Sperre (Auto-Lock):", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf(1 to "1 Min", 5 to "5 Min", 15 to "15 Min", 30 to "30 Min").forEach { (mins, lbl) ->
+                        listOf(0 to "Sofort", 1 to "1 Min", 5 to "5 Min", 15 to "15 Min", 30 to "30 Min").forEach { (mins, lbl) ->
                             FilterChip(
                                 selected = autoLockMinutes == mins,
                                 onClick = { autoLockMinutes = mins },
