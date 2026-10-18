@@ -2375,14 +2375,13 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         try {
                             val backupDir = File(context.filesDir, "Backups").apply { mkdirs() }
                             val pw = syncPasswordKey.value
-                            if (!pw.isNullOrBlank()) {
-                                val encTarget = File(backupDir, "${entity.fileName}.enc")
-                                DocumentStorageService.encryptFile(File(entity.filePath), encTarget, pw)
-                            } else {
-                                // Bei unverschlüsseltem Modus direkt eine lokale Sicherheitskopie anlegen
-                                val rawTarget = File(backupDir, entity.fileName)
-                                File(entity.filePath).copyTo(rawTarget, overwrite = true)
+                            if (pw.isNullOrBlank()) {
+                                // Never create a plaintext mirror. Opting into mirroring does not
+                                // authorize an unencrypted copy when no encryption key is available.
+                                throw SecurityException("Auto-Mirror benötigt einen verfügbaren Verschlüsselungsschlüssel.")
                             }
+                            val encTarget = File(backupDir, "${entity.fileName}.enc")
+                            DocumentStorageService.encryptFile(File(entity.filePath), encTarget, pw)
                         } catch (e: Exception) {
                             Log.e("DocAnizerViewModel", "Auto-Mirror fehlgeschlagen: ${e.message}")
                         }
