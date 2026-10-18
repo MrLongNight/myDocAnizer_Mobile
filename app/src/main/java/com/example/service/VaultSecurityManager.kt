@@ -552,6 +552,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
         }
     }
 
+    /** Explicit unlock for the deliberately unprotected mode; still derives and loads the actual DEK. */
+    fun unlockUnencryptedVault(): Boolean {
+        if (!isUnencryptedModeEnabled()) return false
+        if (_vaultHeader.value == null) return false
+        return unlockVault(password = "myDocAnizer-unencrypted-fallback")
+    }
+
     /**
      * Abwärtskompatible Wrapper-Methode für bestehende Aufrufe.
      */
