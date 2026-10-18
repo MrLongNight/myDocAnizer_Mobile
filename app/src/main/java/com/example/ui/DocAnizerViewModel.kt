@@ -3129,7 +3129,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     passwordKey = syncPasswordKey.value,
                     settings = pdfSettings.value
                 )
-                } ?: throw IllegalStateException("Vault is locked; refusing document write")  val (detectedCancellation, detectedContractEnd) = com.example.service.DeadlineDetectionService.extractPrimaryDeadlines(ocrText)
+                } ?: throw IllegalStateException("Vault is locked; refusing document write")
+
+                val (detectedCancellation, detectedContractEnd) = com.example.service.DeadlineDetectionService.extractPrimaryDeadlines(ocrText)
 
                 val entity = DocumentEntity(
                     title = safeTitle,
