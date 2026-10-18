@@ -1316,9 +1316,9 @@ class VaultSecurityManager private constructor(private val context: Context) {
     fun getTotpUri(secretBase32: String, accountName: String = "Tresor"): String = TotpEngine.getUri(secretBase32, accountName)
 
     fun setAutoLockMinutes(minutes: Int) {
+        require(minutes in 0..1440) { "Auto-lock must be between 0 and 1440 minutes" }
         val currentHeader = _vaultHeader.value ?: return
-        val updated = currentHeader.copy(autoLockMinutes = minutes)
-        saveVaultHeader(updated)
+        saveVaultHeader(currentHeader.copy(autoLockMinutes = minutes))
     }
 
     fun getAutoLockMinutes(): Int {
