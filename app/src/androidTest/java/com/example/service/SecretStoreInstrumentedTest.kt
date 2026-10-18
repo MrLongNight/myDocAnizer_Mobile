@@ -59,6 +59,16 @@ class SecretStoreInstrumentedTest {
     }
 
     @Test
+    fun missingKeystoreKeyFailsClosed() {
+        val secret = "synthetic-key-loss-test".toByteArray(Charsets.UTF_8)
+        assertTrue(store.put("key_loss_test", secret))
+        val keyStore = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        keyStore.deleteEntry("mydocanizer_secret_store_aes_gcm_v1")
+        assertNull(store.get("key_loss_test"))
+        secret.fill(0)
+    }
+
+    @Test
     fun invalidNamesAreRejected() {
         assertFalse(store.put("../invalid", byteArrayOf(1, 2, 3)))
         assertNull(store.get("../invalid"))
