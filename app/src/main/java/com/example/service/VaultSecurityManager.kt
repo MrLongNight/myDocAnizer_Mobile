@@ -1506,11 +1506,22 @@ object Bip39Engine {
     }
 
     fun mnemonicToSeed(phrase: String): ByteArray {
-        val spec = PBEKeySpec(phrase.toCharArray(), "mnemonic".toByteArray(Charsets.UTF_8), 2048, 512)
-        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512")
-        val secret = factory.generateSecret(spec)
-        val seed = secret.encoded
-        return seed.copyOfRange(0, 32) // 256 Bits für AES-256
+        val phraseChars = phrase.toCharArray()
+        val salt = "mnemonic".toByteArray(Charsets.UTF_8)
+        val spec = PBEKeySpec(phraseChars, salt, 2048, 512)
+        return try {
+            val seed = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA512")
+                .generateSecret(spec).encoded
+            try {
+                seed.copyOfRange(0, 32) // bestehendes Format nutzt die ersten 256 Bits als KEK
+            } finally {
+                seed.fill(0)
+            }
+        } finally {
+            spec.clearPassword()
+            phraseChars.fill('\u0000')
+            salt.fill(0)
+        }
     }
 
     val BIP39_WORD_LIST: List<String> = listOf(
