@@ -382,7 +382,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setBiometricAuthEnabled(enabled: Boolean) {
         settingsRepo.setBiometricAuthEnabled(enabled)
-        if (!enabled) LockManager.onAppUnlockedAfterAuthentication()
+        if (!enabled) completeVaultUnlock()
     }
 
     /** Marks the app session unlocked only after the caller completed a real vault unlock. */
