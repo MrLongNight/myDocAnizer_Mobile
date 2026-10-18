@@ -374,7 +374,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     // Biometrische Autorisierung (Fingerabdruck, Face Unlock, PIN)
     val biometricAuthEnabled: StateFlow<Boolean> = settingsRepo.biometricAuthEnabled
     private val _isAppUnlocked = MutableStateFlow(
-        if (!settingsRepo.biometricAuthEnabled.value) {
+        if (com.example.BuildConfig.DEBUG) {
+            true
+        } else if (!settingsRepo.biometricAuthEnabled.value) {
             true
         } else {
             val hasHardware = biometricAuthManager.checkBiometricAvailability() == BiometricAuthManager.BiometricHardwareStatus.AVAILABLE

@@ -362,6 +362,22 @@ fun AppLockScreen(
                     )
                 }
 
+                if (com.example.BuildConfig.DEBUG) {
+                    OutlinedButton(
+                        onClick = { viewModel.unlockApp() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(40.dp)
+                            .testTag("btn_debug_instant_unlock"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.tertiary)
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("⚡ Sofort-Entsperren (Test-Modus)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
                 TextButton(
                     onClick = { showRecoveryDialog = true },
                     modifier = Modifier.testTag("btn_lock_screen_recovery")
