@@ -48,6 +48,7 @@ biometric = "1.2.0-alpha05"
 kotlinxSerializationJson = "1.8.0"
 vico = "2.0.0"
 bcprov = "1.78"
+pdfboxAndroid = "2.0.27.0"
 zxingCore = "3.5.3"
 zxingAndroidEmbedded = "4.3.0"
 
@@ -55,6 +56,7 @@ zxingAndroidEmbedded = "4.3.0"
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
 zxing-android-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingAndroidEmbedded" }
 bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bcprov" }
+pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfboxAndroid" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
