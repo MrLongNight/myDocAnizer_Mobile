@@ -160,31 +160,45 @@ object P2pSyncSecurityService {
      * Verschlüsselt einen Plaintext-String mit AES-256-GCM.
      * Rückgabe: Base64(IV + Ciphertext + Tag)
      */
-    fun encryptString(plainText: String, secretKeyBase64: String): String {
-        val keyBytes = try {
-            Base64.decode(secretKeyBase64, Base64.NO_WRAP)
-        } catch (e: Exception) {
-            MessageDigest.getInstance("SHA-256").digest(secretKeyBase64.toByteArray(Charsets.UTF_8))
+    private fun decodeAes256Key(secretKeyBase64: String): ByteArray {
+        require(secretKeyBase64.isNotBlank()) { "AES-256-Schlüssel fehlt." }
+        val keyBytes = Base64.decode(secretKeyBase64, Base64.NO_WRAP)
+        require(keyBytes.size == 32) { "AES-256-Schlüssel muss genau 32 Bytes haben." }
+        require(Base64.encodeToString(keyBytes, Base64.NO_WRAP) == secretKeyBase64) {
+            "AES-256-Schlüssel muss kanonisch Base64-kodiert sein."
         }
-        val encrypted = encryptBytes(plainText.toByteArray(Charsets.UTF_8), keyBytes)
-        return Base64.encodeToString(encrypted, Base64.NO_WRAP)
+        return keyBytes
+    }
+
+    fun encryptString(plainText: String, secretKeyBase64: String): String {
+        val keyBytes = decodeAes256Key(secretKeyBase64)
+        val plainBytes = plainText.toByteArray(Charsets.UTF_8)
+        return try {
+            val encrypted = encryptBytes(plainBytes, keyBytes)
+            Base64.encodeToString(encrypted, Base64.NO_WRAP)
+        } finally {
+            keyBytes.fill(0)
+            plainBytes.fill(0)
+        }
     }
 
     /**
      * Entschlüsselt einen mit AES-256-GCM verschlüsselten String.
+     * Ungültige Schlüssel- oder Payloadformate schlagen geschlossen fehl.
      */
     fun decryptString(encryptedBase64: String, secretKeyBase64: String): String? {
+        var keyBytes: ByteArray? = null
+        var decryptedBytes: ByteArray? = null
         return try {
-            val keyBytes = try {
-                Base64.decode(secretKeyBase64, Base64.NO_WRAP)
-            } catch (e: Exception) {
-                MessageDigest.getInstance("SHA-256").digest(secretKeyBase64.toByteArray(Charsets.UTF_8))
-            }
+            keyBytes = decodeAes256Key(secretKeyBase64)
             val combined = Base64.decode(encryptedBase64, Base64.NO_WRAP)
-            val decryptedBytes = decryptBytes(combined, keyBytes) ?: return null
+            decryptedBytes = decryptBytes(combined, keyBytes) ?: return null
             String(decryptedBytes, Charsets.UTF_8)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
+        } finally {
+            keyBytes?.fill(0)
+            decryptedBytes?.fill(0)
         }
     }
 
