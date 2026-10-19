@@ -180,6 +180,14 @@ Diese Tests prüfen, dass die App bei gesperrtem Tresor nicht weiter mit einem a
 - [ ] **PDF-05** Produktentscheidung dokumentieren: Reicht die Suche in Room/FTS innerhalb der App, oder wird ein eigenständig durchsuchbarer PDF-Textlayer verlangt? Bei Bedarf eines Textlayers zuerst einen eigenen Minimalplan freigeben, nicht im Rahmen der Verschlüsselungsarbeiten implementieren.
 - [ ] **PDF-06** Instrumentationstest und Geräte-/Emulatorlauf getrennt protokollieren. Der Test wurde hinzugefügt, aber noch nicht ausgeführt.
 
+## 8B. P2P-Transport und Kryptofallbacks
+
+- [ ] **P2P-01** Vor P02/P03 die ADR `p01-p2p-transport-adr.md` ausdrücklich freigeben; bis dahin keine TLS-Client-/Servermigration als abgenommen markieren.
+- [ ] **P2P-02** `P2pSyncSecurityTest` ausführen und die Tests für AES-256-Key-Parsing, String-Roundtrip, ungültigen Schlüssel und fehlerhafte Payload prüfen.
+- [ ] **P2P-03** Verifizieren, dass ungültige Base64-/Schlüssellängen keinen SHA-256-Ersatzschlüssel mehr erzeugen.
+- [ ] **P2P-04** Ergebnis von Unit-Tests und realem Geräte-/Netzwerktest getrennt dokumentieren. Die neuen Tests wurden ergänzt, aber noch nicht ausgeführt.
+- [ ] **P2P-05** Keine Klartext-P2P-Synchronisation im Produktivbetrieb als sicher einstufen; das aktuelle HTTP/TLS-Risiko bleibt bis P02/P03 offen.
+
 ## 9. Header v1→v2 Migration: bewusst nicht ausführen
 
 - [ ] **V14-STOP** Nicht manuell Header, Preferences oder Vault-Dateien ändern. Die v2-Laufzeitintegration ist derzeit blockiert.
