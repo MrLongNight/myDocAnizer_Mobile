@@ -56,7 +56,6 @@ class P2pSyncSecurityTest {
         assertFalse(P2pSyncServer.isLocalIp("192.169.1.1"))
     }
 
-
     @Test
     fun stringEncryptionRoundTripsWithCanonicalAes256Key() {
         val key = P2pSyncSecurityService.generateSharedSecret()
@@ -94,5 +93,4 @@ class P2pSyncSecurityTest {
         assertNull(P2pSyncSecurityService.decryptString(encrypted, "not-a-valid-aes-key"))
         assertNull(P2pSyncSecurityService.decryptString("not-base64!", validKey))
     }
-
 }
