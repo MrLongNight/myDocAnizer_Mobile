@@ -171,6 +171,15 @@ Diese Tests prüfen, dass die App bei gesperrtem Tresor nicht weiter mit einem a
 - [ ] **BACKUP-06** Ergebnis der statischen Regeln und des echten Geräte-/Restore-Tests getrennt dokumentieren. Ein XML-Unit-Test allein beweist nicht den tatsächlichen System-Backupablauf.
 - [ ] **BACKUP-07** Prüfen, dass Modell-/Temp-Verzeichnisse und der externe App-Dateibereich vom Cloud-Backup ausgeschlossen sind; Cache-Temporärdateien werden separat als Cache behandelt.
 
+## 8A. Scan-PDF-Textlayer (D14)
+
+- [ ] **PDF-01** Instrumentationstest `PdfTextLayerInstrumentedTest` ausführen.
+- [ ] **PDF-02** Prüfen, dass PDFBox den sichtbaren Kopftext `myDocAnizer` extrahiert.
+- [ ] **PDF-03** Prüfen, dass der eindeutige OCR-Sentinel nicht aus der erzeugten Scan-PDF extrahiert wird; das bestätigt den aktuellen fehlenden OCR-Textlayer.
+- [ ] **PDF-04** Separat prüfen, dass derselbe OCR-Inhalt im Dokumentdatensatz in Room gespeichert und über die App-Suche gefunden wird.
+- [ ] **PDF-05** Produktentscheidung dokumentieren: Reicht die Suche in Room/FTS innerhalb der App, oder wird ein eigenständig durchsuchbarer PDF-Textlayer verlangt? Bei Bedarf eines Textlayers zuerst einen eigenen Minimalplan freigeben, nicht im Rahmen der Verschlüsselungsarbeiten implementieren.
+- [ ] **PDF-06** Instrumentationstest und Geräte-/Emulatorlauf getrennt protokollieren. Der Test wurde hinzugefügt, aber noch nicht ausgeführt.
+
 ## 9. Header v1→v2 Migration: bewusst nicht ausführen
 
 - [ ] **V14-STOP** Nicht manuell Header, Preferences oder Vault-Dateien ändern. Die v2-Laufzeitintegration ist derzeit blockiert.
@@ -208,6 +217,7 @@ Diese Tests prüfen, dass die App bei gesperrtem Tresor nicht weiter mit einem a
 - [Detailplan V11–S05: QR, Emergency-PDF, Biometrie, Backup und Lock](manual-test-checklist-v11-s05.md)
 - [Implementierungsbericht V11–S05](v11-s05-implementation-report.md)
 - [Implementierungsbericht S06–S10](s06-s10-implementation-report.md)
+- [D14 PDF-Textlayer-Audit](d14-pdf-text-layer-audit.md)
 - [V14-Migrationsblocker](v14-migration-blocker.md)
 
 **Abnahmeregel:** Ein Abschnitt gilt erst als bestanden, wenn seine konkreten Tests durchgeführt wurden. Ein erfolgreiches Build, ein erfolgreicher App-Start oder ein grüner Einzeltest ersetzt keine End-to-End-Prüfung. Bei fehlgeschlagenen Voraussetzungen alle abhängigen Tests als BLOCKIERT markieren, bis der Fehler behoben und die betroffenen Tests wiederholt wurden.
