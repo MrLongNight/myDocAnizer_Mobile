@@ -592,5 +592,6 @@ Sofort abbrechen und konkreten Blocker melden, wenn:
 | D13 | PATCH ERSTELLT | direkt in main | Ja | Backup-Regeltests erweitert; Build-/Testlauf offen | D14 |
 | D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | P01 |
 | P01 | PATCH ERSTELLT | direkt in main | Ja | P2P-Transport-Audit und TLS-ADR dokumentiert; Freigabe offen | ADR-Freigabe vor P02 |
+| P10 | PATCH ERSTELLT | direkt in main | Ja | SHA-256-Ersatzschlüssel-Fallback entfernt; Negativtests ergänzt; Testlauf offen | Testlauf und Aufrufer-Audit prüfen |
 
 Zulässige Statuswerte: `NICHT GESTARTET`, `BLOCKIERT`, `PATCH ERSTELLT`, `MANUELL ÜBERNOMMEN`, `GETESTET`, `ABGENOMMEN`.
