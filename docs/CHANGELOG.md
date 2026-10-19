@@ -5,6 +5,7 @@ All notable changes to **myDocAnizer-Mobile** are documented here.
 ## [Unreleased] - 2026-10-18 (Sicherheits-Härtung)
 - Security: Entfernt pauschale Android-Geräteübertragungs-Includes für Dateien, Datenbanken und SharedPreferences; sensible Speicherbereiche werden explizit ausgeschlossen.
 - Security tests: Erweitert `BackupRulesSecurityTest` um Prüfungen gegen pauschale Includes und für externe/temporäre Speicherbereiche.
+- D14: Ergänzt einen PDFBox-basierten Instrumentationstest und dokumentiert, dass Scan-OCR aktuell nicht als Textlayer in die PDF eingebettet wird; Testlauf offen.
 
 ### Tresor-Authentifizierung und externe Intents
 - Gemeinsamer persistenter Backoff für Passwort-/TOTP-/Recovery-Versuche; Authentifizierungsaufrufe gegen parallele Versuche serialisiert.
