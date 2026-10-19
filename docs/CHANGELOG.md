@@ -7,6 +7,7 @@ All notable changes to **myDocAnizer-Mobile** are documented here.
 - Security tests: Erweitert `BackupRulesSecurityTest` um Prüfungen gegen pauschale Includes und für externe/temporäre Speicherbereiche.
 - D14: Ergänzt einen PDFBox-basierten Instrumentationstest und dokumentiert, dass Scan-OCR aktuell nicht als Textlayer in die PDF eingebettet wird; Testlauf offen.
 - P01: Dokumentiert den Ist-Zustand des P2P-Transports, bestätigt Klartext-HTTP statt TLS und erstellt eine TLS-/Fingerprint-Pinning-ADR; Freigabe vor P02/P03 erforderlich.
+- P10: Entfernt den SHA-256-Ersatzschlüssel-Fallback bei ungültigen P2P-AES-Schlüsselstrings; falsche Base64-/Schlüssellängen schlagen geschlossen fehl, Tests ergänzt.
 
 ### Tresor-Authentifizierung und externe Intents
 - Gemeinsamer persistenter Backoff für Passwort-/TOTP-/Recovery-Versuche; Authentifizierungsaufrufe gegen parallele Versuche serialisiert.
