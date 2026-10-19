@@ -55,4 +55,44 @@ class P2pSyncSecurityTest {
         assertFalse(P2pSyncServer.isLocalIp("172.32.0.1")) // Outside 172.16 - 172.31 range
         assertFalse(P2pSyncServer.isLocalIp("192.169.1.1"))
     }
+
+
+    @Test
+    fun stringEncryptionRoundTripsWithCanonicalAes256Key() {
+        val key = P2pSyncSecurityService.generateSharedSecret()
+        val plaintext = "synthetic-p2p-test-payload"
+
+        val encrypted = P2pSyncSecurityService.encryptString(plaintext, key)
+
+        assertNotEquals(plaintext, encrypted)
+        assertEquals(plaintext, P2pSyncSecurityService.decryptString(encrypted, key))
+    }
+
+    @Test
+    fun invalidStringEncryptionKeyIsRejectedWithoutHashFallback() {
+        assertThrows(IllegalArgumentException::class.java) {
+            P2pSyncSecurityService.encryptString("synthetic", "not-a-valid-aes-key")
+        }
+    }
+
+    @Test
+    fun wrongLengthAesKeyIsRejected() {
+        val shortKey = android.util.Base64.encodeToString(
+            ByteArray(16) { 7 },
+            android.util.Base64.NO_WRAP
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            P2pSyncSecurityService.encryptString("synthetic", shortKey)
+        }
+    }
+
+    @Test
+    fun decryptionFailsClosedForInvalidKeyOrMalformedPayload() {
+        val validKey = P2pSyncSecurityService.generateSharedSecret()
+        val encrypted = P2pSyncSecurityService.encryptString("synthetic", validKey)
+
+        assertNull(P2pSyncSecurityService.decryptString(encrypted, "not-a-valid-aes-key"))
+        assertNull(P2pSyncSecurityService.decryptString("not-base64!", validKey))
+    }
+
 }
