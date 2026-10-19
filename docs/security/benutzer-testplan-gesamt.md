@@ -218,6 +218,7 @@ Diese Tests prüfen, dass die App bei gesperrtem Tresor nicht weiter mit einem a
 - [Implementierungsbericht V11–S05](v11-s05-implementation-report.md)
 - [Implementierungsbericht S06–S10](s06-s10-implementation-report.md)
 - [D14 PDF-Textlayer-Audit](d14-pdf-text-layer-audit.md)
+- [P01 P2P-Transport-Audit und TLS-ADR](p01-p2p-transport-adr.md)
 - [V14-Migrationsblocker](v14-migration-blocker.md)
 
 **Abnahmeregel:** Ein Abschnitt gilt erst als bestanden, wenn seine konkreten Tests durchgeführt wurden. Ein erfolgreiches Build, ein erfolgreicher App-Start oder ein grüner Einzeltest ersetzt keine End-to-End-Prüfung. Bei fehlgeschlagenen Voraussetzungen alle abhängigen Tests als BLOCKIERT markieren, bis der Fehler behoben und die betroffenen Tests wiederholt wurden.
