@@ -241,7 +241,7 @@ Vor der manuellen Abnahme bitte den [Gesamt-Testplan aus Benutzersicht](security
 ## D13 – Unverschlüsselten Mirror entfernen und Backupregeln prüfen — **[IMPLEMENTIERUNG ERGÄNZT – TESTLAUF OFFEN]**
 **Prompt:** Prüfe den Auto-Mirror/Klartextbackup-Pfad und `backup_rules.xml`/`data_extraction_rules.xml`. Entferne den unverschlüsselten Mirror oder sperre ihn bis zu einer ausdrücklich bestätigten, sichtbaren Nutzerfreigabe und dokumentierten Warnung. Schließe Cache, temporäre Klartextdateien, geheime Prefs, Logs, lokale Backupcontainer und Modelle passend aus; exportiere keine sensiblen Speicherorte pauschal bei Geräteübertragung. **Abnahme:** alle Regeln einzeln begründet; keine unbeabsichtigte Klartextübertragung.
 
-## D14 – PDF-Textlayer-Verhalten belegen
+## D14 – PDF-Textlayer-Verhalten belegen — **[QUELLCODE AUDITIERT – EXTRAKTORTEST ERGÄNZT, TESTLAUF OFFEN]**
 **Prompt:** Prüfe nur, ob von der App erzeugte Scan-PDFs einen durchsuchbaren Textlayer enthalten oder ausschließlich Bilder speichern. Erstelle einen Test mit einem PDF-Text-Extractor. Falls ein Textlayer bereits Produktanforderung ist und fehlt, lege zuerst einen separaten Minimalimplementierungsplan vor; implementiere ihn nicht nebenbei mit der Dokumentverschlüsselung. Dokumentiere andernfalls eindeutig, dass Suche über Room/FTS erfolgt. **Abnahme:** tatsächliches Verhalten ist automatisiert belegt und dokumentiert.
 
 ---
@@ -590,5 +590,6 @@ Sofort abbrechen und konkreten Blocker melden, wenn:
 | S09 | BLOCKIERT | – | Nein | S08-Testlauf und Verbraucher-Audit offen | S08 prüfen |
 | S10 | PATCH ERSTELLT | direkt in main | Ja | Policy-Tests ergänzt; Widget-Cold-Start-Test offen | D01 |
 | D13 | PATCH ERSTELLT | direkt in main | Ja | Backup-Regeltests erweitert; Build-/Testlauf offen | D14 |
+| D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | P01 |
 
 Zulässige Statuswerte: `NICHT GESTARTET`, `BLOCKIERT`, `PATCH ERSTELLT`, `MANUELL ÜBERNOMMEN`, `GETESTET`, `ABGENOMMEN`.
