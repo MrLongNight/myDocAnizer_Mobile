@@ -1,22 +1,88 @@
-@!@ # myDocAnizer-Mobile – granularisierte Coding-Prompts mit Sicherheits-Gates
+# myDocAnizer-Mobile – Micro-AP-Arbeitsplan
 
-**Projekt:** `MrLongNight/myDocAnizer_Mobile`  
-**Ausgangsbasis:** Die acht erweiterten APs aus `myDocAnizer_Expanded_Prompts.md`. Die darin genannten Codebefunde sind Arbeitshypothesen, die im aktuellen Codebestand verifiziert werden müssen.  
-**Ziel:** Große, sicherheitskritische Pakete in kleine, einzeln abnehmbare Änderungen (Micro-APs) zerlegen.
+> **Stand:** 20.10.2026 · **Repository:** [`MrLongNight/myDocAnizer_Mobile`](https://github.com/MrLongNight/myDocAnizer_Mobile) · **Zweck:** sichere, einzeln abnehmbare Arbeitspakete für den Google-AI-Studio-Patch-Workflow.
 
-## Zentrale Benutzertest-Checkliste
+## Status auf einen Blick
 
-Vor der manuellen Abnahme bitte den [Gesamt-Testplan aus Benutzersicht](security/benutzer-testplan-gesamt.md) verwenden. Er legt die abhängige Reihenfolge der Tests fest und verknüpft die Detailpläne V01–V10 und V11–S05. **V14 bleibt ausdrücklich blockiert** und darf nicht manuell getestet oder migriert werden, solange die v2-Laufzeitintegration fehlt.
+| Bereich | Status | Aktueller Stand |
+|---|---|---|
+| **Testarchitektur** | **VERIFIZIERT laut Statusbericht** | 22 benannte Testklassen aus vier Bereichen; Details siehe unten. |
+| **Build-Konfiguration** | **GEPRÜFT** | `app/build.gradle.kts` setzt den JVM-Heap für Unit-Tests auf `1024m`. |
+| **Build/App-Start** | Laut Statusbericht stabil | In dieser reinen Dokumentationsänderung nicht erneut ausgeführt. |
+| **Micro-AP-Inventar** | **114 Arbeitspakete** | 30 Einträge haben einen dokumentierten Einzelstatus; **84 benötigen noch einen Statusabgleich**. |
+| **Bisher dokumentierte Einzelstände** | **1 abgenommen · 1 getestet · 24 Patch erstellt · 4 blockiert** | Die Zahlen beziehen sich nur auf die 30 vorhandenen Einträge, nicht auf alle 114 Micro-APs. |
+| **Nächster Dokumentationsschritt** | Statusabgleich | Nicht erfasste Micro-APs mit dem tatsächlichen Repository-/Patch-Stand abgleichen. Fehlende Einträge sind **nicht automatisch unerledigt**. |
 
-## Workflow für Google AI Studio + manuelle Patch-Übernahme
+**Wichtig:** Ein grüner Testlauf bestätigt die jeweils abgedeckten Tests, aber nicht automatisch die vollständige Abnahme jedes Micro-APs. Offene Geräte-, Laufzeit-, Migrations- und Freigabeprüfungen bleiben separat offen.
 
-1. **Ein Lauf = ein Micro-AP:** Sende den Masterprompt aus Abschnitt 1 zusammen mit genau einem Micro-AP. Keine Sammelaufträge und keine ungefragten Folgearbeiten.
-2. **Vorher-Zustand wahren:** Vor Änderungen die betroffenen Dateien und deren Ausgangszustand erfassen. Keine vorhandenen Änderungen überschreiben und keine Datei komplett ersetzen, wenn ein gezielter Eingriff genügt.
-3. **Änderung isolieren:** Nur die für den jeweiligen Micro-AP notwendigen Dateien anfassen. Keine Formatierungswellen, Umbenennungen, Dependency-Updates oder Nebenbei-Refactorings.
-4. **Patch als Übergabeartefakt:** Änderungen werden als standardkonformer Unified Diff/Patch (inkl. neuer oder gelöschter Dateien) mit korrekten relativen Dateipfaden ausgegeben.
-5. **Lokal prüfen vor dem nächsten Schritt:** Vor dem Anwenden des Patches lokal im eigenen Repo `git status` sichern, Patch einspielen, Diff kontrollieren und Tests ausführen. Bei Konflikten nicht blind mit `--reject`, `--ours` oder `--theirs` erzwingen.
-6. **Kein Kettenlauf:** Erst nach lokaler Übernahme, erfolgreichem Test und Sichtprüfung den nächsten Micro-AP starten. Status in der Fortschrittsliste führen: `NICHT GESTARTET | BLOCKIERT | PATCH ERSTELLT | MANUELL ÜBERNOMMEN | GETESTET | ABGENOMMEN`.
-7. **Gezielt vorgehen:** Erst `M00` ausführen, danach nur bestätigte Befunde abarbeiten. Architektur-Gates sind zwingende Stopppunkte.
+### Teststatus – laut bereitgestelltem Statusbericht verifiziert
+
+| Testbereich | Anzahl | Testklassen |
+|---|---:|---|
+| Kryptographie und Vault | 6 | Argon2id-Referenzvektoren, Dokumentverschlüsselung, VaultHeader v2/Krypto, v1-Kompatibilität, Recovery-Sicherheit |
+| Zugriffsschutz und Richtlinien | 8 | Backoff, Backup-Regeln, Cloud-Mirror, externe Intents, Lock-Lease/LockManager, Auto-Lock, P2P-Sicherheit |
+| App-Start und UI (Robolectric) | 3 | ExampleRobolectricTest, MainActivityUiTest, GreetingScreenshotTest |
+| Integrität und KI/Inferenz | 5 | ExampleUnitTest, IntegrityTest, LlmBenchmarkAndHardwareTest, QrEncodingTest, RecoveryPayloadEngineTest |
+| **Gesamt** | **22** | **Laut Statusbericht verifiziert** |
+
+<details>
+<summary>Alle 22 Testklassen anzeigen</summary>
+
+**Kryptographie & Vault**
+- `Argon2idReferenceVectorTest`
+- `DocumentEncryptionSecurityTest`
+- `VaultHeaderCryptoV2Test`
+- `VaultHeaderV2Test`
+- `VaultV1CompatibilityTest`
+- `VaultRecoverySecurityTest`
+
+**Zugriffsschutz & Sicherheitsrichtlinien**
+- `AuthenticationBackoffManagerTest`
+- `BackupRulesSecurityTest`
+- `CloudMirrorSafetyTest`
+- `ExternalIntentPolicyTest`
+- `LockLeaseTest`
+- `LockManagerTest`
+- `VaultAutoLockObserverTest`
+- `P2pSyncSecurityTest`
+
+**App-Start & UI (Robolectric)**
+- `ExampleRobolectricTest`
+- `MainActivityUiTest`
+- `GreetingScreenshotTest`
+
+**Integrität & KI/Inferenz**
+- `ExampleUnitTest`
+- `IntegrityTest`
+- `LlmBenchmarkAndHardwareTest`
+- `QrEncodingTest`
+- `RecoveryPayloadEngineTest`
+
+</details>
+
+**Standardprüfung im lokalen Projekt:** `./gradlew assembleDebug testDebugUnitTest`. Dieser Befehl umfasst die JVM-Unit-Tests; Geräte-/Instrumentationstests müssen – sofern für den Micro-AP erforderlich – separat ausgeführt und dokumentiert werden.
+
+### Offene Freigaben und Sicherheitsblocker
+
+| ID | Offen / erforderlich | Regel |
+|---|---|---|
+| **V05 / V06 / V06A / V06B** | Entscheidung, ob TOTP entfernt oder als echter zweiter Faktor an die DEK-Freigabe gebunden wird | Keine Option eigenmächtig auswählen; Folge-AP nur nach Freigabe. |
+| **V14** | Vault-v2-Laufzeitintegration fehlt laut bestehendem Arbeitsstand | Keine v2-Migration oder manuelle Abnahme auf Verdacht. |
+| **S09** | S08-Testlauf und Audit der SecretStore-Verbraucher laut bestehendem Arbeitsstand ausstehend | Erst nach belastbarem Test-/Aufrufernachweis fortsetzen. |
+| **D02 / DB12–DB13** | Freigabe der Datenbankarchitektur und Migrationsstrategie | Keine Datenbankverschlüsselung oder Migration ohne ADR-Freigabe und Rollback-Plan. |
+| **P01 → P02** | Freigabe der Transport-/Pairing-ADR | Vor Umsetzung von P02 klären. |
+| **L02** | Entscheidung: echte native Inferenz oder Feature ehrlich zurückbauen/deaktivieren | Nur einen freigegebenen Pfad umsetzen. |
+| **C04** | Entscheidung über Google-Drive-OAuth mit minimalen Scopes oder Rückbau des Providers | Keine nicht abgesicherte Cloud-Anbindung. |
+
+## Arbeitsweise für Google AI Studio
+
+1. Pro Durchlauf genau **einen** Micro-AP zusammen mit dem Masterprompt aus Abschnitt 1 ausführen.
+2. Vorher-Zustand und vorhandene Änderungen sichern; nur den angeforderten Scope ändern.
+3. Unified Diff/Patch mit korrekten relativen Pfaden ausgeben lassen und lokal vor dem Anwenden prüfen.
+4. Nach der Übernahme `git diff --check`, `./gradlew assembleDebug testDebugUnitTest` und die jeweils erforderlichen Zusatztests ausführen.
+5. Erst nach bestätigtem Ergebnis den Einzelstatus aktualisieren und abhängige Arbeitspakete starten.
+
+**Statusdefinitionen:** `NICHT GESTARTET` · `BLOCKIERT` · `PATCH ERSTELLT` · `MANUELL ÜBERNOMMEN` · `GETESTET` · `ABGENOMMEN`.
 
 ---
 
@@ -523,75 +589,60 @@ Vor der manuellen Abnahme bitte den [Gesamt-Testplan aus Benutzersicht](security
 
 ---
 
-## 4. Gemeinsame Abnahmeliste für jeden Micro-AP
+## 4. Gemeinsame Abnahme- und Stopregeln
 
-### Agenten-Gate – vor Ausgabe des Patches
+### Vor dem Patch
+- Nur den beauftragten Micro-AP ändern; keine ungefragten Refactorings, Formatierungswellen oder Dependency-Updates.
+- Ausgangszustand und relevante Dateien dokumentieren; vorhandene Änderungen erhalten.
+- Diff auf Secrets, sensible Beispieldaten, lokale Pfade und versehentliche Änderungen prüfen.
+- Keine Tests als bestanden ausgeben, die nicht tatsächlich ausgeführt bzw. im maßgeblichen Statusbericht verifiziert wurden.
 
-- [ ] Nur der beauftragte Micro-AP wurde umgesetzt; keine unangekündigten Nebenänderungen.
-- [ ] Ausgangszustand/Dateibasis wurde dokumentiert; bestehende Änderungen blieben erhalten.
-- [ ] Patch enthält ausschließlich Änderungen dieses Micro-AP (inkl. neuer/gelöschter Dateien).
-- [ ] Build und Unit-Tests wurden nur dann als bestanden angegeben, wenn sie tatsächlich liefen; Baseline-Fehler sind getrennt ausgewiesen.
-- [ ] Relevante Instrumented-/Migration-/Netzwerk-/WorkManager-/Gerätetests wurden ausgeführt oder explizit als offen benannt.
-- [ ] Keine Secrets, sensiblen Beispieldaten, lokalen absoluten Pfade oder unnötigen generierten Dateien in Patch oder Bericht.
+### Nach manueller Patch-Übernahme
+- `git status --short` prüfen und eigene Änderungen sichern.
+- Patch anwenden, dann `git diff --check` und den vollständigen Diff kontrollieren.
+- `./gradlew assembleDebug testDebugUnitTest` ausführen; benötigte Instrumentation-, Migrations-, Netzwerk- und Gerätetests zusätzlich ausführen.
+- Ergebnis und offene Punkte dokumentieren, erst danach abhängige Micro-APs starten.
 
-### Nutzer-Gate – nach manueller Übernahme im lokalen Repository
-
-- [ ] Vor Anwendung `git status --short` geprüft und eigene Änderungen gesichert.
-- [ ] Patch sauber angewendet (bei Konflikten gestoppt, nicht blind erzwungen).
-- [ ] `git diff --check` und vollständigen `git diff` geprüft.
-- [ ] `./gradlew assembleDebug testDebugUnitTest` und passende zusätzliche Tests lokal ausgeführt.
-- [ ] Status im Fortschrittsprotokoll aktualisiert; erst danach nächsten Micro-AP starten.
+### Sofort stoppen
+Bei unklarer Baseline, fehlender Architekturfreigabe, unbekanntem Altformat, unsicherer Migration/fehlendem Rollback oder Tests, die nur durch Überspringen bzw. Abschwächen grün würden. Der sichere Stopp hat Vorrang vor einer unsicheren Fertigstellung.
 
 ---
 
-## 5. Wann sofort stoppen statt „irgendwie fertigstellen“
+## 5. Einzelstatus – bisher erfasste 30 von 114 Micro-APs
 
-Sofort abbrechen und konkreten Blocker melden, wenn:
-- die Baseline bereits fehlschlägt und die Ursache nicht zum Auftrag gehört,
-- der Ausgangszustand im Workspace nicht eindeutig abgrenzbar ist,
-- ein altes Dateiformat nicht eindeutig gelesen werden kann,
-- eine Schlüssel-/Datenmigration keinen sicheren Rollback besitzt,
-- eine Architekturfreigabe (Gate/ADR) fehlt,
-- ein Test nur durch Überspringen/Abschwächen grün würde oder
-- die Änderung den Schutz bestehender Dokumente gefährden könnte.
+**Hinweis zur Vollständigkeit:** Die folgende Tabelle bildet nur die 30 bisher protokollierten Einzelstände ab. Weitere 84 im Dokument definierte Micro-APs haben hier noch keinen expliziten Status. Das ist eine Dokumentationslücke, keine Aussage darüber, ob sie bereits umgesetzt wurden.
 
-**Sicherer Stopp mit erhaltenen Daten ist ein korrektes Ergebnis; unsichere Fertigstellung ist es nicht.**
 
----
-
-## 6. Kompaktes Fortschrittsprotokoll
 
 | Micro-AP | Status | Patch-Datei | Lokal übernommen | Lokale Tests | Nächster Schritt |
 |---|---|---|---|---|---|
 | M00 | ABGENOMMEN | micro-ap-M00.patch | Ja | Bestanden | V01 |
-| V01 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V02 |
-| V02 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V03 |
-| V03 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V04 |
-| V04 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V05 |
+| V01 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V02 |
+| V02 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V03 |
+| V03 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V04 |
+| V04 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V05 |
 | V05 | BLOCKIERT | – | Ja | Entscheidung offen | Freigabe Option A/B |
 | V06A | BLOCKIERT | – | Nein | Freigabe fehlt | V07 (parallel möglich) |
-| V07 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V08 |
-| V08 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V09 |
-| V09 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V10 |
-| V10 | PATCH ERSTELLT | direkt in main | Ja | Build/Start vor aktuellem Batch gemeldet; Unit-/Funktionstests offen | V11 |
-| V11 | PATCH ERSTELLT | direkt in main | Ja | QR-Roundtrip-Test ergänzt; Lauf offen | V12 |
+| V07 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V08 |
+| V08 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V09 |
+| V09 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V10 |
+| V10 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V11 |
+| V11 | PATCH ERSTELLT | direkt in main | Ja | QrEncodingTest laut Statusbericht verifiziert; AP-Abnahme separat abgleichen | V12 |
 | V12 | PATCH ERSTELLT | direkt in main | Ja | PDF-Regressionstest ergänzt; Textlayer-/Gerätetest offen | V13 |
 | V13 | PATCH ERSTELLT | direkt in main | Ja | CryptoObject-Instrumented-Test ergänzt; Gerätetest offen | V14 |
 | V14 | BLOCKIERT | – | Nein | v2 nicht in Runtime integriert | V14-Laufzeitintegration |
-| V15 | PATCH ERSTELLT | direkt in main | Ja | Backup-Regeltests ergänzt; Lauf offen | S01 |
+| V15 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; weitere AP-Abnahme separat prüfen | S01 |
 | S01 | GETESTET | docs/security/lock-secret-inventory.md | Ja | Audit dokumentiert | S02 |
-| S02 | PATCH ERSTELLT | direkt in main | Ja | LockManager-Unit-Tests ergänzt; Lauf offen | S03 |
-| S03 | PATCH ERSTELLT | direkt in main | Ja | Auto-Lock-Tests ergänzt; Lauf offen | S04 |
+| S02 | PATCH ERSTELLT | direkt in main | Ja | LockManagerTest laut Statusbericht verifiziert | S03 |
+| S03 | PATCH ERSTELLT | direkt in main | Ja | VaultAutoLockObserverTest laut Statusbericht verifiziert | S04 |
 | S04 | PATCH ERSTELLT | direkt in main | Ja | Bypass-Pfade entfernt; Negativtests/Build offen | S05 |
 | S05 | PATCH ERSTELLT | direkt in main | Ja | Produktionsaufrufe auf Key-Leases migriert; Testlauf offen | S06 |
-| S06 | PATCH ERSTELLT | direkt in main | Ja | Backoff-Tests ergänzt; Testlauf offen | S07 |
+| S06 | PATCH ERSTELLT | direkt in main | Ja | AuthenticationBackoffManagerTest laut Statusbericht verifiziert | S07 |
 | S07 | PATCH ERSTELLT | direkt in main | Ja | Screenshot-/Recents-Gerätetest offen | S08 |
 | S08 | PATCH ERSTELLT | direkt in main | Ja | SecretStore-Instrumentationstest ergänzt; Gerätetest offen | S09 |
 | S09 | BLOCKIERT | – | Nein | S08-Testlauf und Verbraucher-Audit offen | S08 prüfen |
-| S10 | PATCH ERSTELLT | direkt in main | Ja | Policy-Tests ergänzt; Widget-Cold-Start-Test offen | D01 |
-| D13 | PATCH ERSTELLT | direkt in main | Ja | Backup-Regeltests erweitert; Build-/Testlauf offen | D14 |
+| S10 | PATCH ERSTELLT | direkt in main | Ja | ExternalIntentPolicyTest laut Statusbericht verifiziert; Widget-Cold-Start-Test bleibt offen | D01 |
+| D13 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; Restore-/Geräteabnahme separat prüfen | D14 |
 | D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | P01 |
 | P01 | PATCH ERSTELLT | direkt in main | Ja | P2P-Transport-Audit und TLS-ADR dokumentiert; Freigabe offen | ADR-Freigabe vor P02 |
-| P10 | PATCH ERSTELLT | direkt in main | Ja | SHA-256-Ersatzschlüssel-Fallback entfernt; Negativtests ergänzt; Testlauf offen | Testlauf und Aufrufer-Audit prüfen |
-
-Zulässige Statuswerte: `NICHT GESTARTET`, `BLOCKIERT`, `PATCH ERSTELLT`, `MANUELL ÜBERNOMMEN`, `GETESTET`, `ABGENOMMEN`.
+| P10 | PATCH ERSTELLT | direkt in main | Ja | SHA-256-Ersatzschlüssel-Fallback entfernt; P2pSyncSecurityTest laut Statusbericht verifiziert; Aufrufer-Audit separat prüfen | Testlauf und Aufrufer-Audit prüfen |
