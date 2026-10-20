@@ -7,9 +7,9 @@
 | Micro-APs insgesamt | **119** |
 | Einzelstatus dokumentiert | **37** |
 | Einzelstatus noch abzugleichen | **82** |
-| Dokumentierte Statusverteilung | 1 abgenommen · 1 getestet · 24 Patch erstellt · 2 blockiert · 8 nicht gestartet · 1 ADR freigegeben |
+| Dokumentierte Statusverteilung | 1 abgenommen · 1 getestet · 27 Patch erstellt · 2 blockiert · 5 nicht gestartet · 1 ADR freigegeben |
 | Tests laut Statusbericht | 22 Testklassen vorhanden; daraus folgt keine automatische Abnahme aller Arbeitspakete |
-| Build/App-Start | Laut letztem Statusbericht stabil; durch diese reine Planungsänderung nicht erneut ausgeführt |
+| Build/Tests | GitHub Actions führt jetzt `assembleDebug testDebugUnitTest` aus; Ergebnis der aktuellen Änderungen wird separat geprüft |
 
 Fehlende Einzelstatus sind eine Dokumentationslücke, kein Beweis dafür, dass ein Arbeitspaket nicht umgesetzt wurde.
 
@@ -506,9 +506,9 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | V03 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V04 |
 | V04 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V05 |
 | V05 | ADR FREIGEGEBEN | docs/security/adr-002-totp-decision.md | Ja | Optionale 2FA: Passwort + zufällige Schlüsseldatei; TOTP ist kein kryptografischer Faktor | V06 |
-| V06 | NICHT GESTARTET | – | Nein | Passwort+Keyfile im tatsächlichen Unlock-Pfad absichern; Legacy-TOTP nicht als echte 2FA zählen | V05 |
-| V06A | NICHT GESTARTET | – | Nein | Optionalen 2FA-Modus konfigurieren und erst nach Test-Unlock aktivieren | V05/V06 abschließen |
-| V06B | NICHT GESTARTET | – | Nein | Beide Faktoren müssen den echten DEK-Wrapper schützen; Passwort allein darf nicht genügen | V05/V06/V06A |
+| V06 | PATCH ERSTELLT | direkt in main | Ja | Unlock-Guard und Tests für Passwort+Keyfile ergänzt; CI-Lauf offen | V06A/V06B |
+| V06A | PATCH ERSTELLT | direkt in main | Ja | Wizard bietet nur Passwort+Keyfile als neue kryptografische 2FA; .key-Export ergänzt; UI-Tests/CI offen | V06B |
+| V06B | PATCH ERSTELLT | direkt in main | Ja | Manager verlangt beide Faktoren und prüft Keyfile-Hash; .key-Import und Negativtests ergänzt; CI offen | Gerätetest/CI |
 | V07 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V08 |
 | V08 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V09 |
 | V09 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V10 |
