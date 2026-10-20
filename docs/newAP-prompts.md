@@ -1,88 +1,17 @@
 # myDocAnizer-Mobile – Micro-AP-Arbeitsplan
 
-> **Stand:** 20.10.2026 · **Repository:** [`MrLongNight/myDocAnizer_Mobile`](https://github.com/MrLongNight/myDocAnizer_Mobile) · **Zweck:** sichere, einzeln abnehmbare Arbeitspakete für den Google-AI-Studio-Patch-Workflow.
+## Statusübersicht
 
-## Status auf einen Blick
+| Kennzahl | Stand |
+|---|---|
+| Micro-APs insgesamt | 114 |
+| Einzelstatus dokumentiert | 30 |
+| Einzelstatus noch abzugleichen | 84 |
+| Bisherige Statusverteilung | 1 abgenommen · 1 getestet · 24 Patch erstellt · 4 blockiert |
+| Tests laut aktuellem Statusbericht | 22 Testklassen vorhanden; daraus folgt keine automatische Abnahme aller Micro-APs |
+| Build/App-Start | Laut Statusbericht stabil; bei dieser Dokumentationsänderung nicht erneut ausgeführt |
 
-| Bereich | Status | Aktueller Stand |
-|---|---|---|
-| **Testarchitektur** | **VERIFIZIERT laut Statusbericht** | 22 benannte Testklassen aus vier Bereichen; Details siehe unten. |
-| **Build-Konfiguration** | **GEPRÜFT** | `app/build.gradle.kts` setzt den JVM-Heap für Unit-Tests auf `1024m`. |
-| **Build/App-Start** | Laut Statusbericht stabil | In dieser reinen Dokumentationsänderung nicht erneut ausgeführt. |
-| **Micro-AP-Inventar** | **114 Arbeitspakete** | 30 Einträge haben einen dokumentierten Einzelstatus; **84 benötigen noch einen Statusabgleich**. |
-| **Bisher dokumentierte Einzelstände** | **1 abgenommen · 1 getestet · 24 Patch erstellt · 4 blockiert** | Die Zahlen beziehen sich nur auf die 30 vorhandenen Einträge, nicht auf alle 114 Micro-APs. |
-| **Nächster Dokumentationsschritt** | Statusabgleich | Nicht erfasste Micro-APs mit dem tatsächlichen Repository-/Patch-Stand abgleichen. Fehlende Einträge sind **nicht automatisch unerledigt**. |
-
-**Wichtig:** Ein grüner Testlauf bestätigt die jeweils abgedeckten Tests, aber nicht automatisch die vollständige Abnahme jedes Micro-APs. Offene Geräte-, Laufzeit-, Migrations- und Freigabeprüfungen bleiben separat offen.
-
-### Teststatus – laut bereitgestelltem Statusbericht verifiziert
-
-| Testbereich | Anzahl | Testklassen |
-|---|---:|---|
-| Kryptographie und Vault | 6 | Argon2id-Referenzvektoren, Dokumentverschlüsselung, VaultHeader v2/Krypto, v1-Kompatibilität, Recovery-Sicherheit |
-| Zugriffsschutz und Richtlinien | 8 | Backoff, Backup-Regeln, Cloud-Mirror, externe Intents, Lock-Lease/LockManager, Auto-Lock, P2P-Sicherheit |
-| App-Start und UI (Robolectric) | 3 | ExampleRobolectricTest, MainActivityUiTest, GreetingScreenshotTest |
-| Integrität und KI/Inferenz | 5 | ExampleUnitTest, IntegrityTest, LlmBenchmarkAndHardwareTest, QrEncodingTest, RecoveryPayloadEngineTest |
-| **Gesamt** | **22** | **Laut Statusbericht verifiziert** |
-
-<details>
-<summary>Alle 22 Testklassen anzeigen</summary>
-
-**Kryptographie & Vault**
-- `Argon2idReferenceVectorTest`
-- `DocumentEncryptionSecurityTest`
-- `VaultHeaderCryptoV2Test`
-- `VaultHeaderV2Test`
-- `VaultV1CompatibilityTest`
-- `VaultRecoverySecurityTest`
-
-**Zugriffsschutz & Sicherheitsrichtlinien**
-- `AuthenticationBackoffManagerTest`
-- `BackupRulesSecurityTest`
-- `CloudMirrorSafetyTest`
-- `ExternalIntentPolicyTest`
-- `LockLeaseTest`
-- `LockManagerTest`
-- `VaultAutoLockObserverTest`
-- `P2pSyncSecurityTest`
-
-**App-Start & UI (Robolectric)**
-- `ExampleRobolectricTest`
-- `MainActivityUiTest`
-- `GreetingScreenshotTest`
-
-**Integrität & KI/Inferenz**
-- `ExampleUnitTest`
-- `IntegrityTest`
-- `LlmBenchmarkAndHardwareTest`
-- `QrEncodingTest`
-- `RecoveryPayloadEngineTest`
-
-</details>
-
-**Standardprüfung im lokalen Projekt:** `./gradlew assembleDebug testDebugUnitTest`. Dieser Befehl umfasst die JVM-Unit-Tests; Geräte-/Instrumentationstests müssen – sofern für den Micro-AP erforderlich – separat ausgeführt und dokumentiert werden.
-
-### Offene Freigaben und Sicherheitsblocker
-
-| ID | Offen / erforderlich | Regel |
-|---|---|---|
-| **V05 / V06 / V06A / V06B** | Entscheidung, ob TOTP entfernt oder als echter zweiter Faktor an die DEK-Freigabe gebunden wird | Keine Option eigenmächtig auswählen; Folge-AP nur nach Freigabe. |
-| **V14** | Vault-v2-Laufzeitintegration fehlt laut bestehendem Arbeitsstand | Keine v2-Migration oder manuelle Abnahme auf Verdacht. |
-| **S09** | S08-Testlauf und Audit der SecretStore-Verbraucher laut bestehendem Arbeitsstand ausstehend | Erst nach belastbarem Test-/Aufrufernachweis fortsetzen. |
-| **D02 / DB12–DB13** | Freigabe der Datenbankarchitektur und Migrationsstrategie | Keine Datenbankverschlüsselung oder Migration ohne ADR-Freigabe und Rollback-Plan. |
-| **P01 → P02** | Freigabe der Transport-/Pairing-ADR | Vor Umsetzung von P02 klären. |
-| **L02** | Entscheidung: echte native Inferenz oder Feature ehrlich zurückbauen/deaktivieren | Nur einen freigegebenen Pfad umsetzen. |
-| **C04** | Entscheidung über Google-Drive-OAuth mit minimalen Scopes oder Rückbau des Providers | Keine nicht abgesicherte Cloud-Anbindung. |
-
-## Arbeitsweise für Google AI Studio
-
-1. Pro Durchlauf genau **einen** Micro-AP zusammen mit dem Masterprompt aus Abschnitt 1 ausführen.
-2. Vorher-Zustand und vorhandene Änderungen sichern; nur den angeforderten Scope ändern.
-3. Unified Diff/Patch mit korrekten relativen Pfaden ausgeben lassen und lokal vor dem Anwenden prüfen.
-4. Nach der Übernahme `git diff --check`, `./gradlew assembleDebug testDebugUnitTest` und die jeweils erforderlichen Zusatztests ausführen.
-5. Erst nach bestätigtem Ergebnis den Einzelstatus aktualisieren und abhängige Arbeitspakete starten.
-
-**Statusdefinitionen:** `NICHT GESTARTET` · `BLOCKIERT` · `PATCH ERSTELLT` · `MANUELL ÜBERNOMMEN` · `GETESTET` · `ABGENOMMEN`.
+**Wichtig:** Die 84 fehlenden Statusangaben sind eine Dokumentationslücke und bedeuten nicht automatisch, dass diese Micro-APs unerledigt sind. Die Einzelstatus-Tabelle steht am Ende der Datei.
 
 ---
 
@@ -589,26 +518,7 @@
 
 ---
 
-## 4. Gemeinsame Abnahme- und Stopregeln
-
-### Vor dem Patch
-- Nur den beauftragten Micro-AP ändern; keine ungefragten Refactorings, Formatierungswellen oder Dependency-Updates.
-- Ausgangszustand und relevante Dateien dokumentieren; vorhandene Änderungen erhalten.
-- Diff auf Secrets, sensible Beispieldaten, lokale Pfade und versehentliche Änderungen prüfen.
-- Keine Tests als bestanden ausgeben, die nicht tatsächlich ausgeführt bzw. im maßgeblichen Statusbericht verifiziert wurden.
-
-### Nach manueller Patch-Übernahme
-- `git status --short` prüfen und eigene Änderungen sichern.
-- Patch anwenden, dann `git diff --check` und den vollständigen Diff kontrollieren.
-- `./gradlew assembleDebug testDebugUnitTest` ausführen; benötigte Instrumentation-, Migrations-, Netzwerk- und Gerätetests zusätzlich ausführen.
-- Ergebnis und offene Punkte dokumentieren, erst danach abhängige Micro-APs starten.
-
-### Sofort stoppen
-Bei unklarer Baseline, fehlender Architekturfreigabe, unbekanntem Altformat, unsicherer Migration/fehlendem Rollback oder Tests, die nur durch Überspringen bzw. Abschwächen grün würden. Der sichere Stopp hat Vorrang vor einer unsicheren Fertigstellung.
-
----
-
-## 5. Einzelstatus – bisher erfasste 30 von 114 Micro-APs
+## Einzelstatus – bisher erfasste 30 von 114 Micro-APs
 
 **Hinweis zur Vollständigkeit:** Die folgende Tabelle bildet nur die 30 bisher protokollierten Einzelstände ab. Weitere 84 im Dokument definierte Micro-APs haben hier noch keinen expliziten Status. Das ist eine Dokumentationslücke, keine Aussage darüber, ob sie bereits umgesetzt wurden.
 
