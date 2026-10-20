@@ -214,7 +214,9 @@ fun SecurityWizardStep(
         }
         VaultSecurityTier.TWO_FACTOR -> {
             selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE &&
-                isPasswordMatching && keyFileToken.matches(Regex("[A-Fa-f0-9]{64}"))
+                isPasswordMatching &&
+                keyFileToken.matches(Regex("[A-Fa-f0-9]{64}")) &&
+                keyFileExported
         }
         null -> false
     }
@@ -880,6 +882,13 @@ fun SecurityWizardStep(
                         }
                         keyFileExportMessage?.let { message ->
                             Text(message, style = MaterialTheme.typography.labelSmall, color = if (keyFileExported) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                        }
+                        if (selectedTier == VaultSecurityTier.TWO_FACTOR && !keyFileExported) {
+                            Text(
+                                "Bitte kopiere den Schlüssel oder speichere die .key-Datei, bevor du fortfährst. Ohne sie lässt sich der Tresor nicht entsperren.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
 
