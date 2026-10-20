@@ -11,6 +11,8 @@ import com.example.service.VaultRecoveryMethod
 import com.example.service.VaultSecurityManager
 import org.json.JSONObject
 import org.junit.Assert.*
+import org.junit.Before
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -19,6 +21,23 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], manifest = Config.NONE)
 class VaultV1CompatibilityTest {
+    // Robolectric creates isolated application contexts per test class, while the manager is a process singleton.
+    // Reset it so one test cannot retain another test's SharedPreferences/context.
+    @Before
+    fun resetVaultManagerBeforeTest() = resetVaultManagerSingleton()
+
+    @After
+    fun resetVaultManagerAfterTest() = resetVaultManagerSingleton()
+
+    private fun resetVaultManagerSingleton() {
+        val companion = VaultSecurityManager.Companion
+        val instanceField = companion.javaClass.declaredFields.first {
+            it.name == "INSTANCE" && it.type == VaultSecurityManager::class.java
+        }
+        instanceField.isAccessible = true
+        instanceField.set(companion, null)
+    }
+
     private fun context() = ApplicationProvider.getApplicationContext<Application>()
 
     @Test
