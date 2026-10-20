@@ -2,43 +2,62 @@
 
 ## Statusübersicht
 
-| Kennzahl | Stand |
+| Kennzahl | Aktueller Stand |
 |---|---|
-| Micro-APs insgesamt | 114 |
-| Einzelstatus dokumentiert | 30 |
-| Einzelstatus noch abzugleichen | 84 |
-| Bisherige Statusverteilung | 1 abgenommen · 1 getestet · 24 Patch erstellt · 4 blockiert |
-| Tests laut aktuellem Statusbericht | 22 Testklassen vorhanden; daraus folgt keine automatische Abnahme aller Micro-APs |
-| Build/App-Start | Laut Statusbericht stabil; bei dieser Dokumentationsänderung nicht erneut ausgeführt |
+| Micro-APs insgesamt | **119** |
+| Einzelstatus dokumentiert | **35** |
+| Einzelstatus noch abzugleichen | **84** |
+| Dokumentierte Statusverteilung | 1 abgenommen · 1 getestet · 24 Patch erstellt · 3 blockiert · 6 nicht gestartet |
+| Tests laut Statusbericht | 22 Testklassen vorhanden; daraus folgt keine automatische Abnahme aller Arbeitspakete |
+| Build/App-Start | Laut letztem Statusbericht stabil; durch diese reine Planungsänderung nicht erneut ausgeführt |
 
-**Wichtig:** Die 84 fehlenden Statusangaben sind eine Dokumentationslücke und bedeuten nicht automatisch, dass diese Micro-APs unerledigt sind. Die Einzelstatus-Tabelle steht am Ende der Datei.
+Fehlende Einzelstatus sind eine Dokumentationslücke, kein Beweis dafür, dass ein Arbeitspaket nicht umgesetzt wurde.
+
+## Verbindliche Produktvorgaben
+
+| Thema | Festgelegte Anforderung |
+|---|---|
+| **Optionale Zwei-Faktor-Absicherung** | Nutzer kann sie bei Bedarf aktivieren. Nur als echte kryptografische Absicherung ausliefern; falls sie nicht mit vertretbarem Aufwand sicher umsetzbar ist, zuerst technische Optionen mit Empfehlung vorlegen. |
+| **Tresor-Wiederherstellung** | Passwort **oder** Passkey; optional zusätzliche Sicherheitsfragen; optional druckbares Notfalldokument in eindeutig erkennbarer oder unauffälliger Gestaltung. |
+| **Vollständige lokale Verschlüsselung** | Gesamte Room-Datenbank, dauerhaft gespeicherte App-Einstellungen und Dokumente verschlüsseln. Suchindizes, Metadaten, Vorschauen, temporäre Dateien und Backups mitprüfen; keine unverschlüsselten dauerhaften Spiegel. |
+| **Verbindungen** | App2App, PC2App und Browser2App sollen unterstützt und jeweils auf Transportverschlüsselung, Identitätsprüfung, Kopplung und Angriffsflächen geprüft werden. Kein Klartext-Fallback. |
+| **Lokale KI** | Echte native Modellinferenz ist das gewählte Ziel. Regelbasierte Heuristiken dürfen nicht als KI-Inferenz dargestellt werden. |
+| **Google Drive** | Vollständige OAuth-Integration für verschlüsselte Backups/Sync. Synchronisationsmodus in der App wählbar: manuell oder automatisch; automatischer Sync ist explizit aktivierbar. Hochgeladen werden ausschließlich clientseitig verschlüsselte Daten. |
+
+## Technische Leitplanken
+
+- Architektur-, Bibliotheks- und Implementierungsentscheidungen treffe ich nach Codeprüfung und dokumentiere sie knapp. Produktentscheidungen werden nicht erneut abgefragt.
+- Wenn eine gewählte Funktion mit den erforderlichen Sicherheitsgarantien technisch nicht machbar erscheint, wird sie nicht stillschweigend unsicher umgesetzt oder entfernt. Dann folgt eine verständliche Entscheidungsfrage mit Empfehlung.
+- Kein roher DEK in PDFs, QR-Codes, UI oder Logs. Ein bewusst erzeugter, zufälliger Recovery-Schlüssel darf als explizites Notfallgeheimnis exportiert werden; das Dokument ist dann hochsensibel.
+- Eine unauffällige Gestaltung eines Notfalldokuments ist nur Tarnung, keine kryptografische Sicherheit. Wer das Geheimnis findet, kann es möglicherweise benutzen.
+- Die Testbasis umfasst laut Bericht 22 Testklassen. Der Status einzelner Micro-APs muss zusätzlich anhand echter Implementierung, passender Tests und erforderlicher Geräte-/Integrationstests bewertet werden.
 
 ---
 
 ## 1. Abhängigkeits- und Freigabeplan
 
-> **Hinweis:** Abhängigkeiten definieren die fachliche Reihenfolge. Jeder Patch muss lokal übernommen und getestet sein, bevor ein abhängiger Micro-AP gestartet wird.
+Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Testlauf ausgeführt und der tatsächliche Status dokumentiert wurde.
 
 ### Reihenfolge
 
 1. **M00** – Projekt-/Buildbaseline und Befundinventar.
-2. **V01–V15** – Vault-Kryptografie, Header-/Recovery-Formate und Migration. Zuerst Format- und Referenztests, danach Implementierungen, dann Migration.
-3. **S01–S10** – Lockzustand und SecretStore. Der bisherige Schlüsselzugriff bleibt kompatibel, bis die abhängigen Konsumenten einzeln migriert und geprüft sind.
-4. **D01–D14** – Dokumentverschlüsselung und Backup/Restore. **D02 (DB-Architektur-ADR)** muss vor DB12/DB13 und jeder Datenbankverschlüsselungs-Migration ausdrücklich freigegeben sein.
-5. **DB01–DB14** – Room-Baseline, Migrationen, FTS, Geldbeträge, DB-Verschlüsselung und Performance. Datenbankversionen strikt sequenziell erhöhen; nie zwei DB-Migrationsaufträge parallel bearbeiten.
-6. **P01–P13** – P2P. Benötigt die bestätigte Transport-/Pairing-ADR sowie kompatible Dokumentstreams und den SecretStore.
-7. **C01–C09** – Cloud-Sync. Benötigt verschlüsselte Backupcontainer, SecretStore und eine ausdrücklich definierte Richtlinie für gesperrten Vault.
-8. **L01–L11A bzw. L08B** – LLM. **L02 ist ein Freigabe-Gate**: Native Integration oder ehrlicher Rückbau; nicht beides implementieren.
-9. **R01–R24** – Refactoring zuletzt, nach Stabilisierung der Sicherheitsgrenzen und Datenformate.
+2. **V01–V18** – Tresor, Schlüssel, optionale Zwei-Faktor-Absicherung und Wiederherstellung.
+3. **S01–S10** – Lockzustand und SecretStore. Legacy-Schlüsselzugriff bleibt kompatibel, bis alle Verbraucher einzeln migriert und geprüft sind.
+4. **D01–D15** – Datenfluss, Schlüsselarchitektur, Dokumentverschlüsselung, Backup/Restore und Verschlüsselung aller App-Einstellungen.
+5. **DB01–DB14** – vollständige SQLCipher-Datenbankverschlüsselung, Migrationen, FTS, Geldbeträge und Performance. Datenbankversionen strikt sequenziell erhöhen.
+6. **P01–P13** – sichere App2App-, PC2App- und Browser2App-Verbindungen; alle drei anhand einer gemeinsamen Sicherheitsmatrix prüfen.
+7. **C01–C09** – Google-Drive-/WebDAV-Sync. Backupcontainer und sensible Metadaten vor dem Upload clientseitig verschlüsseln; manueller/automatischer Sync ist eine Nutzeroption.
+8. **L01–L11A** – echte native lokale Inferenz ist gewählt. L08B ist kein regulärer Pfad und darf nicht ohne technischen Befund und erneute ausdrückliche Produktfreigabe anstelle der nativen Engine ausgeführt werden.
+9. **R01–R24** – Refactoring nach Stabilisierung der Sicherheitsgrenzen, Persistenzformate und Integrationspfade.
 
-### Explizite Freigabepunkte – nicht selbst entscheiden
+### Technische Freigabe- und Stopp-Punkte
 
-- **V05:** Soll TOTP als echte, kryptografisch wirksame zweite Schutzkomponente weitergeführt werden oder wird es entfernt? Keine bloße UI-Sperre als 2FA bezeichnen.
-- **V08/V09:** Recovery-Dateiformat und Bedrohungsmodell müssen vor der Implementierung definiert und geprüft werden.
-- **D02/DB11–DB12:** SQLCipher-/vollständige DB-Verschlüsselung oder bewusst begründete Feldverschlüsselung. FTS darf nicht unbemerkt sensible Klartextdaten offenlegen.
-- **P01:** Browserportal nur behalten, wenn Zertifikatsvertrauen wirklich sicher und benutzbar verifiziert wird; ansonsten deaktivieren.
-- **L02:** Pfad A (echte native Inferenz) oder Pfad B (Feature ehrlich deaktivieren/zurückbauen).
-- **C04:** Google Drive mit sauberem OAuth und minimalen Scopes unterstützen oder den Provider zurückbauen.
+- **V05/V06B – optionale Zwei-Faktor-Absicherung:** Das Ziel ist entschieden; offen ist nur die technische Machbarkeit eines echten kryptografischen zweiten Faktors. Eine sechsstellige TOTP-Prüfung darf nicht als Schutz gelten, wenn ein Offline-Angreifer dadurch den DEK durch Ausprobieren freischalten kann.
+- **V09/V16–V18 – Wiederherstellung:** Passwort- und Passkey-Pfade müssen auf unterstützten Geräten/Authenticators tatsächlich wiederherstellbar sein. Ein Passkey, der nur die Identität bestätigt, aber keinen geeigneten Schlüssel für die Entschlüsselung liefert, ist kein eigenständiger Verschlüsselungsschlüssel.
+- **D02/DB12–DB13 – Datenbank:** vollständige SQLCipher-Verschlüsselung ist festgelegt. Vor Migration müssen Room-Kompatibilität, Schlüsselbereitstellung, native ABIs, WAL/SHM, FTS, Backups und Rückkehrpfad technisch belegt sein.
+- **P01/P12 – Verbindungen:** kein Kanal gilt als sicher, nur weil TLS-Klassen oder Auditdokumente existieren. Die echten Produktpfade sind für App2App, PC2App und Browser2App mit Negativtests zu belegen.
+- **L01/L02 – lokale KI:** erst Bestandsaudit, dann nativen Engine-Pfad umsetzen. Bei einem konkreten Build-/Lizenz-/Geräteblocker Befund samt Alternativen vorlegen, statt kommentarlos auf Heuristiken zurückzufallen.
+- **C01/C04–C09 – Google Drive:** echte Autorisierung, minimale passende OAuth-Berechtigungen, verschlüsselte Nutzdaten und wählbarer manueller/automatischer Sync. Erfolg erst nach vollständiger Übertragung und Integritätsprüfung melden.
 
 ---
 
@@ -67,54 +86,60 @@
 **Abhängigkeit:** V03.  
 **Prompt:** Implementiere ausschließlich die AEAD-Operationen zum Verpacken/Öffnen des zufälligen 256-Bit-DEK im v2-Header. Nutze geprüfte AES-GCM/JCA- oder gleichwertige AEAD-Primitiven korrekt; pro Verschlüsselung neuen zufälligen Nonce/IV generieren und niemals wiederverwenden. Lege fest und teste, welche Vault-ID-, Versions- und KDF-Metadaten als AAD gebunden werden. Falscher Schlüssel, falscher AAD oder veränderter Tag müssen fehlschlagen, ohne Teilresultat auszugeben. Keine automatische Migration. **Abnahme:** gültiger Roundtrip; Manipulations- und Nonceformattests; keine geheime Materialausgabe in Logs.
 
-## V05 – TOTP-Entscheidungsvorlage (AUDIT/GATE) — **[ADR ERSTELLT – ENTSCHEIDUNG OFFEN]**
-**Prompt:** Untersuche die bestehende TOTP-/Base32-Implementierung, Speicherung des Secrets, UI-Gates und Beziehung zur DEK-Freigabe. Erstelle eine kurze ADR mit zwei Optionen: (A) TOTP entfernen und bestehende Klartext-Secrets geordnet migrieren/entfernen oder (B) überprüfbares Design, bei dem der zweite Faktor tatsächlich kryptografisch den DEK-Zugriff schützt. Berücksichtige RFC 6238, Rate-Limits, Replay, Gerätewechsel und Recovery. Nimm keine Codeänderung vor und entscheide nicht eigenmächtig zwischen den Produktoptionen. **Abnahme:** eindeutige Risiken, Aufwand und Nutzerfolgen; wartet auf Freigabe.
-
-## V06 – TOTP nur nach freigegebenem Design testen/implementieren
-**Abhängigkeit:** V05 und explizite Auswahl Option B; bei Option A diesen Auftrag überspringen.  
-**Prompt:** Setze nur den in der freigegebenen ADR definierten TOTP-Kern um. Verwende RFC-6238-konforme HMAC-/Base32-Behandlung und offizielle Referenzvektoren einschließlich Zeitfenster. Vergleiche Codes konstantzeitig, begrenze Fehlversuche und verhindere Replay eines akzeptierten Codes im gleichen Zeitfenster. Speichere das Secret nicht im Klartext in Header/Prefs. Noch keine Änderung an UI oder Vault-Migration außer dem für den Kern zwingend nötigen, kompatiblen Adapter. **Abnahme:** Referenzvektoren und Negativtests grün; keine Behauptung echter 2FA, solange die Freigabearchitektur nicht vollständig integriert ist.
-
-## V06A – TOTP entfernen (NUR nach Freigabe Option A) — **[BLOCKIERT – FREIGABE FEHLT]**
-**Abhängigkeit:** V05 und explizite Freigabe zum Entfernen von TOTP; statt V06/V06B ausführen.  
-**Prompt:** Entferne nur den freigegebenen TOTP-Pfad aus UI und Authentifizierungslogik. Vorhandene TOTP-Secrets müssen kontrolliert migriert/entfernt werden; lösche sie erst, wenn der neue Zustand nachweislich gespeichert wurde. Entferne keine anderen Authentifizierungs- oder Recovery-Wege. Aktualisiere Texte so, dass keine nicht mehr vorhandene 2FA behauptet wird. **Abnahme:** Tests für Altzustand, Migration, Neustart und TOTP-Deaktivierung; kein Klartext-Secret verbleibt.
-
-## V06B – TOTP an die tatsächliche DEK-Freigabe binden (NUR Option B)
-**Abhängigkeit:** V05/V06 und freigegebener Sicherheitsentwurf.  
-**Prompt:** Integriere den bereits getesteten TOTP-Kern in den echten Vault-Unlock-/DEK-Freigabepfad der genehmigten ADR. Ein erfolgreiches Passwort allein darf den als 2FA geschützten Schlüssel nicht freigeben. Verhindere, dass andere öffentliche APIs oder ein UI-Callback diese Prüfung umgehen. Verknüpfe Replay-/Rate-Limit-Zustand mit S06, ohne parallele Backoff-Implementierung anzulegen. **Abnahme:** End-to-End-Negativtests für Passwort ohne TOTP, falschen/abgelaufenen/wiederverwendeten Code und korrekte Kombination; UI bezeichnet die Funktion erst danach als 2FA.
-
+## V05 – Optionale echte Zwei-Faktor-Absicherung (AUDIT/ARCHITEKTUR)
+**Status:** Ziel festgelegt; technische Machbarkeit zu belegen.  
+**Prompt:** Prüfe bestehende TOTP-Implementierung, Passwort-/DEK-Freigabe, Android Keystore, Credential Manager/Passkeys und verfügbare Schlüsselableitungs-APIs. Entwirf die optionale Einstellung „Zwei-Faktor-Absicherung aktivieren“. Vergleiche praktisch unterstützbare Wege. Der zweite Faktor muss den Zugriff auf den Schlüssel tatsächlich kryptografisch mitbestimmen; eine zusätzliche UI-Abfrage reicht nicht. Ein TOTP-Code mit kleinem Wertebereich darf nicht als offline überprüfbarer Schlüsselbestandteil eingesetzt werden, wenn ein Angreifer das gespeicherte Vault-Material damit durchprobieren kann. Berücksichtige Gerätewechsel, Verlust des zweiten Faktors und Wiederherstellung. Keine Produktänderung, bevor ein tragfähiger Entwurf und Tests feststehen. **Abnahme:** kurze ADR mit Empfehlung, Grenzen und Aussage, ob 2FA ohne unverhältnismäßigen Aufwand sicher realisierbar ist.
+## V06 – Zweiten Faktor technisch absichern und testen
+**Abhängigkeit:** V05.  
+**Prompt:** Implementiere nach der V05-ADR ausschließlich die geprüfte Faktor-/Schlüsselableitungskomponente. Verwende etablierte APIs und Bibliotheken; keine eigene Kryptokonstruktion. Wenn TOTP verwendet wird, ergänze RFC-6238-Referenzvektoren, Zeitfenster, konstante Vergleiche, Replay-Schutz und Rate-Limits; weise zusätzlich nach, dass die DEK-Absicherung offline nicht durch simples Durchprobieren des Codes umgangen werden kann. Bei Passkey/Keystore-PRF prüfe, ob der Schlüssel auf einem unterstützten Ersatzgerät tatsächlich verfügbar ist. Noch keine breite UI-Migration. **Abnahme:** Referenz- und Negativtests bestanden; unterstützte und nicht unterstützte Gerätekonstellationen dokumentiert.
+## V06A – Optionalen Zwei-Faktor-Modus sicher konfigurierbar machen
+**Abhängigkeit:** V05 und V06.  
+**Prompt:** Implementiere die Konfiguration für den optionalen Zwei-Faktor-Modus. Standardmäßig bleibt er deaktiviert, bis der Nutzer ihn ausdrücklich einrichtet. Eine Aktivierung darf erst erfolgreich sein, wenn der zweite Faktor eingerichtet, ein Wiederherstellungsweg bestätigt und ein Test-Unlock erfolgreich war. Deaktivierung erfordert bestätigte Tresorentsperrung und muss die Schlüsselverpackung atomar aktualisieren. Kein Zwischenzustand darf den Nutzer aussperren oder den DEK unverschlüsselt speichern. **Abnahme:** Tests für Einrichtung, Abbruch, Neustart, ungültigen Faktor, Deaktivierung und Wiederherstellung.
+## V06B – Optionalen zweiten Faktor an die echte DEK-Freigabe binden
+**Abhängigkeit:** V05, V06 und V06A.  
+**Prompt:** Binde den freigegebenen zweiten Faktor in den echten Vault-Unlock-/DEK-Freigabepfad ein. Ist die Funktion aktiviert, darf Passwort/erster Faktor allein den geschützten DEK nicht freigeben. Alle öffentlichen APIs, Hintergrunddienste und UI-Callbacks müssen denselben Gatekeeper verwenden. Der Recovery-Weg muss funktionieren, ohne heimlich den zweiten Faktor zu umgehen. **Abnahme:** End-to-End-Negativtests für fehlenden/falschen/abgelaufenen Faktor, korrekte Kombination, Lock/Unlock, Neustart und Recovery; die UI behauptet erst danach echte Zwei-Faktor-Absicherung.
 ## V07 – BIP-39-Mnemonic-Validierung — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Prompt:** Isoliere die BIP-39-Funktionalität und prüfe Wortliste (genau 2048 Wörter), Entropie, Checksumme und Mnemonic-Validierung anhand offizieller Referenzvektoren. Korrigiere ausschließlich Fehler in diesem Modul; wenn Eigenbau-Logik die Referenzvektoren nicht zuverlässig erfüllt, ersetze sie durch eine geprüfte, kompatible Bibliothek. Erzeuge nur synthetische Testdaten. **Nicht tun:** Shamir, PDF/QR oder Headerformat verändern. **Abnahme:** gültige/ungültige Mnemonics, Grenzfälle und offizielle Vektoren sind getestet.
 
 ## V08 – Shamir-Share-Konsistenz — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Prompt:** Prüfe den vorhandenen Shamir-2-aus-3-Code und seine Hashspeicherung. Stelle durch Tests sicher, dass die drei gehashten Shares exakt dieselben Bytefolgen sind, die später an den Nutzer ausgegeben werden, und dass jedes zulässige Paar den ursprünglichen synthetischen DEK reproduziert. Verwende offizielle oder klar bezeichnete Referenzvektoren. Ersetze den Eigenbau, falls er nicht belastbar gegen Referenzen besteht. **Nicht tun:** Recovery-PDF oder Verschlüsselungsformat in diesem Schritt ändern. **Abnahme:** jedes gültige Paar rekonstruiert exakt denselben Schlüssel; vertauschte, gekürzte und manipulierte Shares scheitern.
 
-## V09 – Recovery-Format als ADR (AUDIT/GATE) — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
-**Prompt:** Entwirf ein versioniertes Recovery-Payload für ein Notfall-Kit, ohne es schon zu implementieren. Definiere Entropiequelle, KDF samt Parametern, Salt, AEAD, AAD, Nonce, Versionierung, Authentifizierungsfehler, Export-/Importworkflow und Schutz vor offline kopierten Kits. Ein sechsstelliger PIN reicht nicht als Schutz für ein offline kopierbares Kit. Begründe Passphrase-Anforderungen und Recovery bei Formatversionen. Beschreibe explizit, dass der rohe DEK niemals direkt in PDF, QR, UI, Clipboard oder Logs ausgegeben wird. **Abnahme:** ADR mit Angriffsmodell, Byteformat und Testfällen; Implementierung erst nach Freigabe.
-
-## V10 – Recovery-Payload-Kern — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
-**Abhängigkeit:** V09 und Freigabe der ADR.  
-**Prompt:** Implementiere nur Encode/Decode des genehmigten Recovery-Payload-Formats als eigenständige, testbare Komponente. Schlüsselableitung und Authenticated Encryption ausschließlich über geprüfte Primitive. Versions-/Längenprüfung, falsche Passphrase, veränderte Ciphertextbytes und ungültiger Tag müssen kontrolliert scheitern. Nutze ausschließlich synthetische Schlüssel. Keine PDF-, QR- oder UI-Änderungen in diesem Micro-AP. **Abnahme:** bytegenaue Roundtrip-Tests, Negativtests und kein Roh-DEK in Fehlermeldungen/Logs.
-
+## V09 – Recovery-Format und Wiederherstellungsoptionen festlegen (ADR)
+**Prompt:** Definiere ein versioniertes Wiederherstellungskonzept für folgende Wege: (1) Tresorpasswort **oder** Passkey; (2) optional zusätzliche Sicherheitsfragen; (3) optional ein druckbares Notfalldokument. Dieses soll sowohl als klar erkennbares myDocAnizer-Mobile-Wiederherstellungsdokument als auch als unauffällige, neutral gestaltete Variante erzeugt werden können. Definiere ein hochentropisches, zufällig erzeugtes Recovery-Geheimnis, das einen verpackten Tresorschlüssel freigeben kann; niemals den rohen DEK abdrucken. Definiere KDF, AEAD, AAD, Nonce, Salt, Version, Prüfsumme, Normalisierung, Fehlerbehandlung und Kompatibilität. Beurteile die Passkey-PRF-/Schlüsselverfügbarkeit bei Gerätewechseln; ein bloßer Passkey-Login ohne nutzbares Schlüsselmaterial reicht nicht. Sicherheitsfragen dürfen nur zusätzliche Pflichtangaben sein und keine alleinige starke Verschlüsselung versprechen; geringe Entropie und Offline-Risiken müssen in UI und Tests berücksichtigt werden. Camouflage ist keine kryptografische Sicherheit. **Abnahme:** ADR deckt jeden Restore-Pfad, neues Gerät, Verlustszenarien und Grenzen ab.
+## V10 – Versionierten Recovery-Payload-Kern umsetzen
+**Abhängigkeit:** V09.  
+**Prompt:** Implementiere Encode/Decode für das freigegebene Recovery-Payload als isolierte Komponente. Erzeuge ein zufälliges, ausreichend hochentropisches Recovery-Geheimnis, das einen verpackten Tresorschlüssel freigeben kann; exportiere niemals den rohen DEK. Nutze etablierte KDF-/AEAD-Bibliotheken, versionsgebundene AAD, sichere Nonces, Salt, Längenlimits und Integritätsprüfung. Unterstütze zuerst den passwortbasierten Payload-Pfad; Passkey-PRF und Sicherheitsfragen werden separat in V16/V17 integriert. Falsches Geheimnis, manipulierte Bytes, ungültiger Tag, unbekannte Version oder abgeschnittener Payload müssen sicher scheitern. **Abnahme:** bytegenaue Roundtrips, Negativtests und keine Secrets in Meldungen/Logs.
 ## V11 – Standardkonforme QR-Kodierung — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Abhängigkeit:** V10.  
 **Prompt:** Ersetze ausschließlich die derzeitige QR-Matrix-Erzeugung durch eine etablierte QR-Encoding-Bibliothek. Kodiert wird nur das freigegebene verschlüsselte Recovery-Payload, nie der Roh-DEK oder ein unverschlüsselter Schlüssel. Teste, dass ein unabhängiger QR-Decoder das Payload bytegenau zurückliest und beschädigte/zu große Inhalte kontrolliert behandelt werden. **Abnahme:** unabhängiger Decode-Roundtrip im Test; kein selbst gebautes Hash-Bit-Muster als QR-Code.
 
-## V12 – Emergency-PDF sicherstellen — **[IMPLEMENTIERUNG ERLEDIGT – PDF-TEXTEXTRAKTION AM GERÄT OFFEN]**
-**Abhängigkeit:** V10, V11.  
-**Prompt:** Ändere ausschließlich die Emergency-Kit-PDF-Ausgabe: Entferne die bisherige Base64-Roh-DEK-Zeile und alle sonstigen direkten Schlüsselkopien. Das Dokument darf nur das genehmigte verschlüsselte Recovery-Payload/den passenden standardkonformen QR-Code und verständliche Anleitungen enthalten. Prüfe den erzeugten PDF-Textlayer und extrahierbaren Inhalt automatisiert auf Roh-DEK, Secret und unerwartete sensible Daten. UI muss Passphrase-/Recovery-Anforderungen klar erklären. **Abnahme:** PDF-Export- und Text-Extraktionstests; kein unverschlüsselter DEK in PDF-Bytes, OCR-Text, QR oder Logs.
+## V12 – Eindeutig gekennzeichnetes Notfalldokument
+**Abhängigkeit:** V09–V11.  
+**Prompt:** Erstelle die klar erkennbare Druckvariante mit Kennzeichnung als myDocAnizer-Mobile-Notfall-/Wiederherstellungsdokument. Sie enthält notwendige versionierte Daten inklusive des ausdrücklich erzeugten Recovery-Geheimnisses, Prüfsumme, Formatversion und verständlicher Anleitung. Der rohe DEK, Tresorpasswort und Sicherheitsfragen-Antworten dürfen nicht hinein. Sind Fragen eingerichtet, zeige deren Fragen und genaue Antwortregeln, nicht die Antworten. Warne beim Export, dass Personen mit Zugriff auf das Recovery-Geheimnis den Tresor möglicherweise wiederherstellen können. **Abnahme:** PDF-/QR-Roundtrip auf einem zweiten Gerät, Testdruck/Lesbarkeit, PDF-Text-/QR-Analyse und keine unbeabsichtigten Daten in Metadaten oder Logs.
+## V12B – Unauffälliges Notfalldokument
+**Abhängigkeit:** V09–V12.  
+**Prompt:** Erzeuge dieselben kryptografischen Recovery-Daten wie V12, aber in neutraler Gestaltung ohne offensichtliche myDocAnizer-/Tresor-Bezeichnung. Die App muss das enthaltene, versionsgebundene Payload zuverlässig über Import/Scan erkennen; verwende keine schwer merkbaren Geheimregeln und keine externen Links. Die kryptografischen Daten und Zufallsentropie bleiben gleich sicher zur klaren Variante. Erkläre vor Export, dass Tarnung keine kryptografische Sicherheit bietet. Antworten auf Sicherheitsfragen und das Tresorpasswort werden nicht abgedruckt. **Abnahme:** Beide Varianten stellen denselben synthetischen Tresor wieder her; QR-/PDF-Parser, Export, Druck, Textlayer und Metadaten geprüft.
 
-## V13 – Biometrie und Keystore getrennt absichern — **[IMPLEMENTIERUNG ERLEDIGT – GERÄTETEST OFFEN]**
-**Abhängigkeit:** V03/V04; gemeinsame Schlüsselzustandsintegration später mit S04/S05.  
-**Prompt:** Prüfe und korrigiere nur die Keystore-Key-Erstellung und `BiometricPrompt`-Kryptooperation. Nutze `setUserAuthenticationRequired(true)` und passende Invalidierungsoptionen; StrongBox nur mit dokumentiertem, sicherem Fallback. API-abhängige Methoden nur ab den unterstützten API-Leveln aufrufen. Die Authentifizierung muss die tatsächliche kryptografische Entschlüsselungsoperation schützen, nicht nur eine UI-Abfrage bestätigen. **Nicht tun:** globalen LockManager implementieren. **Abnahme:** Tests/Mocks für Erfolg, Abbruch, Invalidierung und API-Fallback; echte Geräteprüfungen separat ausweisen.
-
+## V13 – Biometrie und Keystore getrennt absichern
+**Abhängigkeit:** V04 und optionaler Faktorpfad V05–V06B.  
+**Prompt:** Prüfe und sichere den Biometrie-/Keystore-Pfad: Biometrie ist eine lokale Freigabemethode, nicht automatisch ein portabler Wiederherstellungsschlüssel. Der DEK darf nur über den dokumentierten Gatekeeper freigegeben werden; aktivierte Zwei-Faktor-Regeln dürfen nicht durch Biometrie, Service/API-Aufruf oder UI-Callback umgangen werden. Gerätewechsel und Keystore-Invalidierung müssen einen getesteten Recovery-Pfad verwenden. **Abnahme:** Instrumentationstests für Biometrie, Ablehnung, Key-Invalidierung, Neustart und optional aktivierte 2FA.
 ## V14 – Atomare v1→v2-Headermigration — **[BLOCKIERT – V2-LAUFZEITINTEGRATION FEHLT]**
 **Abhängigkeit:** V02–V04 und vorhandenes v1-Fixture aus V01.  
 **Prompt:** Implementiere ausschließlich die Header-Migration. Lies v1 mit der alten, kompatiblen Ableitung, prüfe erfolgreichen Unlock, verpacke denselben DEK in v2 und schreibe v2 zunächst atomar in eine temporäre Datei/Transaktion. Lies den neuen Header erneut ein und prüfe ihn kryptografisch, bevor das Original ersetzt wird. Bei jedem Fehler bleibt v1 unverändert; keine automatische Neuinitialisierung und kein Datenverlust. Lege erzwungene Fehlerpfade im Test fest. **Abnahme:** Erfolgs- und Rollback-Test mit v1-Fixture, Idempotenz und Nachweis, dass falsches Passwort den Originalheader nicht ändert.
 
-## V15 – Backup-Regeln für Vault-Secrets — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
-**Prompt:** Prüfe `backup_rules.xml` und `data_extraction_rules.xml` für Cloud-Backup sowie Geräteübertragung. Schließe `mydocanizer_vault_security.xml` und andere Keystore-gebundene Geheimnisse ausdrücklich aus, sofern kein freigegebenes, geprüftes verschlüsseltes Exportformat existiert. Entferne keine legitimen Nutzerdateien pauschal; überprüfe jedes Include/Exclude samt tatsächlichem Speicherort. **Abnahme:** automatisierte/strukturelle Tests oder dokumentierte Regelprüfung decken beide Plattformmechanismen ab; keine geheime Vault-Pref wird versehentlich übertragen.
+## V15 – Backup-Regeln für Vault-Secrets
+**Prompt:** Prüfe Manifest-Backupregeln, Auto Backup, Device Transfer und alle Android-Backup-/Exportpfade. Schlüssel, Einstellungen im Klartext, TOTP-Secrets, Recovery-Secrets, Access-/Refresh-Tokens und Klartextdokumente dürfen nicht unbeabsichtigt in Systembackups gelangen. Nutzerinitiierte verschlüsselte Backupcontainer bleiben unterstützt. **Abnahme:** XML-/Manifest- und Backup-Regressionsprüfungen belegen, dass nur freigegebene verschlüsselte Artefakte aufgenommen werden.
+## V16 – Wiederherstellung mit Passkey
+**Abhängigkeit:** V09/V10 und das in V05 freigegebene Schlüsselkonzept.  
+**Prompt:** Implementiere einen Passkey-basierten Restore-Pfad nur, wenn die echte Plattformunterstützung genügend kryptografisches Schlüsselmaterial für die Entschlüsselung liefert (z. B. unterstützte PRF-Funktion) und die Wiederherstellung auf einem Ersatzgerät praktisch nachgewiesen wurde. Ein gewöhnlicher Authentifizierungsnachweis oder ein lokaler, nicht exportierbarer Android-Keystore-Schlüssel ist kein portabler Entschlüsselungsschlüssel. Passwort-Fallback bleibt verfügbar; ungeeignete Geräte müssen vor Einrichtung verständlich erklärt werden. **Abnahme:** Enrollment, Restore auf anderem unterstützten Gerät/Authenticator, nicht unterstützte Geräte, verlorener Passkey und Passwort-Fallback getestet.
 
----
+## V17 – Zusätzliche Sicherheitsfragen im Recovery-Profil
+**Abhängigkeit:** V09/V10; Passkey-Kombination erst nach V16.  
+**Prompt:** Ermögliche Nutzern optional eigene Sicherheitsfragen samt Antworten für die Recovery. Antworten niemals im Klartext persistieren, loggen, exportieren oder als alleinige starke Verschlüsselung behandeln. Normalisierung (Unicode, Groß-/Kleinschreibung, Leerzeichen) muss stabil, versioniert und vor dem Einrichten erklärt werden. Fragen werden kryptografisch mit dem gewählten Passwort-/Passkey-/Recovery-Pfad kombiniert; Fragen allein dürfen keinen Tresor öffnen. Erkläre geringe Entropie und dass lokale Rate-Limits keine Offline-Versuche stoppen. Druckdokumente enthalten höchstens Fragen und Antwortregeln, niemals Antworten. **Abnahme:** richtige/falsche Antworten, Normalisierung, Unicode, vergessene Fragen, manipuliertes Payload, Passwort-/Passkeypfad und keine Klartextantworten getestet.
+
+## V18 – Wiederherstellungsoptionen verständlich auswählbar machen
+**Abhängigkeit:** V10, V12, V12B, V16 und V17.  
+**Prompt:** Baue die Einstellungs- und Restore-Oberfläche für die gewählten Optionen: Tresorpasswort oder Passkey; optionale Sicherheitsfragen; optionales Notfalldokument in klarer oder unauffälliger Gestaltung. Zeige Voraussetzungen, unterstützte Geräte, Folgen bei Verlust und verlange einen erfolgreichen Test-Restore, bevor Konfiguration aktiv gilt. Erkläre Sensibilität des Druckdokuments, Grenzen der Tarnung und begrenzte zusätzliche Stärke von Sicherheitsfragen in einfacher Sprache. Keine Option darf einen unsicheren Bypass oder falsche Erfolgsmeldung ermöglichen. **Abnahme:** UI-/Robolectric-Tests für Auswahlkombinationen, Geräte ohne Passkey-Unterstützung, Abbruch, Fehlkonfiguration und Restore.
 
 # S – LockManager, sichere Sitzung und SecretStore
 
@@ -161,40 +186,33 @@
 ## D01 – Datenfluss-Inventar (AUDIT)
 **Prompt:** Verfolge lesend sämtliche PDF-/Bild-/Scan-/OCR-/Viewer-/Share-/Export-/P2P-/Cloud-/Backup-/Restore-/Cachepfade sowie Speicherorte und Datenbankfelder mit sensiblen Metadaten. Markiere pro Pfad, ob Inhalt/Index/Metadaten derzeit in Klartext oder verschlüsselt vorliegen und welcher Aufrufer `isEncrypted`/`passwordKey` steuert. Keine Produktänderung. **Abnahme:** `docs/security/document-data-flow.md` mit Pfad- und Klassenbelegen, inklusive benutzerdefinierter Speicherorte.
 
-## D02 – Datenbankverschlüsselung: Architekturentscheidung (AUDIT/GATE)
-**Prompt:** Untersuche selbst `AppDatabase`, Room-Provider, FTS, WAL/SHM und alle DB-Öffnungspfade und erstelle darauf eine ADR, die vollständige Datenbankverschlüsselung (SQLCipher-kompatible, aktuell unterstützte Room-Integration) gegen Feldverschlüsselung abwägt. Bewerte OCR-FTS, WAL/SHM, Key-Lifecycle, Migration vorhandener DBs, Backup, Gerätekompatibilität und Wiederherstellung. Entscheide nicht stillschweigend; wenn Produktfreigabe oder Proof-of-Concept fehlt, liefere die Optionen und stoppe. AP-7 darf keine widersprüchliche Technik parallel auswählen. **Abnahme:** freigabefähige ADR mit Test-/Rollback-Plan, keine DB-Änderung.
-
-## D03 – Zentrale KeyProvider-/CryptoService-Schnittstelle
-**Abhängigkeit:** freigegebene Vault-v2-API aus V04 und D02-Entscheidung, soweit DB-Schlüssel betroffen sind.  
-**Prompt:** Erstelle eine eng umrissene, testbare `CryptoService`-/`KeyProvider`-Schnittstelle für dokumentierte Zwecke. Nutze geprüfte HKDF-Implementierung, klare Domain-Separation für Datei, Index, Backup und gegebenenfalls DB; binde Vault-ID und Purpose ein. Ziehe keine Keys aus `userPasswordKey`-/`syncPasswordKey`-Strings. In diesem Schritt noch keine umfassende Umstellung aller Aufrufer; einen bestehenden Verbraucher als Kompatibilitätsnachweis migrieren und übrige Verbraucher inventarisieren. **Abnahme:** deterministische synthetische Tests, Purpose-Isolation und keine Schlüsselwerte in Logs.
-
+## D02 – Vollständige Datenbankverschlüsselung (SQLCipher) technisch festlegen
+**Produktentscheidung:** vollständige Datenbankverschlüsselung ist gewählt.  
+**Prompt:** Prüfe den tatsächlichen AppDatabase-/Room-2.7-Aufbau, Öffnungspfade, FTS, WAL/SHM, Export/Restore und Versionskatalog. Prüfe aktuelle SQLCipher-for-Android-Integration auf Room-Kompatibilität, minSdk 24, native ABIs, 16-KB-Kompatibilität, Wartung und Lizenz. Erstelle eine technische ADR mit konkreter Bibliotheksversion, Schlüsselbereitstellung, FTS-/WAL-Verhalten, Migration, Tests und Rollback. Feldverschlüsselung ist nicht der gewählte Ersatz. **Abnahme:** nachweislich kompatibler Weg für vollständig verschlüsselte Room-Datenbank; kein Rückfall auf unverschlüsseltes SQLite.
+## D03 – Gemeinsame Schlüsselarchitektur für DB, Dokumente, Settings und Backups
+**Abhängigkeit:** V04 und D02.  
+**Prompt:** Implementiere eine testbare CryptoService-/KeyProvider-Schnittstelle mit klarer Schlüsselhierarchie und Domain-Separation für SQLCipher, Dokument-Streams, Einstellungen und Backupcontainer. Verwende geprüfte HKDF-/AEAD-APIs; Schlüssel an Vault-ID und Zweck binden. Die DB erhält einen zufälligen Schlüssel, geschützt über die Vault-Schlüsselarchitektur; niemals das Nutzerpasswort direkt als SQLCipher-Key verwenden. Definiere Sperrverhalten, flüchtige Schlüssel und portable Wiederherstellung. Keine userPasswordKey-/syncPasswordKey-String-Fallbacks. **Abnahme:** Purpose-Isolation, Recovery-Verhalten und keine Schlüsselwerte in Logs.
 ## D04 – Streaming-Dateiformat für neue Dokumente
 **Abhängigkeit:** D03.  
-**Prompt:** Implementiere das versionierte Streaming-AEAD-Dateiformat als isolierte Komponente, bevorzugt auf geprüfter Bibliothek wie Tink, sofern sie mit der genehmigten Schlüsselarchitektur integrierbar ist. Definiere Datei-ID, Vault-ID, Formatversion und relevante Metadaten als authentifizierten Kontext; nutze eine dokumentierte Segmentgröße um 1 MiB. Erkenne beschädigten, abgeschnittenen oder mit falschem AAD versehenen Stream. Noch keine Bestandsmigration. **Abnahme:** Roundtrip auch für große synthetische Dateien und Negativtests; kein `ByteArray` für die Gesamtdatei.
-
-## D05 – `secureSave` auf verschlüsselte Ablage umstellen
-**Abhängigkeit:** D04.  
-**Prompt:** Stelle ausschließlich die zentralen `secureSave`-/Import-Schreibpfade auf standardmäßige direkte Streaming-Verschlüsselung um. Entferne Aufrufoptionen, mit denen versehentlich Klartext dauerhaft abgelegt wird; falls eine Übergangs-API erforderlich ist, sperre sie explizit und dokumentiere sie. Schreibe in eine zufällige temporäre verschlüsselte Zieldatei, verifiziere Abschluss/Authentifizierung und committe erst danach atomar. **Abnahme:** Tests beweisen, dass normale Importpfade keine persistente Klartextkopie anlegen; vorhandene Ziele bleiben intakt.
-
-## D06 – Viewer, OCR, Share und Vorschau anbinden
-**Abhängigkeit:** D04, D05.  
-**Prompt:** Migriere nur die Konsumenten Viewer, Vorschau und OCR-Re-Run auf kontrollierte entschlüsselnde Streams bzw. `ContentProvider`/Pipe. Wenn eine API eine Datei verlangt, erstelle eine kurzlebige app-private Arbeitskopie und räume sie nach Erfolg, Abbruch und Prozesswiederherstellung soweit möglich auf. Teilen an externe Apps muss korrekt darauf hinweisen, dass Empfängerkopien außerhalb der App liegen können. Export/P2P/Cloud noch nicht in diesem Schritt. **Abnahme:** Dateiinhalt stimmt; kein dauerhaftes Klartextcache nach regulärem Abschluss; Fehler-/Abbruchtests.
-
-## D07 – Verschlüsselungsstatus aus Realität ableiten
+**Prompt:** Implementiere versioniertes Streaming-AEAD-Dateiformat für neue Dokumente. Authentifiziere Dokument-ID, Vault-ID, Formatversion und notwendige Metadaten als AAD; verwende eine geprüfte Bibliothek und dokumentierte Segmentierung um 1 MiB. Kein vollständiger Dateiinhalt im RAM. Jede persistente Vorschau/OCR-Ausgabe, die Dokumentinhalt enthält, muss verschlüsselt abgelegt oder als kurzlebige geschützte Arbeitskopie behandelt werden. **Abnahme:** große Dateien, Abbruch, falscher Kontext, Beschädigung und abgeschnittener Stream.
+## D05 – secureSave auf verschlüsselte Ablage umstellen
+**Abhängigkeit:** D03/D04.  
+**Prompt:** Stelle alle relevanten secureSave-Pfade auf das verschlüsselte Dokumentformat um. Vor erfolgreichem AEAD-Abschluss darf keine Zieldatei als gültig sichtbar werden. Kein Schreiben in öffentliche Ordner oder persistente unverschlüsselte Zweitkopie ohne ausdrücklichen Nutzerexport. Leser werden nur über einen klaren Adapter versorgt. **Abnahme:** Save/overwrite/abgebrochener Save, Prozessabbruch, falscher Schlüssel und Wiederöffnen getestet.
+## D06 – Viewer, OCR, Share und Vorschau an Verschlüsselung anbinden
 **Abhängigkeit:** D04/D05.  
-**Prompt:** Entferne in den betroffenen Dokumentpfaden die Semantik, nach der `isEncrypted` durch einen Bool-Parameter, Dateiendung oder Annahme des Aufrufers gesetzt wird. Der Status darf nur durch erfolgreiches Erkennen des unterstützten Formats und eine gültige Authentifizierung/Integritätsprüfung belegt werden. Fehlende/ungültige Header müssen als Fehler behandelt werden, nicht als Klartext oder verschlüsselte Datei erraten werden. **Abnahme:** Tests für falschen Status, Dateiendungs-Spoofing, abgeschnittenen Header und gültige Altdateien.
-
-## D08 – Idempotente Bestandsmigration
+**Prompt:** Prüfe Datenfluss durch Viewer, OCR, Vorschau/Thumbnail, Suche, Teilen/Export und temporäre Dateien. Persistente Inhalte, OCR-Text, Suchindizes und Vorschaubilder müssen verschlüsselt sein; notwendige Klartextarbeitskopien nur kurzlebig, app-privat und mit verlässlichem Cleanup. Teilen/Export ist ein ausdrücklicher Nutzerexport mit verständlicher Warnung, kein stiller Klartext-Mirror. **Abnahme:** Datenfluss-/Regressionstests für jeden Pfad, Prozessabbruch und Cleanup.
+## D07 – Verschlüsselungsstatus aus tatsächlicher Speicherung ableiten
+**Abhängigkeit:** D04–D06.  
+**Prompt:** UI und Modelle leiten den Status aus Dateiformat, Authentifizierungsprüfung und Speicherort ab, nicht aus einem frei gesetzten Flag. Fehlende Schlüssel, unbekannte Formate und beschädigte Dateien gelten nicht als frei lesbare Dokumente. **Abnahme:** Tests für verschlüsselt, Legacy, fehlenden Schlüssel, manipulierten Header und widersprüchliche Metadaten.
+## D08 – Resumierbare Migration vorhandener Dokumente
 **Abhängigkeit:** D04–D07.  
-**Prompt:** Implementiere einen resumierbaren `WorkManager`-Migrationsjob für vorhandene Dokumentdateien. Pro Datei Original lesen, verschlüsselte temporäre Datei erstellen, diese durch Entschlüsseln verifizieren und Länge/Hash vergleichen, dann atomar committen und erst danach Quelle entfernen, sofern der dokumentierte Speicherplan das erlaubt. Speichere nur nötigen, nicht sensitiven Migrationsfortschritt; Prozessabbruch muss sichere Wiederholung erlauben. **Abnahme:** Tests für Abbruch an jeder Phase, Wiederholung und Fehler; Original bleibt bei jedem Verifikationsfehler erhalten.
-
+**Prompt:** Implementiere wiederaufnehmbaren WorkManager-Migrationsjob. Pro Datei Original lesen, verschlüsselte temporäre Datei erstellen, durch Entschlüsseln und Hash-/Längenvergleich verifizieren und erst dann atomar committen. Original vor erfolgreicher Verifikation erhalten. Abbruch und Wiederholung dürfen keine unverschlüsselten Duplikate oder inkonsistente Status erzeugen. Während der Entwicklung ist ein dokumentierter Datenreset zulässig; vor Produktivfreigabe ist ein nachvollziehbarer Upgrade-/Rollback-Pfad erforderlich. **Abnahme:** Abbruch in jeder Phase, Wiederholung, wenig Speicher und Fehler ohne Datenverlust.
 ## D09 – Kollisionssichere Ablage
 **Prompt:** Stelle die interne Dateiablage auf kryptografisch zufällige IDs/UUIDs um, ohne Titel/Absender als Dateisystem-Sicherheitsgrenze zu nutzen. Zielanlagen müssen Create-new-/atomare Semantik verwenden und bestehende Zieldateien nie still überschreiben oder vorab löschen. Anzeigenamen bleiben Metadaten. Ändere nur die zentrale Ablagekomponente und die zwingend nötigen Aufrufer. **Abnahme:** Tests für gleiche Namen, parallele Imports, vorhandenes Ziel und Abbruch nach Teilwrite.
 
-## D10 – Verschlüsselter Backupcontainer
-**Abhängigkeit:** D03/D04.  
-**Prompt:** Implementiere das genehmigte versionierte Backupcontainer-Format mit streamender AEAD-Verschlüsselung. Manifest und sensible Metadaten müssen geschützt sein; kein dauerhaftes Klartext-ZIP oder Klartext-Index als Zwischenschritt. Lege Größen-/Eintragsgrenzen und Formatkennung fest. Bestehende Restorelogik nur über klaren Adapter kompatibel halten; noch keine Massenmigration alter Backups. **Abnahme:** Roundtrip, große Datei ohne OOM, falscher Schlüssel, manipulierte Metadaten und abgeschnittener Container.
-
+## D10 – Vollständig verschlüsselter Backupcontainer für alle Nutzdaten
+**Abhängigkeit:** D03/D04 und SQLCipher-Aufbau aus DB12.  
+**Prompt:** Implementiere versionierten streamenden AEAD-Backupcontainer mit verschlüsselter Datenbank, allen wiederherzustellenden App-Einstellungen, Dokumenten, OCR-/Suchdaten und nötigen nicht gerätegebundenen Recovery-Metadaten. Manifest, Dateinamen und sensible Metadaten innerhalb des Containers verschlüsseln. Keine Klartext-ZIP-/JSON-/Indexzwischenablage. Android-Keystore- und Google-OAuth-Zugangsdaten bleiben gerätegebunden bzw. werden beim Restore neu autorisiert; nicht in den Backupcontainer aufnehmen. **Abnahme:** kompletter Restore in frischer Installation, große Dateien ohne OOM, Integritätsfehler, falscher Schlüssel, abgeschnittener Container und unbekannte Version.
 ## D11 – Restore: Archive und Pfade validieren
 **Abhängigkeit:** D10.  
 **Prompt:** Implementiere ausschließlich die Vorabvalidierung beim Restore. Normalisiere Pfade und erzwinge, dass jeder Eintrag kanonisch im Zielverzeichnis verbleibt. Lehne absolute Pfade, `..`, Separatorvarianten, kodierte Traversalversuche, doppelte IDs, übergroße Einträge, zu viele Einträge und unzulässige Kompressionsverhältnisse ab. Daten nicht vor Abschluss der Validierung in die produktive Datenbank übernehmen. **Abnahme:** Zip-Slip-/Zip-Bomb-/Traversal- und Größenbegrenzungstests.
@@ -203,39 +221,37 @@
 **Abhängigkeit:** D11.  
 **Prompt:** Sorge dafür, dass Restorevalidierung und Schreiben transaktional bzw. über einen Staging-Bereich erfolgen. Ein beschädigter AEAD-Tag, fehlendes Manifest oder fehlerhafte Metadaten darf keinen Teilimport in der Produktivdatenbank hinterlassen. Vermeide blindes `REPLACE`; definiere Konfliktregeln über neue IDs/Merge. UI erhält `wiederhergestellt / übersprungen / fehlgeschlagen` plus nicht sensitive Ursachen. **Abnahme:** erzwungene Fehler in jeder Phase hinterlassen keinen inkonsistenten Zwischenstand.
 
-## D13 – Unverschlüsselten Mirror entfernen und Backupregeln prüfen — **[IMPLEMENTIERUNG ERGÄNZT – TESTLAUF OFFEN]**
-**Prompt:** Prüfe den Auto-Mirror/Klartextbackup-Pfad und `backup_rules.xml`/`data_extraction_rules.xml`. Entferne den unverschlüsselten Mirror oder sperre ihn bis zu einer ausdrücklich bestätigten, sichtbaren Nutzerfreigabe und dokumentierten Warnung. Schließe Cache, temporäre Klartextdateien, geheime Prefs, Logs, lokale Backupcontainer und Modelle passend aus; exportiere keine sensiblen Speicherorte pauschal bei Geräteübertragung. **Abnahme:** alle Regeln einzeln begründet; keine unbeabsichtigte Klartextübertragung.
-
-## D14 – PDF-Textlayer-Verhalten belegen — **[QUELLCODE AUDITIERT – EXTRAKTORTEST ERGÄNZT, TESTLAUF OFFEN]**
-**Prompt:** Prüfe nur, ob von der App erzeugte Scan-PDFs einen durchsuchbaren Textlayer enthalten oder ausschließlich Bilder speichern. Erstelle einen Test mit einem PDF-Text-Extractor. Falls ein Textlayer bereits Produktanforderung ist und fehlt, lege zuerst einen separaten Minimalimplementierungsplan vor; implementiere ihn nicht nebenbei mit der Dokumentverschlüsselung. Dokumentiere andernfalls eindeutig, dass Suche über Room/FTS erfolgt. **Abnahme:** tatsächliches Verhalten ist automatisiert belegt und dokumentiert.
-
----
+## D13 – Unverschlüsselte Mirrors entfernen und Backupregeln prüfen — **[IMPLEMENTIERUNG ERGÄNZT – TESTLAUF OFFEN]**
+**Abhängigkeit:** D05–D12.  
+**Prompt:** Suche und entferne produktive Klartext-Mirrors, Fallbacks, Cachekopien und Backup-Pfade, die Verschlüsselung umgehen. Prüfe backup_rules, data_extraction_rules, Manifest, Auto Backup und Device Transfer. Nur ausdrücklich vom Nutzer exportierte Dateien dürfen als Klartext außerhalb des Tresors landen. **Abnahme:** Code-/Dateisuche und Backup-/Restore-Regressionstests weisen keine unbeabsichtigte dauerhafte Klartextkopie nach.
+## D14 – PDF-Textlayer und OCR-Ausgaben vollständig prüfen
+**Abhängigkeit:** D06/D13.  
+**Prompt:** Belege anhand synthetischer Dokumente, dass PDF-Textlayer, OCR-Ausgaben und Suchindizes nur innerhalb der verschlüsselten Persistenz verbleiben. Ein PDF darf einen Textlayer haben, solange die PDF-Datei selbst verschlüsselt gespeichert wird; bei explizitem Nutzerexport ist das Verhalten klar. Keine Recovery-Secrets oder Tresor-Schlüssel in Textlayer einbetten. **Abnahme:** PDF-/OCR-Tests, Text-Extraktion und Dateisystemkontrollen; Geräte-/Instrumentationstests getrennt dokumentieren.
+## D15 – Alle App-Einstellungen verschlüsselt speichern
+**Abhängigkeit:** D03 und S08; vor vollständigem Backup-Restore mit D10 koordinieren.  
+**Prompt:** Inventarisiere DataStore, SharedPreferences, Settings-Repositories, lokale JSON-Dateien und weitere Persistenz von App-Einstellungen. Verschlüssele sämtliche dauerhaft gespeicherten Einstellungen app-seitig über einen zentralen getesteten Pfad; Klartextdateien dürfen nicht neben der verschlüsselten Ablage entstehen. Secrets wie OAuth-Tokens gehören in den SecretStore. Lokale Entschlüsselung darf bequem sein, aber Backup-Wiederherstellung muss ohne alten, nicht portablen Keystore-Schlüssel möglich sein; deshalb Einstellungen im D10-Backup zusätzlich mit dem tragbaren Recovery-/Backup-Schlüssel verschlüsseln. **Abnahme:** Persistenzinventur, Klartextsuche in Dateien/Backups, falscher/fehlender Schlüssel, Neustart und vollständiger Restore.
 
 # P – P2P: TLS, Pairing, Server und Transfers
 
-## P01 – Protokoll-Audit und Transport-ADR (AUDIT/GATE)
-**Prompt:** Untersuche die vollständige P2P-Verbindung von Client bis Server inklusive direktem `ServerSocket`, HTTP-Parser, Authentifizierung, CA-/Portal-Endpunkten, CORS, Upload, Download und Sessionmanagement. Erstelle eine ADR für TLS mit pro Installation erzeugtem Zertifikat und überprüftem SHA-256-Fingerprint sowie für den Pairing-Handshake. Entscheide gesondert, ob das Browserportal sicher unterstützt werden kann. Noch keine Protokollimplementierung. **Abnahme:** Datenflussdiagramm, bestätigte Risiken, gewählte Architekturvorschläge und offene Freigaben.
-
-## P02 – TLS nur auf Serverseite
-**Abhängigkeit:** P01, freigegebene Transport-ADR.  
-**Prompt:** Implementiere die TLS-Terminierung in der Serverkomponente gemäß ADR. Der Socket darf bei fehlender Zertifikats-/TLS-Konfiguration nicht auf Klartext zurückfallen. Noch nicht den Client umstellen: falls dadurch der Build oder Tests temporär nicht bestehen, halte einen klar isolierten, nicht produktiv erreichbaren Adapter nur so lange wie nötig und dokumentiere ihn; keine Release-Konfiguration darf Klartext akzeptieren. **Abnahme:** Integrationstest beweist TLS und Ablehnung von Klartextverbindungen.
-
-## P03 – Client-TLS und Fingerprint-Pinning
+## P01 – Sicherheits-Audit aller Verbindungsarten und Transport-ADR
+**Produktanforderung:** App2App, PC2App und Browser2App sollen sicher unterstützt werden.  
+**Prompt:** Prüfe im echten Code jeden End-to-End-Pfad für App2App, PC2App und Browser2App: Client, ServerSocket/HTTP-Parser, Ports, WLAN/LAN, TLS, Zertifikats-/Fingerprintprüfung, Pairing, Authentifizierung, Upload/Download, Sessionverwaltung, CORS/Origin, Browserzugriff und Fallbacks. Erstelle eine Matrix pro Verbindung mit vorhandener Verschlüsselung, Identitätsprüfung, Replay-Schutz und Negativtests. Entwirf einen gepflegten Transport-/Pairing-Ansatz. Browser-Zertifikatsvalidierung muss ohne Warnungsumgehung funktionieren; plane keine Lösung, die Nutzer zum Ignorieren einer Zertifikatswarnung zwingt. Noch keine Protokollimplementierung. **Abnahme:** belegte Ist-Matrix, Risiken und umsetzbarer Zielentwurf; kein „sicher“ allein aufgrund vorhandener TLS-Klassen.
+## P02 – TLS für alle Server-Endpunkte verbindlich machen
+**Abhängigkeit:** P01, geprüfter Transportentwurf.  
+**Prompt:** Implementiere TLS auf allen Serverendpunkten für App2App, PC2App und Browser2App. Kein produktiver Socket darf auf Klartext zurückfallen, wenn TLS oder Zertifikatsprüfung fehlt/fehlschlägt. Dokumentiere Zertifikatsbereitstellung und Erneuerung ohne Warnungsumgehung. **Abnahme:** Integrationstests beweisen TLS auf jedem Endpunkt und Ablehnung unverschlüsselter Verbindungen; Release-Build enthält keinen Klartext-Fallback.
+## P03 – Native App- und PC-Clients: TLS und Identitätsprüfung
 **Abhängigkeit:** P02.  
-**Prompt:** Stelle ausschließlich P2P-Clientverbindungen auf TLS gemäß ADR um. Der Fingerprint muss über einen zweiten, vertrauenswürdigen Pairingkanal verifiziert werden; unbekanntes oder gewechseltes Zertifikat darf nicht still akzeptiert werden. Teste gültigen Fingerprint, fremdes Zertifikat, Zertifikatswechsel und erneutes Pairing. Browser-Pinning nicht als durch App-Code automatisch gesichert darstellen. **Abnahme:** kein Klartext-Fallback und alle Zertifikatsnegativtests bestehen.
-
-## P04 – Pairing-Handshake
-**Abhängigkeit:** P01/P03 und S08, soweit gemeinsame Pairing-Secrets betroffen sind.  
-**Prompt:** Implementiere nur das freigegebene Pairingverfahren mit gepflegter PAKE-Bibliothek oder korrekt verifiziertem ephemeral ECDH plus Short Authentication String. Keine Eigenbau-Kryptokonstruktion und keine PIN→PBKDF2-Lösung mit statischem Salt als alleinige gegenseitige Authentifizierung. Pairingcode einmalig und höchstens drei Minuten gültig. Geheimnisse in SecretStore, nicht in Logs. **Abnahme:** erfolgreicher Pairing-Roundtrip, falsche SAS/PIN, abgelaufener und wiederverwendeter Code.
-
+**Prompt:** Stelle App2App- und PC2App-Clients auf TLS um. Die Gegenstelle muss beim Pairing über einen vertrauenswürdigen Kanal authentifiziert werden; unbekannte/gewechselte Zertifikate dürfen nicht still akzeptiert werden. Prüfe gültiges/fremdes Zertifikat, Zertifikatswechsel, Re-Pairing und fehlende TLS-Unterstützung. Browser-Sicherheit nicht durch native App-Pinning-Tests ersetzen. **Abnahme:** kein Klartext-Fallback und Negativtests für alle unterstützten nativen Clientpfade.
+## P04 – Sicherer Pairing-Handshake für alle Verbindungstypen
+**Abhängigkeit:** P01/P03 und S08 soweit gemeinsame Pairing-Secrets betroffen sind.  
+**Prompt:** Implementiere ein geprüftes Pairingverfahren für App2App, PC2App und Browser2App. Verwende gepflegte PAKE-Bibliothek oder korrekt verifiziertes ephemeres ECDH mit authentifiziertem Short Authentication String, abhängig vom Zielentwurf. Keine selbst erfundene Kryptografie und keine statische PIN als alleinige Authentifizierung. Pairingcode einmalig und kurzlebig; Rate-Limits und SecretStore verwenden. Browser muss mit echten Browser-Sicherheitsgrenzen funktionieren. **Abnahme:** erfolgreicher Pairing-Roundtrip sowie falsche, abgelaufene und wiederverwendete Codes und Identitätsverwechslung getestet.
 ## P05 – HTTP-Parsing und Ressourcenlimits
 **Abhängigkeit:** P01.  
 **Prompt:** Prüfe, ob eine gepflegte HTTP-Serverbibliothek mit minSdk und TLS-Architektur kompatibel ist. Nutze sie, wenn dadurch kein neues Sicherheitsproblem entsteht; andernfalls härte den bestehenden Parser eng begrenzt. Setze Limits für Request-Line, Headeranzahl/-größe, Body, Read-/Idle-Timeouts, Verbindungen und parallele Jobs. Vor Authentifizierung höchstens 4 KiB Body. Unerwartetes `Transfer-Encoding`, widersprüchliche Längen und abgeschnittene Requests ablehnen. **Abnahme:** Tests für oversized header/body, Slowloris-/Timeoutfall und ungültige Content-Length.
 
-## P06 – Große Datei streamend übertragen
-**Abhängigkeit:** D04, P03, P05.  
-**Prompt:** Migriere ausschließlich Upload-/Download-Payloads auf Streaming; keine `ByteArray(contentLength)`-Allokation für große Dateien. Exakt erwartete Bytes lesen, frühen EOF als Fehler behandeln und nur vollständig authentifizierte/validierte Dateien in Datenbank/Manifest aufnehmen. Integriere das verschlüsselte AP-Dokumentformat ohne unverschlüsselte persistente Zwischenkopie. **Abnahme:** große synthetische Datei, Verbindungsabbruch, abgeschnittener Body und Integritätsfehler werden sicher behandelt.
-
+## P06 – Dokumente über alle Verbindungstypen streamend übertragen
+**Abhängigkeit:** D04, P03–P05.  
+**Prompt:** Migriere Upload-/Download-Payloads für App2App, PC2App und Browser2App auf Streaming. Keine Gesamtdatei als ByteArray, keine dauerhafte unverschlüsselte Zwischenkopie. Nur vollständig authentifizierte und validierte Dateien dürfen in Datenbank/Manifest aufgenommen werden. **Abnahme:** große synthetische Dateien, Abbruch, gekürzter Body, falscher Hash/AEAD-Tag und alle drei Transportpfade getestet.
 ## P07 – Replay-Schutz, Sessionablauf und Rate-Limits
 **Prompt:** Ergänze den P2P-Authpfad um einen thread-sicheren Nonce-Replay-Cache pro gekoppeltem Gerät mit TTL. Wiederverwendete Nonces ablehnen; Zeitstempel allein zählen nicht als Replay-Schutz. Kopplungs-/Authfehler pro IP/Gerät begrenzen und Sessions nach 15 Minuten Inaktivität beenden. Bearer-Tokens ausschließlich im Authorization-Header. **Abnahme:** parallele Wiederholung, abgelaufene Session, viele falsche Codes und fehlende/abgelaufene Nonce getestet.
 
@@ -252,24 +268,20 @@
 ## P11 – Serverlebenszyklus und Android-Berechtigungen
 **Prompt:** Entferne `runBlocking` nur in den P2P-Request-/Serverpfaden durch strukturierten Coroutine-Lebenszyklus. Bei Serverstop müssen Jobs, Sockets und Streams zuverlässig beendet werden. Prüfe nötige Foreground-Service-Typen/Berechtigungen und aktuelle Laufzeitlimits der Ziel-API; Service nur während aktiver Aufgabe mit sichtbarer Benachrichtigung und Stoppmöglichkeit. Entferne WLAN-/Multicastberechtigungen nur nach Nutzungsprüfung. **Abnahme:** Stop/Cancel/Netzverlusttests; keine hängen gebliebenen Jobs oder unbegründeten Berechtigungen.
 
-## P13 – Browserportal sicher deaktivieren oder sauber absichern
-**Abhängigkeit:** P01–P03 und Entscheidung aus P01.  
-**Prompt:** Setze ausschließlich die freigegebene Portalentscheidung um. Wenn ein Standardbrowser den Zertifikatsfingerprint nicht sicher und verständlich prüfen kann, deaktiviere das Browserportal standardmäßig und entferne die HTTP-/CA-Platzhalter-/Wildcard-CORS-Endpunkte. Falls das Portal behalten wird, muss seine komplette Verbindung tatsächlich über validiertes TLS laufen; keine stillen Ausnahme- oder Warnungsumgehungen. **Abnahme:** Tests belegen Deaktivierung oder nachvollziehbare TLS-Validierung; keine HTTP-Portal-URL und kein Wildcard-CORS.
-
-## P12 – P2P-End-to-End-Sicherheitstests
+## P13 – Browser2App sicher und ohne Warnungsumgehung unterstützen
+**Abhängigkeit:** P01–P03 und P12.  
+**Prompt:** Implementiere das Browserportal so, dass aktuelle Standardbrowser die Verbindung ohne deaktivierte Zertifikatsprüfung oder Ignorieren einer Sicherheitswarnung nutzen können. Sichere Origin-/CSRF-/CORS-/Private-Network-Access-Regeln, Pairing-Token, Sitzung und jede Upload-/Download-Route. Kein HTTP-Fallback, keine Wildcard-CORS-Öffnung, keine Platzhalter-CA und keine unsichere Ausnahme. Wenn eine Browserfunktion technisch nicht sicher bereitgestellt werden kann, stoppe vor Release und dokumentiere die Blockade statt sie unsicher zu belassen. **Abnahme:** Tests auf unterstützten Browsern belegen TLS/Authentifizierung/Origin-Schutz; kein Klartextpfad.
+## P12 – End-to-End-Sicherheitstests für App2App, PC2App und Browser2App
 **Abhängigkeit:** P02–P11.  
-**Prompt:** Erstelle bzw. vervollständige echte In-Process-Client-/Servertests mit dem produktiven TLS-/Pairing-/Transferpfad. Teste Upload, Download, Manifest, Abbruch, Zertifikatswechsel, Replay, Ablauf, oversized Request, Pfad-Traversal, Zielkollision und 20 falsche Pairing-/Authversuche. Stelle Testergebnisse getrennt nach Unit-, Integration- und realem Gerätetest dar. Keine Behauptung, Android-Versionen seien kompatibel, wenn nicht geprüft. **Abnahme:** tatsächliche Testprotokolle; keine Klartext-HTTP-Ausnahme und kein Secret in Logs.
-
----
-
+**Prompt:** Erstelle echte Client-/Server-Integrationstests für jeden der drei Verbindungstypen. Teste Upload/Download, Pairing, Zertifikatswechsel, Replay, Sessionablauf, falsche Zugangsdaten, Rate-Limits, oversized Requests, Pfad-Traversal, Zielkollision, Verbindungsabbruch und keinen Klartext-Fallback. Browser2App auf realen unterstützten Browsern prüfen, insbesondere Zertifikatsvertrauen, Origin/CSRF und CORS/Private-Network-Regeln. Trenne Unit-, Integration-, Emulator- und reale Gerätetests. **Abnahme:** Testmatrix pro Verbindungstyp; keine pauschale Sicherheits-/Kompatibilitätsbehauptung ohne Befund.
 # L – Lokale KI und Modelldownloads
 
 ## L01 – Laufzeit- und APK-Inventur (AUDIT)
 **Prompt:** Prüfe aktuell `LlamaCppInferenceEngine`, `LlmService`, JNI-Aufrufe, `System.loadLibrary`, CMake/NDK, `jniLibs`, Gradle-Artefakte, Modellkatalog, Downloads und tatsächlichen APK-Inhalt. Dokumentiere, was wirklich kompiliert und ladbar ist, und unterscheide echte Inferenz von regelbasierten Heuristiken. Noch keine Native-Bibliotheken hinzufügen und keine Funktion entfernen. **Abnahme:** reproduzierbares Inventar mit bestätigten Dateien/ABIs und offenen Punkten.
 
-## L02 – Produktentscheidung Native Engine oder Rückbau (GATE)
-**Prompt:** Liefere auf Basis von L01 eine Entscheidungsvorlage für (A) echte llama.cpp-Integration oder (B) standardmäßig deaktiviertes/entferntes LLM-Feature mit transparentem regelbasiertem Ersatz. Vergleiche Geräteabdeckung, APK-Größe, RAM, Lizenz/Notices, Buildkomplexität, 16-KB-Kompatibilität und Wartungsrisiken. Implementiere keinen der beiden Pfade und warte auf explizite Auswahl. Unabhängige Sicherheitsfehler im Download dürfen separat beschrieben werden. **Abnahme:** klare Optionsvorlage ohne Codepfad-Mischung.
-
+## L02 – Native lokale KI-Integration verbindlich vorbereiten
+**Produktentscheidung:** echte native Modellinferenz lokal auf dem Gerät.  
+**Prompt:** Verwende das L01-Audit, um den nativen Integrationspfad für llama.cpp zu bestimmen: fest versionierter Upstream, passende NDK/CMake-Version, unterstützte ABIs, Modellformat/Lizenz, RAM-/Kontextgrenzen, APK-Größe und 16-KB-Alignment. Erstelle den Implementierungsplan für L08A–L11A. Die Wahl echter nativer Inferenz ist getroffen; nicht auf einen weiteren Nutzerentscheid warten und regelbasierte Heuristiken nicht als Ersatz-KI deklarieren. Bei belegtem technischen Blocker Befund und Alternativen vorlegen, bevor ein Rückbau erwogen wird. **Abnahme:** reproduzierbarer Native-Integrationsplan und klarer Build-/Geräteumfang.
 ## L03 – Modellkatalog und Quellenbelege
 **Prompt:** Konsolidiere nur den Modellkatalog. Jeder Eintrag muss belastbare Quelle, exakte Dateigröße, SHA-256, Version, Lizenz, unterstützte Architektur und Dateiformat enthalten. Erfinde fehlende Werte nicht; unvollständige Einträge dürfen nicht aktiviert/heruntergeladen werden. Konsolidiere Duplikate ohne Modell-IDs/URLs unbemerkt zu verändern. **Abnahme:** Tests für Duplikate, fehlende Lizenz, fehlenden Hash und ungültige Größen.
 
@@ -288,10 +300,9 @@
 ## L07 – Ehrliche Laufzeitmodi und Datenschutz
 **Prompt:** Stelle sicher, dass UI, APIs, Logs und Telemetrie klar zwischen `Regelbasiert` und `Lokales Modell` unterscheiden. Keine Konfidenz wie `0.98`, Token-/Durchsatzmetriken oder „verifiziert“-Meldungen ohne echte Messung/Prüfung. Tokens/s nur aus real gezählten Tokens und gemessener Zeit. Keine Dokument-/OCR-Inhalte an entfernte Provider oder Telemetrie senden, ohne separat gekennzeichnete und ausdrückliche Nutzerfreigabe. **Abnahme:** Tests prüfen sichtbaren Modus, Heuristik-Fallback und fehlende/gescheiterte Engine; keine irreführende Inferenzbehauptung.
 
-## L08A – Native Build reproduzierbar einbinden (NUR Pfad A)
-**Abhängigkeit:** L02, explizit freigegebener Pfad A.  
-**Prompt:** Binde ein geprüftes, fest versioniertes llama.cpp-Commit/Submodul mit dokumentierten Lizenzen, CMake/NDK-Konfiguration und nachvollziehbarem Build ein. Keine undokumentierten vorgefertigten `.so`-Dateien und keine gleichzeitige Downloader-/UI-Refaktorierung. Baue zuerst nur die freigegebenen ABIs und dokumentiere exakt die erzeugten Artefakte. **Abnahme:** reproduzierbarer Gradle-/Native-Build mit dokumentiertem Upstream-Commit und Lizenzen; noch keine Behauptung funktionierender Inferenz.
-
+## L08A – Native Build reproduzierbar einbinden
+**Abhängigkeit:** L01/L02.  
+**Prompt:** Binde ein geprüftes, fest versioniertes llama.cpp-Commit/Submodul mit dokumentierten Lizenzen, CMake/NDK-Konfiguration und reproduzierbarem Build ein. Keine undokumentierten vorgefertigten .so-Dateien. Beginne mit den nötigen ABIs und prüfe minSdk 24 sowie aktuelle Packaging-/16-KB-Anforderungen. Dokumentiere Upstream-Commit, Lizenznotices, Buildbefehle und Artefakte. **Abnahme:** reproduzierbarer Gradle-/Native-Build und belegte Paketierung; noch keine Behauptung funktionierender Inferenz.
 ## L09A – JNI-Modelllebenszyklus (NUR Pfad A)
 **Abhängigkeit:** L08A.  
 **Prompt:** Implementiere den minimalen JNI-Lebenszyklus für Modell laden/entladen, Fehler zurückmelden und Ressourcen freigeben. Schütze vor parallelem Laden und ungültigen Modellpfaden; native Fehler dürfen nicht unkontrolliert den Prozess beenden. Tokenstreaming, Toolrouting und UI bleiben außerhalb dieses Micro-AP. **Abnahme:** instrumentierte Tests für erfolgreiches Laden/Entladen, ungültige Datei, doppeltes Laden und Cleanup.
@@ -304,17 +315,14 @@
 **Abhängigkeit:** L08A–L10A.  
 **Prompt:** Prüfe alle nativen Bibliotheken inklusive transitiver Abhängigkeiten auf ABI-Abdeckung sowie 16-KB-ELF- und APK/AAB-Alignment. Teste nur die zugesagten ABIs, einschließlich `arm64-v8a` und `x86_64` nur sofern tatsächlich paketiert/unterstützt, auf passenden Emulatoren oder Geräten. Dokumentiere Geräte, API-Level und Resultate. **Abnahme:** kein pauschales „kompatibel“ ohne Artefakt-/Gerätenachweis.
 
-## L08B – Ehrlicher LLM-Rückbau (NUR Pfad B)
-**Abhängigkeit:** L02, explizit freigegebener Pfad B; überspringe L08A–L11A.  
-**Prompt:** Setze das LLM-Feature hinter ein Standard-`false`-Feature-Flag, entferne/unzugänglich mache Modellmenü, Chat-/Tool-Inferenz und Downloads, soweit sie nur zu diesem nicht verfügbaren Pfad gehören. Erhalte unabhängige regelbasierte Funktionen und kennzeichne sie korrekt. Keine Modellbytes im Hintergrund laden. **Abnahme:** Tests zeigen deaktivierten Standardzustand, keinen unnötigen Modell-Download und keine Inferenzbehauptungen.
-
----
-
+## L08B – LLM-Rückbau (nicht ausgewählt; nur Notfall-Alternative)
+**Abhängigkeit:** Nur nach dokumentiertem schwerwiegendem technischem Blocker und erneuter ausdrücklicher Nutzerentscheidung.  
+**Prompt:** Diesen Auftrag nicht automatisch ausführen. Erst nach konkretem Befund und Nutzerfreigabe einen Rückbau umsetzen. Regelbasierte Funktionen transparent kennzeichnen; keine Modellbytes ohne Freigabe laden. **Abnahme:** Entscheidung und Auswirkungen dokumentiert; kein stillschweigender Austausch echter KI gegen Heuristiken.
 # C – Cloud-Sync, OAuth und WebDAV
 
-## C01 – Cloud-Verhalten und Schlüsselgrenze (AUDIT/GATE)
-**Prompt:** Prüfe `CloudSyncWorkerService`, `GoogleDriveClient`, `WebDavClient`, Einstellungen, Token-/Passwortablage, Netzwerkstatus und Verhalten bei gesperrtem Vault. Erstelle eine knappe ADR, die entscheidet, ob Sync nur mit entsperrtem Vault läuft oder welche getrennt geprüfte Hardware-/Keystore-Freigabe zulässig wäre. Master-Passphrase darf nicht persistiert werden. Untersuche auch das aktuelle Fail-open-Verhalten bei unklarem WLAN-Status. Noch keine Provider-Implementierung. **Abnahme:** eindeutig definierter gesperrter Zustand und sichere Statusregeln.
-
+## C01 – Cloud-Sync, Verschlüsselungsgrenze und Sperrverhalten auditieren
+**Produktentscheidung:** vollständige Google-Drive-Integration; Nutzdaten ausschließlich clientseitig verschlüsselt.  
+**Prompt:** Prüfe CloudSyncWorkerService, GoogleDriveClient, WebDavClient, Einstellungen, Token-/Passwortablage, Netzwerkstatus und Vault-Lock. Definiere manuelle und automatische Synchronisation als auswählbare Modi; automatische Synchronisation erst nach ausdrücklicher Aktivierung. Niemals Klartextdaten hochladen. Bei gesperrtem Vault darf ein Worker höchstens bereits vollständig erstellte und authentifiziert verschlüsselte Container übertragen; neue Container benötigen Schlüssel gemäß Vault-Regeln. Erstelle technische Richtlinie für diesen Zustand, Konflikte, Netzwechsel und Abbruch. **Abnahme:** Datenfluss-/Zustandsmatrix ohne gespeicherte Master-Passphrase und ohne unsicheres Fail-open.
 ## C02 – WorkManager-Grundmigration
 **Abhängigkeit:** C01, D10 und S08 soweit Secrets benötigt werden.  
 **Prompt:** Ersetze die direkte Singleton-Ausführung durch einen `CoroutineWorker` mit Unique Work pro Sync-Konfiguration, Netzwerk-Constraints, optionalem Akku-Constraint, Fortschritt und begrenztem Retry/Backoff. Netzstatus bei Fehler/Unklarheit muss fail-closed sein. Große Transfers erhalten nur bei Bedarf eine korrekte Foreground-Info mit Stoppmöglichkeit und API-konformem Serviceverhalten. Provider-Auth noch nicht neu entwerfen. **Abnahme:** WorkManager-TestDriver für Constraints, Unique Work, Retry und Abbruch.
@@ -323,27 +331,24 @@
 **Abhängigkeit:** C01, S05, S08.  
 **Prompt:** Stelle sicher, dass Worker ausschließlich über die genehmigte KeyProvider-/SecretStore-Schnittstelle auf benötigte Schlüssel/Zugangsdaten zugreift. Definiere den Workerzustand bei gesperrtem Vault: kontrolliert warten/fehlschlagen oder nur den in C01 explizit genehmigten Weg verwenden. Kein `userPasswordKey: String`, keine gespeicherte Master-Passphrase, keine stillschweigende automatische Entsperrung. **Abnahme:** Tests für gesperrten Vault, fehlende Secrets, Prozessneustart, Lock während Sync und Widerruf.
 
-## C04 – Google-Drive-OAuth-Entscheidung (GATE)
-**Prompt:** Erstelle eine ADR zur echten Google-Identity-Autorisierung oder vollständigem Rückbau von Google Drive. Falls unterstützt: minimalen Scope vergleichen (`drive.file` versus `appDataFolder`), Consent/Neuautorisierung, Tokenlebenszyklus und Fehlerzustände beschreiben. Keine manuell einzutragenden Access-Tokens als Produktlösung. Noch keine OAuth-Implementierung; warte auf Auswahl. **Abnahme:** Produktoption samt Konsequenzen eindeutig dokumentiert.
-
-## C04B – Google Drive zurückbauen (NUR wenn Option „entfernen“ freigegeben)
-**Abhängigkeit:** C04 und ausdrückliche Freigabe zum Rückbau; statt C05 ausführen.  
-**Prompt:** Entferne ausschließlich den nicht mehr unterstützten Google-Drive-Provider aus UI, Workerregistrierung und Konfiguration. Bestehende lokale/verschlüsselte Backups dürfen nicht gelöscht werden. Erkläre vorhandene Nutzerkonfiguration klar und ohne Secrets zu loggen; sichere bei Bedarf einen kompatiblen Fehlerzustand für alte Einstellungen. **Abnahme:** kein Drive-Upload und kein OAuth-Tokenabruf kann mehr gestartet werden; Build- und Regressionstests grün.
-
-## C05 – Google-Drive-Client absichern (nur wenn genehmigt)
-**Abhängigkeit:** C04, Freigabe für Drive.  
-**Prompt:** Implementiere nur die Client-Zuverlässigkeit der genehmigten OAuth-Integration: URLs über `HttpUrl.Builder`, resumable Upload für große Dateien, begrenzte Retries mit `Retry-After` bei 429/geeigneten 5xx, getrennte Fehler für Auth/Quota/Netz/Format. Bei 401 kontrolliert stoppen und Neuautorisierung verlangen. Tokens und Dateiinhalt nie loggen. **Abnahme:** MockWebServer-Tests für Uploadfortsetzung, 401, 429, 5xx, Netzabbruch und Redirect.
-
+## C04 – Google-Drive-OAuth sicher integrieren
+**Produktentscheidung:** Google Drive unterstützen; kein manuell eingetragener Access-Token.  
+**Prompt:** Implementiere echten Android-OAuth-/Authorization-Flow mit gepflegter Google-Autorisierungsbibliothek. Nutze die engste Scope-Kombination, die den Backupablauf unterstützt. Für vom Nutzer sichtbare Backupdateien den drive.file-Pfad und passenden Datei-/Ordnerfluss prüfen; appDataFolder nur nutzen, wenn ausdrücklich versteckte App-Daten gewünscht sind. Access-/Refresh-Tokens sicher lokal im SecretStore/Keystore speichern, niemals loggen oder in Backups aufnehmen. Consent, Neuautorisierung, Widerruf und Konto-/Netzfehler sauber behandeln. **Abnahme:** echte Autorisierung, minimale Berechtigung, Revocation-/401-Tests und verständliche Statusmeldungen.
+## C04B – Google Drive entfernen (nicht ausgewählt)
+**Abhängigkeit:** Nur falls die aktuelle Produktentscheidung nach einem belegten schwerwiegenden technischen Blocker erneut geändert wird.  
+**Prompt:** Diesen Auftrag nicht automatisch ausführen. Erst konkreten Befund, Alternativen und Empfehlung vorlegen und erneute ausdrückliche Entscheidung abwarten. Kein Provider darf stillschweigend entfernt werden.
+## C05 – Google-Drive-Client und Transfers absichern
+**Abhängigkeit:** C04; Uploads ausschließlich aus D10-verschlüsselten Containern.  
+**Prompt:** Implementiere zuverlässige Drive-Uploads/Downloads großer Container mit Resumable Upload, begrenzten Retries und Retry-After bei geeigneten 429/5xx, getrennten Auth-/Quota-/Netz-/Formatfehlern und sicherem Abbruch. Prüfe Containerintegrität vor dem Anwenden eines Downloads. Bei 401 kontrolliert stoppen und Neuautorisierung anfordern. Logs dürfen keine Tokens, Inhalte, Klartextnamen oder Recovery-Secrets enthalten. **Abnahme:** Tests für Resume, 401, 403, 429, 5xx, Netzabbruch, ungültigen Container und Abbruch.
 ## C06 – WebDAV-HTTPS und Zertifikatsvertrauen
 **Prompt:** Erzwinge HTTPS und Hostnamenprüfung. Beziehe Anmeldedaten ausschließlich aus S08-SecretStore. Für bewusst unterstützte selbstsignierte NAS-Zertifikate nur explizites Trust-on-first-use mit SHA-256-Fingerprint pro Host; geändertes Zertifikat blockieren, bis der Nutzer bewusst erneut prüft. Keine globale Trust-all-Implementierung oder stille HTTP-Ausnahme. **Abnahme:** Tests für gültiges, falsches, abgelaufenes/geändertes Zertifikat und fehlende Zugangsdaten.
 
 ## C07 – Verschlüsseltes Sync-Manifest und Differenzabgleich
 **Abhängigkeit:** D10/C03.  
-**Prompt:** Implementiere nur ein versioniertes, authentifiziert verschlüsseltes Manifest mit Dokument-ID, Inhaltsprüfsumme, Änderungszeit und Backupgeneration. Provider dürfen keine Klartext-OCR-/Titel-/Absenderdaten erhalten. Übertrage nur neue/geänderte Daten. Lege Konflikt-/Rollbackregeln fest, damit ein veraltetes Manifest keinen neueren Vaultzustand überschreibt; Löschungen erst nach festgelegter Aufbewahrungsfrist spiegeln. **Abnahme:** Tests für identische/geänderte Dateien, altes Manifest, Konflikt und Manipulation.
-
-## C08 – Status, Neuautorisierung und Abbruch
-**Prompt:** Passe ausschließlich Status/UI an den echten Workerzustand an: letzter erfolgreicher Lauf, letzter Fehler, Fortschritt, nächste Planung soweit verfügbar und erforderliche Nutzeraktion. „Erfolg“ erst melden, wenn alle vorgesehenen Daten vollständig übertragen und verifiziert sind. Manueller Abbruch muss Netzwerk-/Dateistreams tatsächlich schließen. Fehlende Zustimmung/Config, fehlender Key oder gesperrter Vault dürfen keinen Upload starten. **Abnahme:** UI-/Worker-Tests für Erfolg, Teilfehler, Abbruch und Neuautorisierung.
-
+**Prompt:** Implementiere ein versioniertes, authentifiziert verschlüsseltes Sync-Manifest mit Dokument-ID, Inhaltsprüfsumme, Änderungszeit und Backupgeneration. Sensible Titel, OCR, Absender, Dateinamen und Ordnerstruktur bleiben im verschlüsselten Container; im Drive bleiben nur unvermeidbare Transportmetadaten. Übertrage nur neue/geänderte Daten. Alte Manifeste dürfen keinen neueren Vaultzustand überschreiben; Konflikt- und Löschregeln müssen idempotent sein. **Abnahme:** identische/geänderte Dateien, altes/manipuliertes Manifest, Konflikte und Integritätsprüfung getestet.
+## C08 – Manuellen/automatischen Sync konfigurierbar machen
+**Abhängigkeit:** C01–C07.  
+**Prompt:** Ergänze die Auswahl **Manuell** oder **Automatisch**. Manuell synchronisiert nur nach Nutzeraktion. Automatisch wird erst nach Opt-in eingerichtet, nutzt eindeutige WorkManager-Arbeit, Netzwerkbedingungen und begrenzte Wiederholungen und lässt sich deaktivieren. Status muss den echten Workerzustand wiedergeben: letzter Erfolg/Fehler, Fortschritt und nötige Neuautorisierung. Kein Upload bei fehlender Konfiguration oder unverschlüsseltem Payload. **Abnahme:** UI-/Worker-Tests für beide Modi, Opt-in/Opt-out, Vault-Lock, Abbruch, Neuautorisierung und Netzwechsel.
 ## C09 – Cloud-End-to-End-Tests
 **Abhängigkeit:** C02–C08, jeweils nur für ausgewählte Provider.  
 **Prompt:** Ergänze echte Worker-/Provider-Integrationstests für Upload, Resume, 401, 429/Retry-After, 5xx, Offline/Netzwechsel, falschen Hash, gesperrten Vault, fehlende Konfiguration, Abbruch und Prozessneustart. Markiere nicht verfügbare Live-OAuth-/Providerprüfungen klar als offen. **Abnahme:** Testprotokoll trennt Mock-, WorkManager-, Integration- und reale Providerprüfung.
@@ -391,14 +396,12 @@
 **Abhängigkeit:** DB04; eigene, sequenzielle Schema-Migration nach allen vorangegangenen Migrationen.  
 **Prompt:** Stelle Finanzbeträge im Storage-/Domain-Modell auf `Long`-Cent um. Definiere Rundungsregel fachlich (z. B. `BigDecimal`/HALF_UP) und migriere alte `REAL`/`Double`-Werte reproduzierbar; kein unkontrolliertes `Double * 100`. Ändere nur Betragsspeicherung und zwingend abhängige Mapper. Parser, UI, Bankabgleich und GiroCode schrittweise in Folgeaufträgen behandeln, sofern sie nicht in diesem eng begrenzten Schritt nötig sind. **Abnahme:** Migrationstests für positive/negative Werte, Null, Rundungsgrenzen und große Werte.
 
-## DB12 – Datenbankverschlüsselung gemäß ADR umsetzen (GATE)
-**Abhängigkeit:** D02, DB01–DB04 und explizit freigegebene ADR.  
-**Prompt:** Implementiere nur die in D02 freigegebene Datenbanköffnung/Schlüsselbereitstellung, ohne gleichzeitig Dokumentverschlüsselung, Geldbeträge oder Refactoring zu ändern. Alle Öffnungspfade müssen denselben KeyProvider nutzen; kein passwortloser Notfallzugriff und kein Fallback auf unverschlüsseltes SQLite. Prüfe WAL/SHM, FTS und Migrationstest-Setup. Wenn SQLCipher-/Room-Kompatibilität nicht belegt ist, stoppe vor Datenmigration. **Abnahme:** instrumentierte Tests für Öffnen, falschen Schlüssel, Neustart und gesperrten Vault; offene Geräteprüfungen klar nennen.
-
-## DB13 – Bestehende Datenbank sicher migrieren (NUR wenn SQLCipher/DB-Verschlüsselung freigegeben)
-**Abhängigkeit:** DB12 ist vollständig getestet; D02 ist ausdrücklich freigegeben. Bei Feldverschlüsselungsentscheidung diesen Auftrag überspringen und den ADR-spezifischen Feldmigrationsplan verwenden.  
-**Prompt:** Implementiere nur den sicheren Bestandstransfer von der bisherigen DB in die genehmigte verschlüsselte Datenbank. Originaldatenbank unverändert erhalten, bis Kopie/Export, Migration, FTS, Foreign Keys, Zeilenzahlen und repräsentative Datensummen verifiziert sind. Migration muss unter Prozessabbruch wiederaufnehmbar sein und darf nie in Klartext-SQLite zurückfallen. Teste fehlenden/invalidierten Key, wenig Speicher, Abbruch, beschädigte Quelle und Rollback. **Abnahme:** instrumentierte Migrationstests mit realer Room-/SQLCipher-Konfiguration; Quelle wird erst nach vollständiger Verifikation ersetzt bzw. gemäß genehmigtem Rollbackplan gesichert.
-
+## DB12 – SQLCipher für die vollständige Room-Datenbank umsetzen
+**Abhängigkeit:** D02, DB01–DB04 und D03.  
+**Prompt:** Implementiere den in D02 festgelegten, aktuell unterstützten SQLCipher-/Room-Aufbau. Alle Datenbanköffnungen müssen denselben sicheren KeyProvider verwenden; kein passwortloser Notfallzugriff und kein Fallback auf unverschlüsseltes SQLite. Prüfe WAL/SHM, FTS, Migrationen, native ABIs und Start-/Lock-Lifecycle. Bei Sperrung DB-Verbindungen schließen und flüchtige Schlüssel so weit wie möglich entfernen. **Abnahme:** echte Room-/SQLCipher-Integrationstests für Öffnen, falschen Schlüssel, Neustart, Sperren/Entsperren und FTS; Geräte-/ABI-Prüfungen getrennt dokumentieren.
+## DB13 – Bestehende Datenbank in SQLCipher migrieren
+**Abhängigkeit:** DB12 vollständig getestet.  
+**Prompt:** Implementiere sicheren Bestandstransfer der bisherigen Datenbank in SQLCipher. Original bis zur Verifikation erhalten; Migration prüft Schema, Zeilenzahlen, Foreign Keys, FTS und repräsentative Inhalte. Während der Entwicklung darf ein dokumentierter Clean-Install/Datenreset verwendet werden, da keine produktiven Nutzerdaten erhalten werden müssen; vor Release muss ein echter Upgrade-/Rollback-Pfad getestet sein. Nie auf Klartext-SQLite zurückfallen. **Abnahme:** Tests für Abbruch, wenig Speicher, falschen Schlüssel, beschädigte Quelle, Rollback und vollständiges Wiederöffnen nach Neustart.
 ## DB14 – Listen-/Suchperformance messen
 **Abhängigkeit:** DB05–DB08 und DB12/DB13, soweit die genehmigte DB-Verschlüsselung betroffen ist.  
 **Prompt:** Erzeuge einen synthetischen Testbestand mit 10.000 Dokumenten und je etwa 10 KB OCR-Text. Miss vor/nach den Änderungen Listenaufbau, Paging, Suche, Heap und Datenbankgröße. Dokumentiere Gerät/Emulator, API-Level, Laufzahl und Messmethode. Keine Tuningänderung ohne Messbasis. Prüfe insbesondere, dass Listenabfragen `ocrText` nicht materialisieren und dass FTS unter der genehmigten DB-Architektur läuft. **Abnahme:** reproduzierbare Kennzahlen und Vergleichswerte; keine bloße Aussage „fühlt sich schneller an“.
@@ -488,9 +491,9 @@
 
 ---
 
-## Einzelstatus – bisher erfasste 30 von 114 Micro-APs
+## Einzelstatus – 35 erfasste von 119 Micro-APs
 
-**Hinweis zur Vollständigkeit:** Die folgende Tabelle bildet nur die 30 bisher protokollierten Einzelstände ab. Weitere 84 im Dokument definierte Micro-APs haben hier noch keinen expliziten Status. Das ist eine Dokumentationslücke, keine Aussage darüber, ob sie bereits umgesetzt wurden.
+**Hinweis zur Vollständigkeit:** Die Tabelle bildet 35 protokollierte Einzelstände ab. Weitere 84 im Dokument definierte Micro-APs haben hier noch keinen expliziten Status. Das ist eine Dokumentationslücke, keine Aussage darüber, ob sie bereits umgesetzt wurden.
 
 
 
@@ -501,17 +504,17 @@
 | V02 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V03 |
 | V03 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V04 |
 | V04 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V05 |
-| V05 | BLOCKIERT | – | Ja | Entscheidung offen | Freigabe Option A/B |
-| V06A | BLOCKIERT | – | Nein | Freigabe fehlt | V07 (parallel möglich) |
+| V05 | BLOCKIERT | – | Ja | Technischer Entwurf für optionale 2FA offen | Sicheren Faktor und Offline-Angriffsmodell belegen |
+| V06A | NICHT GESTARTET | – | Nein | Optionalen 2FA-Modus konfigurieren | V05/V06 abschließen |
 | V07 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V08 |
 | V08 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V09 |
 | V09 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V10 |
 | V10 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V11 |
 | V11 | PATCH ERSTELLT | direkt in main | Ja | QrEncodingTest laut Statusbericht verifiziert; AP-Abnahme separat abgleichen | V12 |
-| V12 | PATCH ERSTELLT | direkt in main | Ja | PDF-Regressionstest ergänzt; Textlayer-/Gerätetest offen | V13 |
-| V13 | PATCH ERSTELLT | direkt in main | Ja | CryptoObject-Instrumented-Test ergänzt; Gerätetest offen | V14 |
+| V12 | PATCH ERSTELLT | direkt in main | Ja | PDF-Regressionstest ergänzt; explizites Notfalldokument und Geräterestore abzunehmen | V12B/V13 |
+| V12B | NICHT GESTARTET | – | Nein | Unauffällige Druckvariante erstellen | V12 |\n| V13 | PATCH ERSTELLT | direkt in main | Ja | CryptoObject-Instrumented-Test ergänzt; Gerätetest offen | V14 |
 | V14 | BLOCKIERT | – | Nein | v2 nicht in Runtime integriert | V14-Laufzeitintegration |
-| V15 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; weitere AP-Abnahme separat prüfen | S01 |
+| V15 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; weitere AP-Abnahme separat prüfen | S01 |\n| V16 | NICHT GESTARTET | – | Nein | Passkey muss echte Wiederherstellung ermöglichen | V09/V10 |\n| V17 | NICHT GESTARTET | – | Nein | Sicherheitsfragen nur zusätzlicher, begrenzt starker Faktor | V10/V16 |\n| V18 | NICHT GESTARTET | – | Nein | Restore-Auswahl/Einrichtung in der App | V12/V12B/V16/V17 |
 | S01 | GETESTET | docs/security/lock-secret-inventory.md | Ja | Audit dokumentiert | S02 |
 | S02 | PATCH ERSTELLT | direkt in main | Ja | LockManagerTest laut Statusbericht verifiziert | S03 |
 | S03 | PATCH ERSTELLT | direkt in main | Ja | VaultAutoLockObserverTest laut Statusbericht verifiziert | S04 |
@@ -523,6 +526,6 @@
 | S09 | BLOCKIERT | – | Nein | S08-Testlauf und Verbraucher-Audit offen | S08 prüfen |
 | S10 | PATCH ERSTELLT | direkt in main | Ja | ExternalIntentPolicyTest laut Statusbericht verifiziert; Widget-Cold-Start-Test bleibt offen | D01 |
 | D13 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; Restore-/Geräteabnahme separat prüfen | D14 |
-| D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | P01 |
-| P01 | PATCH ERSTELLT | direkt in main | Ja | P2P-Transport-Audit und TLS-ADR dokumentiert; Freigabe offen | ADR-Freigabe vor P02 |
+| D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | D15 |\n| D15 | NICHT GESTARTET | – | Nein | Alle dauerhaft gespeicherten Einstellungen verschlüsseln | DB/Persistenztests |
+| P01 | PATCH ERSTELLT | direkt in main | Ja | Bestehende Audit-/TLS-ADR dokumentiert; alle drei Verbindungstypen müssen im Code bestätigt werden | Sicherheitsmatrix vor P02 |
 | P10 | PATCH ERSTELLT | direkt in main | Ja | SHA-256-Ersatzschlüssel-Fallback entfernt; P2pSyncSecurityTest laut Statusbericht verifiziert; Aufrufer-Audit separat prüfen | Testlauf und Aufrufer-Audit prüfen |
