@@ -9,6 +9,8 @@ import com.example.service.VaultSecurityTier
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -17,6 +19,23 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], manifest = Config.NONE)
 class VaultTwoFactorSecurityTest {
+    // Robolectric creates isolated application contexts per test class, while the manager is a process singleton.
+    // Reset it so one test cannot retain another test's SharedPreferences/context.
+    @Before
+    fun resetVaultManagerBeforeTest() = resetVaultManagerSingleton()
+
+    @After
+    fun resetVaultManagerAfterTest() = resetVaultManagerSingleton()
+
+    private fun resetVaultManagerSingleton() {
+        val companion = VaultSecurityManager.Companion
+        val instanceField = companion.javaClass.declaredFields.first {
+            it.name == "INSTANCE" && it.type == VaultSecurityManager::class.java
+        }
+        instanceField.isAccessible = true
+        instanceField.set(companion, null)
+    }
+
     @Test
     fun passwordAndKeyFileAreBothRequiredToUnlock() {
         val manager = VaultSecurityManager.getInstance(
