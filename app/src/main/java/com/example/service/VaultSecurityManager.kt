@@ -249,7 +249,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             recoveryStatusLabel = label,
             hasEmergencyPin = header.hasEmergencyPin,
             createdAt = header.createdAt,
-            securityTier = header.securityTier,
+            securityTier = if (header.securityTier == VaultSecurityTier.TWO_FACTOR && header.factorType == VaultFactorType.PASSWORD_AND_TOTP) VaultSecurityTier.ONE_FACTOR else header.securityTier,
             factorType = header.factorType,
             totpEnabled = !header.totpSecret.isNullOrBlank(),
             keyFileEnabled = !header.keyFileTokenHash.isNullOrBlank(),
@@ -337,6 +337,14 @@ class VaultSecurityManager private constructor(private val context: Context) {
         recoveryCode: String? = null,
         autoLockMinutes: Int = 5
     ): VaultSetupResult {
+        if (securityTier == VaultSecurityTier.TWO_FACTOR) {
+            require(factorType == VaultFactorType.PASSWORD_AND_KEYFILE) {
+                "Die Zwei-Faktor-Verschlüsselung erfordert Passwort und Schlüsseldatei. TOTP ist kein kryptografischer zweiter Faktor."
+            }
+            require(masterPassword.isNotBlank() && keyFileToken?.matches(Regex("[A-Fa-f0-9]{64}")) == true) {
+                "Für die Zwei-Faktor-Verschlüsselung werden ein Passwort und eine gültige 256-Bit-Schlüsseldatei benötigt."
+            }
+        }
         val dek = existingDek ?: generateRandomDek()
         val vaultId = "VAULT-" + UUID.randomUUID().toString().take(8).uppercase(Locale.ROOT)
         val createdAt = System.currentTimeMillis()
@@ -532,7 +540,20 @@ class VaultSecurityManager private constructor(private val context: Context) {
     ): Boolean {
         val header = _vaultHeader.value ?: return false
         
-        // 1. TOTP Check (falls im Header aktiviert)
+        // A newly configured cryptographic two-factor vault must require both factors
+        // before any key derivation. Legacy TOTP vaults retain their compatibility gate below.
+        if (header.securityTier == VaultSecurityTier.TWO_FACTOR && header.factorType == VaultFactorType.PASSWORD_AND_KEYFILE) {
+            if (password.isNullOrBlank() || keyFileToken?.matches(Regex("[A-Fa-f0-9]{64}")) != true) return false
+            val expectedHash = header.keyFileTokenHash ?: return false
+            val tokenBytes = keyFileToken.toByteArray(Charsets.UTF_8)
+            val actualHash = try { calculateSha256(tokenBytes) } finally { tokenBytes.fill(0) }
+            if (!MessageDigest.isEqual(
+                    expectedHash.lowercase(Locale.ROOT).toByteArray(Charsets.UTF_8),
+                    actualHash.lowercase(Locale.ROOT).toByteArray(Charsets.UTF_8)
+                )) return false
+        }
+
+        // Legacy TOTP remains an additional compatibility gate for existing headers only.
         if (!header.totpSecret.isNullOrBlank()) {
             if (totpCode == null || !verifyTotpCode(header.totpSecret, totpCode)) {
                 return false
