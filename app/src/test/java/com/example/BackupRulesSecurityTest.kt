@@ -5,8 +5,13 @@ import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import org.xmlpull.v1.XmlPullParser
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33])
 class BackupRulesSecurityTest {
     private fun exclusions(resourceId: Int, section: String? = null): Set<Pair<String, String>> {
         val parser = ApplicationProvider.getApplicationContext<Application>().resources.getXml(resourceId)
