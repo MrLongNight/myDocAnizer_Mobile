@@ -634,7 +634,7 @@ Bei unklarer Baseline, fehlender Architekturfreigabe, unbekanntem Altformat, uns
 | V15 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; weitere AP-Abnahme separat prüfen | S01 |
 | S01 | GETESTET | docs/security/lock-secret-inventory.md | Ja | Audit dokumentiert | S02 |
 | S02 | PATCH ERSTELLT | direkt in main | Ja | LockManagerTest laut Statusbericht verifiziert | S03 |
-| S03 | PATCH ERSTELLT | direkt in main | Ja | Auto-Lock-Tests ergänzt; Lauf offen | S04 |
+| S03 | PATCH ERSTELLT | direkt in main | Ja | VaultAutoLockObserverTest laut Statusbericht verifiziert | S04 |
 | S04 | PATCH ERSTELLT | direkt in main | Ja | Bypass-Pfade entfernt; Negativtests/Build offen | S05 |
 | S05 | PATCH ERSTELLT | direkt in main | Ja | Produktionsaufrufe auf Key-Leases migriert; Testlauf offen | S06 |
 | S06 | PATCH ERSTELLT | direkt in main | Ja | AuthenticationBackoffManagerTest laut Statusbericht verifiziert | S07 |
@@ -646,6 +646,3 @@ Bei unklarer Baseline, fehlender Architekturfreigabe, unbekanntem Altformat, uns
 | D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | P01 |
 | P01 | PATCH ERSTELLT | direkt in main | Ja | P2P-Transport-Audit und TLS-ADR dokumentiert; Freigabe offen | ADR-Freigabe vor P02 |
 | P10 | PATCH ERSTELLT | direkt in main | Ja | SHA-256-Ersatzschlüssel-Fallback entfernt; P2pSyncSecurityTest laut Statusbericht verifiziert; Aufrufer-Audit separat prüfen | Testlauf und Aufrufer-Audit prüfen |
-
-Zulässige Statuswerte: `NICHT GESTARTET`, `BLOCKIERT`, `PATCH ERSTELLT`, `MANUELL ÜBERNOMMEN`, `GETESTET`, `ABGENOMMEN`.
-
