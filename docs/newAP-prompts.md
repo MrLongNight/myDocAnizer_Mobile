@@ -8,7 +8,7 @@
 | Einzelstatus dokumentiert | **37** |
 | Einzelstatus noch abzugleichen | **82** |
 | Dokumentierte Statusverteilung | 1 abgenommen · 1 getestet · 27 Patch erstellt · 2 blockiert · 5 nicht gestartet · 1 ADR freigegeben |
-| Tests laut Statusbericht | 22 Testklassen vorhanden; daraus folgt keine automatische Abnahme aller Arbeitspakete |
+| Tests | 23 Testklassen inkl. `VaultTwoFactorSecurityTest`; vorhanden heißt nicht automatisch ausgeführt oder bestanden |
 | Build/Tests | GitHub Actions führt jetzt `assembleDebug testDebugUnitTest` aus; Ergebnis der aktuellen Änderungen wird separat geprüft |
 
 Fehlende Einzelstatus sind eine Dokumentationslücke, kein Beweis dafür, dass ein Arbeitspaket nicht umgesetzt wurde.
