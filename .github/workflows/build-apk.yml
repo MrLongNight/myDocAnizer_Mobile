@@ -91,7 +91,7 @@ jobs:
       - name: Build Debug APK
         run: |
           cd "${{ env.PROJECT_DIR }}"
-          ./gradlew assembleDebug --stacktrace --no-daemon
+          ./gradlew assembleDebug testDebugUnitTest --stacktrace --no-daemon
 
       - name: Find and Verify APK
         id: apk-check
