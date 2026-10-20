@@ -28,12 +28,9 @@ class VaultTwoFactorSecurityTest {
     fun resetVaultManagerAfterTest() = resetVaultManagerSingleton()
 
     private fun resetVaultManagerSingleton() {
-        val companion = VaultSecurityManager.Companion
-        val instanceField = companion.javaClass.declaredFields.first {
-            it.name == "INSTANCE" && it.type == VaultSecurityManager::class.java
-        }
+        val instanceField = VaultSecurityManager::class.java.getDeclaredField("INSTANCE")
         instanceField.isAccessible = true
-        instanceField.set(companion, null)
+        instanceField.set(null, null)
     }
 
     @Test
