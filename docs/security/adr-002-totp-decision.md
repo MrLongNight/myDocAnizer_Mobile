@@ -1,37 +1,37 @@
-# ADR 002: TOTP als zweiter Tresor-Faktor
+# ADR 002: Optionale Zwei-Faktor-Absicherung des Tresors
 
-**Status:** ENTSCHEIDUNG AUSSTEHEND — keine Produktoption wurde in den geprüften Repository-Artefakten ausdrücklich freigegeben.  
-**Datum:** 2026-10-18  
-**Betrifft:** `VaultSecurityManager`, `VaultHeader.totpSecret`, `unlockVault`, Sicherheitsstufen und Authentifizierungs-UI.
+**Status:** ENTSCHEIDUNG GETROFFEN; Laufzeitumsetzung und Tests offen.  
+**Datum:** 2026-10-20
 
-## Ausgangsbefund
+## Entscheidung
 
-- `VaultHeader` enthält `totpSecret`; `saveVaultHeader` serialisiert das Secret in den JSON-Header innerhalb der SharedPreferences.
-- `unlockVault` prüft einen TOTP-Code vor der Passwort-KDF.
-- Der DEK wird jedoch weiterhin allein mit dem aus Passwort/Keyfile abgeleiteten KEK verpackt. Der TOTP-Code ist nicht Bestandteil einer kryptografischen Schlüsselableitung oder eines zweiten DEK-Wrapping-Schritts.
-- Damit ist der aktuelle TOTP-Pfad eine zusätzliche Software-Prüfung, aber keine kryptografisch unabhängige zweite Schutzkomponente gegen direkte Manipulation bzw. Umgehung des Aufrufpfads.
-- Die Arbeitspaketliste markiert V06A als erledigt, aber der aktuelle Quellcode enthält weiterhin TOTP-Secret, Codeprüfung und TOTP-bezogene Faktorwerte. Ein dokumentierter Freigabenachweis für Option A wurde nicht gefunden.
+Die optionale echte Zwei-Faktor-Verschlüsselung soll zunächst **Tresorpasswort + separate, zufällig generierte Schlüsseldatei** verwenden. Passwort allein bleibt als separater Ein-Faktor-Modus verfügbar. Die Schlüsseldatei enthält niemals den rohen DEK.
 
-## Option A — TOTP entfernen
+TOTP aus einer Authenticator-App wird **nicht** als kryptografischer zweiter Faktor für den lokalen Tresor gewertet. Eine zusätzliche UI-Abfrage kann den Offline-Angriff auf eine kopierte Vault-Datei nicht verhindern.
 
-- TOTP aus Einrichtung, Unlock, UI, Header-Modell und zugehörigen Status-/Faktorwerten entfernen.
-- Bestehende gespeicherte TOTP-Secrets kontrolliert aus dem Header entfernen; das Entfernen muss vor dem Speichern geprüft werden.
-- Keine Passwort-, Keyfile-, Biometrie- oder Recovery-Wege entfernen.
-- Tests für Header mit/ohne Alt-Secret, Unlock nach Bereinigung und Neustart ergänzen.
+## Befunde im aktuellen Code
 
-**Vorteil:** keine irreführende 2FA-Behauptung und kein dauerhaft gespeichertes Klartext-TOTP-Secret.  
-**Nachteil:** TOTP als Produktfunktion entfällt.
+- `VaultHeader.totpSecret` wird als Klartext im JSON-Header in SharedPreferences gespeichert.
+- `unlockVault` prüft TOTP vor der Passwort-KDF, aber der DEK-Wrapper wird weiterhin nur mit Passwort bzw. Passwort+Keyfile abgeleitetem KEK geöffnet.
+- Der Code kombiniert bereits `password` und `keyFileToken` zu einem Argon2id-Eingang. Die tatsächliche Einrichtung, UI, Schlüsseldatei-Generierung, Recovery und Tests müssen noch belegen, dass beide Faktoren erforderlich sind.
+- Bestehende `PASSWORD_AND_TOTP`-Header dürfen nicht stillschweigend als sichere 2FA gelten und nicht durch eine ungetestete Migration unbrauchbar werden.
 
-## Option B — echte kryptografische zweite Schutzkomponente
+## Begründung
 
-- Vor Umsetzung einen überprüfbaren Entwurf für die DEK-Freigabe genehmigen.
-- Der zweite Faktor muss kryptografisch notwendig sein; Passwort allein darf den als 2FA markierten DEK nicht freigeben.
-- TOTP-Secret geschützt speichern; Rate-Limit, Replay-Schutz, Gerätewechsel, Recovery und Wiederherstellung berücksichtigen.
-- End-to-End-Negativtests müssen zeigen, dass Passwort allein, falscher/abgelaufener/wiederverwendeter Code und alternative öffentliche Unlock-Pfade den DEK nicht freigeben.
+Ein sechsstelliger TOTP-Code hat nur etwa eine Million mögliche Werte. Bei einem lokalen Offline-Tresor gibt es keinen vertrauenswürdigen Server, der Angriffsversuche zentral begrenzt. Ein lokal gespeichertes TOTP-Secret kann zudem aus einer Header-Kopie entnommen werden. Daher ist TOTP allein keine geeignete kryptografische Ergänzung für den DEK-Wrapper.
 
-**Vorteil:** TOTP bleibt als echte zweite Komponente erhalten.  
-**Nachteil:** erheblicherer Eingriff in Schlüsselverpackung, Unlock, Recovery und Tests.
+## Umsetzungsvorgaben für V06/V06A/V06B
 
-## Freigabe
+1. Schlüsseldatei kryptografisch zufällig und hochentropisch erzeugen; keine PIN oder manuell gewählte Zeichenfolge als Ersatz.
+2. Zwei-Faktor-Modus erst nach erfolgreichem Test-Unlock mit Passwort **und** Schlüsseldatei aktivieren.
+3. Negativtests müssen zeigen, dass Passwort allein, Schlüsseldatei allein, falsche/gekürzte Datei und manipulierte Eingaben scheitern.
+4. Passwort-/Keyfile-Wechsel atomar ausführen; bei Fehler bleibt der vorherige Wrapper gültig.
+5. Kein Schlüsseldatei-Inhalt in Logs, Crashmeldungen, Backups oder Einstellungen im Klartext.
+6. TOTP-Felder erst nach Aufrufstelleninventur und getesteter Legacy-Behandlung entfernen oder klar als nicht-kryptografische Legacy-Prüfung kennzeichnen.
+7. Recovery bleibt ein eigenständiger, bewusst eingerichteter Pfad. Ein gerätegebundener Keystore-Schlüssel ist nicht automatisch portabel.
+8. Abnahme erfordert Unit-/Robolectric- und Android-Instrumentationstests; Gerätetests separat dokumentieren.
 
-**Noch keine Option ausgewählt.** Die Arbeitspakete V06A und V06B dürfen nicht als umgesetzt gelten, bis die Produktentscheidung ausdrücklich feststeht und der entsprechende Pfad im Code nachweislich implementiert wurde.
+## Referenzen
+
+- Android Keystore: https://developer.android.com/privacy-and-security/keystore
+- WebAuthn PRF (Authenticator-Kompatibilität ist nicht universell): https://github.com/w3c/webauthn/blob/main/explainers/prf-extension.md
