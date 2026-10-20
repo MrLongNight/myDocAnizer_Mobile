@@ -5,9 +5,9 @@
 | Kennzahl | Aktueller Stand |
 |---|---|
 | Micro-APs insgesamt | **119** |
-| Einzelstatus dokumentiert | **35** |
-| Einzelstatus noch abzugleichen | **84** |
-| Dokumentierte Statusverteilung | 1 abgenommen · 1 getestet · 24 Patch erstellt · 3 blockiert · 6 nicht gestartet |
+| Einzelstatus dokumentiert | **37** |
+| Einzelstatus noch abzugleichen | **82** |
+| Dokumentierte Statusverteilung | 1 abgenommen · 1 getestet · 24 Patch erstellt · 2 blockiert · 8 nicht gestartet · 1 ADR freigegeben |
 | Tests laut Statusbericht | 22 Testklassen vorhanden; daraus folgt keine automatische Abnahme aller Arbeitspakete |
 | Build/App-Start | Laut letztem Statusbericht stabil; durch diese reine Planungsänderung nicht erneut ausgeführt |
 
@@ -492,9 +492,9 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 
 ---
 
-## Einzelstatus – 35 erfasste von 119 Micro-APs
+## Einzelstatus – 37 erfasste von 119 Micro-APs
 
-**Hinweis zur Vollständigkeit:** Die Tabelle bildet 35 protokollierte Einzelstände ab. Weitere 84 im Dokument definierte Micro-APs haben hier noch keinen expliziten Status. Das ist eine Dokumentationslücke, keine Aussage darüber, ob sie bereits umgesetzt wurden.
+**Hinweis zur Vollständigkeit:** Die Tabelle bildet 37 protokollierte Einzelstände ab. Weitere 82 im Dokument definierte Micro-APs haben hier noch keinen expliziten Status. Das ist eine Dokumentationslücke, keine Aussage darüber, ob sie bereits umgesetzt wurden.
 
 
 
@@ -505,8 +505,10 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | V02 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V03 |
 | V03 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V04 |
 | V04 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V05 |
-| V05 | BLOCKIERT | – | Ja | Technischer Entwurf für optionale 2FA offen | Sicheren Faktor und Offline-Angriffsmodell belegen |
-| V06A | NICHT GESTARTET | – | Nein | Optionalen 2FA-Modus konfigurieren | V05/V06 abschließen |
+| V05 | ADR FREIGEGEBEN | docs/security/adr-002-totp-decision.md | Ja | Optionale 2FA: Passwort + zufällige Schlüsseldatei; TOTP ist kein kryptografischer Faktor | V06 |
+| V06 | NICHT GESTARTET | – | Nein | Passwort+Keyfile im tatsächlichen Unlock-Pfad absichern; Legacy-TOTP nicht als echte 2FA zählen | V05 |
+| V06A | NICHT GESTARTET | – | Nein | Optionalen 2FA-Modus konfigurieren und erst nach Test-Unlock aktivieren | V05/V06 abschließen |
+| V06B | NICHT GESTARTET | – | Nein | Beide Faktoren müssen den echten DEK-Wrapper schützen; Passwort allein darf nicht genügen | V05/V06/V06A |
 | V07 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V08 |
 | V08 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V09 |
 | V09 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V10 |
