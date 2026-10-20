@@ -2,6 +2,8 @@ package com.example.ui.views.wizard
 
 import android.content.Context
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -64,7 +66,7 @@ data class SecurityInfoContent(
  *
  * 4 Phasen:
  * 1. Grundlegende Stufe wählen (A: Keine | B: 1-Faktor | C: 2-Faktoren) mit Auswirkung & Info-Popups
- * 2. Faktoren festlegen (Master-Passwort, Schlüsseldatei .key, TOTP-Authenticator)
+ * 2. Faktoren festlegen (Master-Passwort und Schlüsseldatei .key)
  * 3. Notfall-Absicherung (BIP-39, Notfall-Kit PDF, Shamir 2-von-3, Notfall-Code, Keine) mit Info-Popups
  * 4. App-Zugriff & Biometrie absichern (Fingerabdruck / Face Unlock, Auto-Lock, Zusammenfassung)
  */
@@ -101,11 +103,22 @@ fun SecurityWizardStep(
     // Schlüsseldatei State
     var keyFileToken by remember { mutableStateOf(vaultSecManager.generateKeyFileToken()) }
     var keyFileExported by remember { mutableStateOf(false) }
-
-    // TOTP State
-    var totpSecret by remember { mutableStateOf(vaultSecManager.generateTotpSecret()) }
-    var totpInputCode by remember { mutableStateOf("") }
-    var totpVerified by remember { mutableStateOf(false) }
+    var keyFileExportMessage by remember { mutableStateOf<String?>(null) }
+    val keyFileExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        if (uri == null) {
+            keyFileExportMessage = "Export abgebrochen."
+        } else {
+            keyFileExportMessage = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { stream ->
+                    stream.write(keyFileToken.toByteArray(Charsets.UTF_8))
+                } ?: error("Datei konnte nicht geschrieben werden")
+                keyFileExported = true
+                "Schlüsseldatei gespeichert. Bewahre sie getrennt vom Smartphone auf."
+            }.getOrElse { "Schlüsseldatei konnte nicht gespeichert werden." }
+        }
+    }
 
     // Google Password Manager & Passkey State
     val coroutineScope = rememberCoroutineScope()
@@ -200,11 +213,8 @@ fun SecurityWizardStep(
             }
         }
         VaultSecurityTier.TWO_FACTOR -> {
-            if (selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE) {
-                isPasswordMatching && keyFileToken.isNotBlank()
-            } else if (selectedFactorType == VaultFactorType.PASSWORD_AND_TOTP) {
-                isPasswordMatching && (totpVerified || totpInputCode.length == 6)
-            } else isPasswordMatching
+            selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE &&
+                isPasswordMatching && keyFileToken.matches(Regex("[A-Fa-f0-9]{64}"))
         }
         null -> false
     }
@@ -397,7 +407,7 @@ fun SecurityWizardStep(
             // OPTION C: Verschlüsselung mit zwei Faktoren
             SecurityTierCard(
                 title = "C) 2-Faktor Schutz (2FA)",
-                subtitle = "Zwei Faktoren zwingend: Master-Passwort + Schlüsseldatei (.key) oder TOTP Authenticator.",
+                subtitle = "Zwei Faktoren zwingend: Master-Passwort UND separate zufällige Schlüsseldatei (.key).",
                 icon = Icons.Default.VpnKey,
                 badge = "2FA Höchste Stufe",
                 isSelected = selectedTier == VaultSecurityTier.TWO_FACTOR,
@@ -407,8 +417,8 @@ fun SecurityWizardStep(
                         title = "Stufe C: Zwei-Faktor-Authentifizierung (2FA)",
                         badge = "Maximaler Schutz",
                         whyRecommended = "Für hochsensible Geschäfts- oder Vertraulichkeitsdaten.",
-                        consequences = "Kombiniert zwei unabhängige Faktoren: 'Etwas, das du weißt' (Passwort) + 'Etwas, das du besitzt' (Schlüsseldatei oder Authenticator-App).",
-                        details = "Selbst wenn ein Angreifer Ihr Passwort erfährt, bleibt der Tresor ohne den zweiten Faktor versiegelt. Komplett lokal ohne Cloud-Kosten!"
+                        consequences = "Kombiniert Wissen (Master-Passwort) und Besitz (separate zufällige Schlüsseldatei). TOTP wird nicht als kryptografischer Faktor angeboten.",
+                        details = "Selbst wenn ein Angreifer Ihr Passwort erfährt, bleibt der Tresor ohne die separate Schlüsseldatei versiegelt. Die Schlüsseldatei muss sicher und getrennt aufbewahrt werden."
                     )
                 },
                 tag = "card_tier_two_factor"
@@ -424,7 +434,7 @@ fun SecurityWizardStep(
                     } else {
                         // Passende Faktorenart für nächsten Schritt vorwählen
                         if (tier == VaultSecurityTier.TWO_FACTOR) {
-                            if (selectedFactorType != VaultFactorType.PASSWORD_AND_KEYFILE && selectedFactorType != VaultFactorType.PASSWORD_AND_TOTP) {
+                            if (selectedFactorType != VaultFactorType.PASSWORD_AND_KEYFILE) {
                                 selectedFactorType = VaultFactorType.PASSWORD_AND_KEYFILE
                             }
                         } else {
@@ -532,15 +542,6 @@ fun SecurityWizardStep(
                                 tag = "factor_card_pass_keyfile"
                             )
 
-                            FactorOptionCard(
-                                title = "Passwort + Authenticator-App (TOTP)",
-                                subtitle = "Sicherheit durch Wissen (Master-Passwort) UND dynamischen 6-stelligen Einmalcode",
-                                icon = Icons.Default.QrCode,
-                                badge = "2FA Authenticator",
-                                isSelected = selectedFactorType == VaultFactorType.PASSWORD_AND_TOTP,
-                                onClick = { selectedFactorType = VaultFactorType.PASSWORD_AND_TOTP },
-                                tag = "factor_card_pass_totp"
-                            )
                         }
                     }
 
@@ -627,8 +628,7 @@ fun SecurityWizardStep(
 
                     // EINGABE: MASTER-PASSWORT (falls relevant)
                     if (selectedFactorType == VaultFactorType.PASSWORD ||
-                        selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE ||
-                        selectedFactorType == VaultFactorType.PASSWORD_AND_TOTP
+                        selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE
                     ) {
                         HorizontalDivider()
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -849,6 +849,7 @@ fun SecurityWizardStep(
                                 onClick = {
                                     clipboardManager.setText(AnnotatedString(keyFileToken))
                                     keyFileExported = true
+                                    keyFileExportMessage = "Token kopiert. Speichere ihn sicher und getrennt vom Gerät."
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -857,9 +858,18 @@ fun SecurityWizardStep(
                                 Text("Token kopieren")
                             }
                             Button(
+                                onClick = { keyFileExportLauncher.launch("myDocAnizer-vault-key.key") },
+                                modifier = Modifier.weight(1f).testTag("btn_export_vault_keyfile")
+                            ) {
+                                Icon(Icons.Default.SaveAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Als .key speichern")
+                            }
+                            Button(
                                 onClick = {
                                     keyFileToken = vaultSecManager.generateKeyFileToken()
                                     keyFileExported = false
+                                    keyFileExportMessage = null
                                 },
                                 modifier = Modifier.weight(1f)
                             ) {
@@ -868,74 +878,8 @@ fun SecurityWizardStep(
                                 Text("Neu generieren")
                             }
                         }
-                    }
-
-                    // EINGABE: TOTP AUTHENTICATOR
-                    if (selectedFactorType == VaultFactorType.PASSWORD_AND_TOTP) {
-                        HorizontalDivider()
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = "Faktor 2: Authenticator-App (TOTP)",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            IconButton(onClick = {
-                                activeInfoDialog = SecurityInfoContent(
-                                    title = "Authenticator-App (TOTP)",
-                                    badge = "Besitzfaktor / 2FA",
-                                    whyRecommended = "State of the Art für sichere Zwei-Faktor-Authentifizierung ohne SMS-Kosten oder Internetzwang.",
-                                    consequences = "Erzeuge alle 30 Sekunden einen neuen 6-stelligen Code in Apps wie Google Authenticator, Aegis oder Bitwarden.",
-                                    details = "100% offline, kein externer Server erforderlich, offener RFC 6238 Standard."
-                                )
-                            }) {
-                                Icon(Icons.Default.Info, contentDescription = "Info", tint = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("Geheimer Einrichtungs-Schlüssel (Base32):", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(
-                                    totpSecret.chunked(4).joinToString(" "),
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
-
-                        FilledTonalButton(
-                            onClick = {
-                                clipboardManager.setText(AnnotatedString(totpSecret))
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Schlüssel in Authenticator-App einfügen")
-                        }
-
-                        // Code-Testfeld
-                        OutlinedTextField(
-                            value = totpInputCode,
-                            onValueChange = {
-                                totpInputCode = it.take(6)
-                                if (it.length == 6) {
-                                    totpVerified = vaultSecManager.verifyTotpCode(totpSecret, it)
-                                }
-                            },
-                            label = { Text("6-stelligen Test-Code eingeben") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        if (totpVerified) {
-                            Text("✅ Code erfolgreich bestätigt! 2FA ist einsatzbereit.", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        keyFileExportMessage?.let { message ->
+                            Text(message, style = MaterialTheme.typography.labelSmall, color = if (keyFileExported) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                         }
                     }
 
@@ -1328,7 +1272,7 @@ fun SecurityWizardStep(
                                         bip39Words = if (selectedRecovery == VaultRecoveryMethod.BIP39_WORDS) generatedWords else null,
                                         securityTier = selectedTier ?: VaultSecurityTier.ONE_FACTOR,
                                         factorType = selectedFactorType,
-                                        totpSecret = if (selectedFactorType == VaultFactorType.PASSWORD_AND_TOTP) totpSecret else null,
+                                        totpSecret = null,
                                         keyFileToken = if (selectedFactorType == VaultFactorType.KEYFILE || selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE) keyFileToken else null,
                                         recoveryCode = if (selectedRecovery == VaultRecoveryMethod.RECOVERY_CODE) recoveryCode else null,
                                         autoLockMinutes = autoLockMinutes
