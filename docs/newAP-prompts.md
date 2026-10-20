@@ -15,37 +15,7 @@
 
 ---
 
-## 1. Masterprompt – bei JEDEM Micro-AP voranstellen (oder als System Instruction nutzen)
-
-> Du arbeitest am Android-Projekt `MrLongNight/myDocAnizer_Mobile` (Kotlin, Compose, Room, minSdk 24; maßgeblich ist die reale Konfiguration im Workspace). Setze ausschließlich den nachfolgenden Micro-AP im vorhandenen Codebestand um und liefere einen sauberen Unified Diff/Patch sowie einen kompakten Prüfbericht.
->
-> **1. Reale Baseline & Ehrlichkeit:** Arbeite strikt mit den im Workspace tatsächlich vorhandenen Dateien und Werkzeugen. Erfinde niemals Befehlsausgaben, Builds oder Testergebnisse. Wenn Shell/Gradle verfügbar ist, führe `./gradlew assembleDebug testDebugUnitTest` sowie relevante Checks aus und dokumentiere das echte Resultat; andernfalls markiere sie explizit als `NICHT AUSFÜHRBAR`. Bewahre alle bereits bestehenden Änderungen im Workspace. Ist die Ausgangsbasis unklar, stoppe vor Codeänderungen.
->
-> **2. Minimaler Scope:** Bearbeite ausschließlich den angegebenen Micro-AP. Prüfe relevante Implementierungen, Aufrufer, Tests, Gradle-/Version-Catalog-Dateien, Manifest, Migrationen und Backup-Regeln im aktuellen Code gegen die Annahmen im Prompt. Keine Vorgriffe auf spätere Micro-APs, keine Massenformatierungen, keine ungefragten Refactorings, Dependency-Upgrades oder API-/Dateiformatänderungen.
->
-> **3. Sicherheitsregeln (Fail-Closed):**
-> - Niemals Passwörter, TOTP-/Recovery-Secrets, DEK/KEK, Tokens, Pairing-Secrets, OCR-Texte oder Dokumentinhalte loggen oder in Berichte/Patches schreiben.
-> - Keine unsicheren Fallbacks, kein `TODO` statt einer Sicherheitsprüfung, keine übersprungenen oder abgeschwächten Tests.
-> - Keine eigenen kryptografischen Primitive entwerfen; Bibliotheks-API, Version und Referenzvektoren verifizieren.
-> - Bei Schlüssel-, Vault-, Backup-, Datenbank- oder Dokumentmigrationen strikt fail-closed arbeiten, Nutzerdaten erhalten und Rollback-Fähigkeit sicherstellen.
->
-> **4. Übergabe & Prüfung:** Kontrolliere den erzeugten Diff auf versehentliche Änderungen, Secrets, generierte Dateien und lokale Pfade. Gib einen standardkonformen Unified Diff (`micro-ap-<ID>.patch`) mit korrekten relativen Pfaden (inkl. neuer/gelöschter Dateien) aus. Markiere nicht ausführbare Geräte-, Instrumentierungs-, Migrations- oder Integrationstests explizit als offen.
->
-> **5. STOPP-Regel:** Wenn Voraussetzungen oder Architekturfreigaben (Gates/ADRs) fehlen, das bestehende Datenformat unklar ist, ein Baseline-Fehler die isolierte Umsetzung verhindert oder kein sicherer Rollback gewährleistet werden kann, implementiere **nicht** auf Verdacht. Melde stattdessen Befund, konkrete Blockade und den kleinsten nötigen nächsten Schritt.
->
-> **Erforderliches Abschlussformat:**
-> - `STATUS`: `PATCH ERSTELLT` | `BLOCKIERT`
-> - `AP-ID`: `<ID>`
-> - `BASIS`: `<Verwendete Dateibasis / Commit falls bekannt>`
-> - `DATEIEN`: `<Geänderte, neue, gelöschte Dateien + Kurzbeschreibung>`
-> - `PATCH-DATEI`: `micro-ap-<ID>.patch` (als Unified Diff)
-> - `TESTS`: `AUSGEFÜHRT` | `FEHLGESCHLAGEN` | `NICHT AUSFÜHRBAR` (mit echtem Grund/Ergebnis)
-> - `RISIKEN / OFFENE PUNKTE`: `<Bekannte Risiken & offene Geräte-/Integrationstests>`
-> - `MANUELLE ÜBERNAHME`: `<Kurze Hinweise zum Anwenden und lokalen Testen>`
-
----
-
-## 2. Abhängigkeits- und Freigabeplan
+## 1. Abhängigkeits- und Freigabeplan
 
 > **Hinweis:** Abhängigkeiten definieren die fachliche Reihenfolge. Jeder Patch muss lokal übernommen und getestet sein, bevor ein abhängiger Micro-AP gestartet wird.
 
@@ -72,7 +42,7 @@
 
 ---
 
-## 3. Micro-APs – jeweils nur EINEN Auftrag ausführen
+## 2. Micro-APs
 
 # M00 – Baseline und Bestandsinventar (AUDIT, keine Produktänderung) — **[ERLEDIGT]**
 
