@@ -1,5 +1,8 @@
 package com.example.ui.views
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import java.io.ByteArrayOutputStream
 import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -62,6 +65,35 @@ fun AppLockScreen(
     
     var enteredTotpCode by remember { mutableStateOf("") }
     var enteredKeyFileToken by remember { mutableStateOf("") }
+    var keyFileImportMessage by remember { mutableStateOf<String?>(null) }
+    val keyFileImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) {
+            keyFileImportMessage = "Schlüsseldatei-Auswahl abgebrochen."
+        } else {
+            val importedToken = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    val output = ByteArrayOutputStream()
+                    val buffer = ByteArray(512)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        require(total <= 4096) { "Datei ist zu groß" }
+                        output.write(buffer, 0, count)
+                    }
+                    String(output.toByteArray(), Charsets.UTF_8).trim()
+                } ?: error("Datei kann nicht gelesen werden")
+            }.getOrNull()
+            if (importedToken != null && importedToken.matches(Regex("[A-Fa-f0-9]{64}"))) {
+                enteredKeyFileToken = importedToken
+                keyFileImportMessage = "Schlüsseldatei geladen."
+            } else {
+                enteredKeyFileToken = ""
+                keyFileImportMessage = "Ungültige Schlüsseldatei. Bitte die originale .key-Datei auswählen."
+            }
+        }
+    }
 
     val isBiometricAvailable = remember {
         viewModel.biometricAuthManager.checkBiometricAvailability() == com.example.service.BiometricAuthManager.BiometricHardwareStatus.AVAILABLE
@@ -156,10 +188,25 @@ fun AppLockScreen(
                         OutlinedTextField(
                             value = enteredKeyFileToken,
                             onValueChange = { enteredKeyFileToken = it },
-                            label = { Text("Schlüsseldatei-Token") },
+                            label = { Text("Schlüsseldatei-Token (64 Hex-Zeichen)") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth().testTag("input_lock_keyfile")
                         )
+                        OutlinedButton(
+                            onClick = { keyFileImportLauncher.launch(arrayOf("application/octet-stream", "text/plain", "application/*")) },
+                            modifier = Modifier.fillMaxWidth().testTag("btn_import_vault_keyfile")
+                        ) {
+                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Schlüsseldatei (.key) laden")
+                        }
+                        keyFileImportMessage?.let { message ->
+                            Text(
+                                text = message,
+                                color = if (message == "Schlüsseldatei geladen.") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
 
                     passwordError?.let { err ->
