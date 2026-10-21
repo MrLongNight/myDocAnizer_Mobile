@@ -143,3 +143,47 @@ Ein konkreter Risikopunkt ist `LlamaCppInferenceEngine.kt`: Die Initialisierung 
 Eine Funktion gilt erst als produktiv mit lokalem LLM, wenn ein reproduzierbarer Test belegt, dass ein echtes GGUF-Modell über die im Release enthaltene native llama.cpp-Bibliothek auf einem unterstützten Android-Gerät ausgeführt wird und das Ergebnis tatsächlich aus dieser Inferenz stammt. Quellcode-Klassen, Modellkatalogeinträge, GGUF-Magic-Bytes, erfolgreiche UI-Flows oder Heuristiktests allein sind kein ausreichender Nachweis.
 
 **Wichtig:** Dieses Dokument ist ein Maßnahmenkonzept auf Basis der untersuchten Repository-Dateien. Es behauptet nicht, dass die native Bibliothek fehlt oder dass alle KI-Funktionen Dummy-Code sind; diese Aussagen müssen durch das P0-Audit und reale Geräte-/APK-Tests bestätigt werden.
+
+
+## Ergänzender Code-Audit: reale Funktionslücken und intelligente Regeln
+
+Dieser Abschnitt basiert auf dem direkten Lesen der Implementierungen und ergänzt das oben beschriebene P0-Audit. Er trennt nachweisbare Codebefunde von noch erforderlichen Geräte-/APK-Nachweisen.
+
+### Bestätigte Befunde
+
+1. **Regelgenerator ist derzeit überwiegend Heuristik, kein allgemeiner LLM-Aufruf.**  
+   In `LlmService.generateRulesFromPrompt()` (ab etwa Zeile 2296) wird die Beschreibung über `descLower.contains(...)` in fest codierte Domänenzweige geleitet (Mobilfunk, Energie, Versicherungen/Kfz, Gehalt, Steuern). Wenn nichts passt, erzeugt ein dynamischer Parser aus den ersten Wörtern eine generische Regel und setzt Felder/Kategorien anhand einfacher Prüfungen wie `isBill` und `isContract`. Diese Funktion ruft in ihrer sichtbaren Implementierung weder `executeInference()` noch `executeFirstRunExtraction()` auf. Die Bezeichnung „KI-Regelgenerator“ ist daher für beliebige freie Nutzerbeschreibungen irreführend.
+2. **Regelabgleich ist ein einfacher deterministischer Treffer.**  
+   `DocRuleRepository.matchRule()` nimmt die erste aktivierte Regel, bei der alle `matchKeywords` vorkommen und kein `excludeKeyword` vorkommt. Es gibt keine semantische Ähnlichkeit, Gewichtung, Konfliktauflösung, Regelpriorität/Scoring oder Modellprüfung. `findMatchingOrSimilarRule()` prüft nur Absender-/Namensstrings.
+3. **Fallback-Inferenz führt kein Modell aus.**  
+   `LlamaCppInferenceEngine.executeFallbackInference()` ruft `createHeuristicFallbackResponse()` auf und serialisiert das Ergebnis als JSON. Es ignoriert dabei den übergebenen `systemPrompt`. Damit kann die Methode zwar den erwarteten Datenvertrag bedienen, aber keine generative oder semantische KI-Aufgabe erfüllen.
+4. **Ein vorhandenes GGUF-Modell garantiert noch keine echte Inferenz.**  
+   `executeInference()` ruft die JNI-Methode nur auf, wenn `isNativeLibLoaded` wahr ist; andernfalls fällt sie auf `executeFallbackInference()` zurück – auch wenn die GGUF-Datei existiert. Außerdem fällt der Catch-Zweig nach einem Inferenzfehler still auf dieselbe Heuristik zurück. Das kann einen erfolgreichen KI-Lauf vortäuschen. Der Audit-Logger setzt im selben Ablauf außerdem einen festen Confidence-Wert von `0.98f`, unabhängig von der tatsächlichen Ergebnisqualität. Das muss durch eine explizite Engine-Quelle, Fehlerstatus und echte Qualitätsmessung ersetzt werden.
+5. **Native Android-Integration ist im geprüften Modul nicht nachgewiesen.**  
+   In `app/src/main` ist in der sichtbaren Inhaltsliste kein `cpp/`- oder `jniLibs/`-Verzeichnis vorhanden; in `app/build.gradle.kts` ist keine `externalNativeBuild`-/CMake-Konfiguration sichtbar. Die Kotlin-Datei deklariert `nativeExecuteLlamaWithGrammar(...)`, aber die zugehörige C/C++-Implementierung und ihre Paketierung konnten im geprüften Modul nicht bestätigt werden. Das beweist allein noch nicht, dass keine Bibliothek über einen anderen Pfad eingebunden wird; die Release-APK/AAB- und Dependency-Inventur bleibt deshalb ein Pflichtschritt.
+6. **Es gibt mindestens zwei Dokumenten-Assistentenpfade mit unterschiedlicher Intelligenz.**  
+   `LlmService.queryDocumentAssistant()` delegiert direkt an `LlmToolExecutor.executeDocumentAssistant()`, eine Kotlin-Regel-/Textlogik ohne Inferenzaufruf. `queryDocumentAssistantWithFollowUps()` ruft dagegen bei vorhandener Modelldatei `executeChatInferenceWithTools()` auf; dieses landet wiederum in `executeInference()` und kann deshalb bei nicht geladener nativer Bibliothek ebenfalls in den heuristischen Fallback wechseln.
+7. **Dokumentenverarbeitung hat bereits einen sinnvollen deterministischen Pfad.**  
+   In `DocAnizerViewModel` wird beim Scan zuerst `ruleRepo.matchRule(ocrText)` ausgeführt. Bei einem Treffer wird das Dokument automatisch über `saveProcessedBitmapWithRule()` gespeichert; nur ohne Treffer folgt `llmService.classifyDocumentText()` und danach ein Vorschlagsdialog. Die Stapelverarbeitung in `DmsManager` verwendet ebenfalls zuerst die Regel und danach die Klassifizierung. Dieser robuste, unabhängige Regel-/OCR-Pfad soll erhalten bleiben – er darf aber nicht als Ersatz für echte LLM-Funktionen dienen.
+8. **Die Regelverfeinerung hat einen Inferenzaufruf, ist aber nicht ausreichend abgesichert.**  
+   `LlmService.refineRuleSuggestion()` baut einen Prompt und ruft `executeInference()` auf, ergänzt die Ergebnisse anschließend aber auch durch direkte Regex-/Key-Value-Auswertung der Nutzeranweisung. Sobald die Engine in den Fallback geht, entsteht keine echte Modellverbesserung. Das Ergebnis muss vor dem Speichern gegen Schema, vorhandene Regeln, OCR-Belege und Konflikte validiert werden.
+
+### Zielverhalten für smarte Regeln
+
+- **Freie Sprache → strukturierter Regelentwurf:** Das lokale LLM übersetzt beliebige Nutzerabsichten in ein versioniertes JSON-Schema für Regelname, Zweck, positive/negative Kriterien, Absender, Dokumenttyp, Kategorie, Ordnerpfad, Tags, benutzerdefinierte Felder, Priorität und Sicherheits-/Bestätigungsbedarf. Keine fest codierten Domänenzweige als Hauptlogik.
+- **Bestehende Regeln verstehen:** Vor einem neuen Entwurf werden passende Regeln samt Beispieldokumenten/Statistiken geladen. Das Modell entscheidet semantisch, ob eine Regel wiederverwendet, präzisiert, zusammengeführt oder als neue Regel vorgeschlagen werden soll. Kotlin validiert und führt Änderungen erst nach festgelegter Freigabe aus.
+- **Semantischer Dokumentabgleich:** Regelkandidaten anhand von OCR-Inhalt, Absender, Layout-/Feldhinweisen und Dokumentkontext bewerten. Ein LLM kann bei mehrdeutigen Treffern klassifizieren; der deterministische Matcher bleibt schneller Erstfilter und Offline-Fallback. Ergebnisse müssen einen Herkunftsstatus (Regel, LLM, OCR/Heuristik, Nutzer) tragen.
+- **Automatische Anwendung mit Leitplanken:** Sichere, eindeutige, bereits freigegebene Regeln dürfen automatisch angewendet werden. Neue, geänderte oder mehrdeutige Regeln werden als Vorschlag angezeigt. Schreibende Aktionen erhalten Konfliktprüfung, Undo/Audit und eine nachvollziehbare Begründung.
+- **Regeln aus Nutzerkorrekturen verbessern:** Korrekturen als Feedback erfassen, wiederkehrende Muster erkennen und daraus versionierte Regeländerungen vorschlagen. Keine stille Selbständerung aktiver Regeln und kein automatisches Lernen aus einem einzelnen möglicherweise falsch erkannten Dokument.
+- **Unabhängiger Backup-Pfad:** Regel-/Regex-/OCR-Verarbeitung muss auch ohne installiertes Modell und bei Fehlern der nativen Engine vollständig funktionsfähig bleiben. UI und Logs müssen explizit anzeigen, dass das Ergebnis aus dem Fallback stammt; ein Fallback-Ergebnis darf nie als echte LLM-Inferenz ausgewiesen werden.
+- **Nicht Bestandteil dieser Aufgabe:** Premium-Lizenzierung, Feature-Gating und Bezahl-UI. Das spätere Geschäftsmodell ändert nichts an der jetzigen technischen Umsetzung und ist kein Grund, LLM-Aufrufe zu blockieren.
+
+### Zusätzliche Abnahmetests für Regeln und Assistenten
+
+- Gleiche Absicht in unterschiedlichen Formulierungen erzeugt semantisch äquivalente Regelentwürfe.
+- Eine unbekannte Firma/Dokumentart funktioniert ohne Codeänderung und ohne Treffer in einer vordefinierten Keyword-Liste.
+- Bestehende ähnliche oder widersprüchliche Regeln werden erkannt und nicht blind dupliziert.
+- Positive und negative Kriterien, Pflichtfelder und Zielpfad sind maschinenlesbar validiert.
+- Native Engine nicht verfügbar: der Backup-Pfad funktioniert, wird als heuristisch gekennzeichnet und meldet keinen LLM-Erfolg.
+- Native Engine verfügbar: Testinstrumentierung belegt, dass Regelgenerierung, Regelverfeinerung und Chat tatsächlich Tokens aus dem ausgewählten GGUF-Modell verwenden.
+- Ein neues Modell-/Engine-Problem darf nicht durch einen festen Confidence-Wert oder Erfolgsmeldung verdeckt werden.
