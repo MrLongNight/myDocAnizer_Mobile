@@ -106,10 +106,14 @@ object VaultHeaderParserV2 {
             if (dekBytes.size != 48) return null // 32-Byte-DEK plus 16-Byte-GCM-Tag
 
             val securityTier = json.optString("securityTier", "ONE_FACTOR")
-            if (securityTier !in listOf("UNENCRYPTED", "ONE_FACTOR", "TWO_FACTOR")) return null
-
             val factorType = json.optString("factorType", "PASSWORD")
-            if (factorType !in listOf("NONE", "PASSWORD", "KEYFILE", "PASSWORD_AND_KEYFILE", "PASSWORD_AND_TOTP", "PASSKEY")) return null
+            // The v2 crypto implementation must reject factor declarations it cannot enforce.
+            val supportedFactorPolicy = when (securityTier) {
+                "ONE_FACTOR" -> factorType == "PASSWORD"
+                "TWO_FACTOR" -> factorType == "PASSWORD_AND_KEYFILE"
+                else -> false
+            }
+            if (!supportedFactorPolicy) return null
 
             val autoLockMinutes = json.optInt("autoLockMinutes", 5)
             if (autoLockMinutes < 0 || autoLockMinutes > 1440) return null
