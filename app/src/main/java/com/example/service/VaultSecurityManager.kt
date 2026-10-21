@@ -276,7 +276,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         password: String,
         salt: ByteArray,
         iterations: Int = 2,
-        memoryKb: Int = 19456 // 19 MiB für neue Vaults; Legacy-Parameter werden aus Header geladen
+        memoryKb: Int = 19456 // V2-Argon2id: mindestens 19 MiB
     ): ByteArray {
         val passwordChars = password.toCharArray()
         return try {
@@ -1494,10 +1494,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         return sb.toString()
     }
 
-    /**
-     * Legacy v1 Emergency-PIN KDF. Retain the original parameters for compatibility with
-     * the existing v1 header format; new Emergency-PDF kits use RecoveryPayloadEngine instead.
-     */
+    /** Derives the emergency-PIN key for the standalone emergency-kit workflow. */
     private fun deriveKekFromPin(pin: String, salt: ByteArray): ByteArray {
         val pinChars = pin.toCharArray()
         val spec = PBEKeySpec(pinChars, salt, 50_000, 256)
@@ -1693,11 +1690,8 @@ object TotpEngine {
 // =============================================================================
 
 /**
- * Gepflegte, versionsfixierte Argon2id-Implementierung via Bouncy Castle (Argon2id v1.3).
- * Erfüllt alle V02-Sicherheitsanforderungen:
- * - Mindestens m=19 MiB (19456 KB), t=2, p=1 für neue Parameter.
- * - Beibehaltung des Legacy-Pfades (16384 KB) für v1-Kompatibilität.
- * - Strenge Parameter-Validierung und Schutz vor RAM-Spitzen durch Synchronisation.
+ * V2-only Argon2id implementation using Bouncy Castle Argon2id v1.3.
+ * Requires at least 19 MiB, t=2–10, and strict bounds to prevent unsafe memory use.
  */
 object Argon2idEngine {
     private val argon2Mutex = Any()
@@ -1706,13 +1700,11 @@ object Argon2idEngine {
         password: CharArray,
         salt: ByteArray,
         iterations: Int = 2,
-        memoryKb: Int = 19456, // Mindestens 19 MiB für neue Parameter, kompatibel mit 16384 für Legacy v1
+        memoryKb: Int = 19456, // Mindestens 19 MiB für V2
         tagLength: Int = 32
     ): ByteArray {
-        // V1 uses exactly the historical 16 MiB / t=2 tuple. New parameters
-        // must use at least 19 MiB / t=2. Never silently clamp hostile values.
-        val isLegacyV1 = memoryKb == 16384 && iterations == 2
-        require(isLegacyV1 || (memoryKb in 19456..262144 && iterations in 2..10)) {
+        // Only the current V2 parameter policy is accepted. Never silently clamp hostile values.
+        require(memoryKb in 19456..262144 && iterations in 2..10) {
             "Unsupported Argon2id parameters: memory=$memoryKb KB, iterations=$iterations"
         }
         require(salt.size == 16) { "Argon2id salt must be exactly 16 bytes" }
