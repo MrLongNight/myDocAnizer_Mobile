@@ -11,6 +11,7 @@ import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -26,7 +27,10 @@ object WebDavClient {
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
-        .followRedirects(true)
+        // Redirects are disabled so credentials and uploads cannot silently follow
+        // a server redirect to another host or transport scheme.
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
 
     /**
@@ -96,7 +100,7 @@ object WebDavClient {
     suspend fun createFolder(url: String, user: String, pass: String, folderName: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             val cleanUrl = sanitizeUrl(url)
-            val folderUrl = if (cleanUrl.endsWith("/")) "$cleanUrl$folderName/" else "$cleanUrl/$folderName/"
+            val folderUrl = buildChildUrl(cleanUrl, folderName, directory = true)
             val credential = if (user.isNotBlank() || pass.isNotBlank()) Credentials.basic(user, pass) else null
 
             val request = Request.Builder()
@@ -136,7 +140,7 @@ object WebDavClient {
             }
 
             val cleanUrl = sanitizeUrl(url)
-            val targetUrl = if (cleanUrl.endsWith("/")) "$cleanUrl$remoteFileName" else "$cleanUrl/$remoteFileName"
+            val targetUrl = buildChildUrl(cleanUrl, remoteFileName)
             val credential = if (user.isNotBlank() || pass.isNotBlank()) Credentials.basic(user, pass) else null
 
             // Step 1: Check if file already exists and get its ETag/Last-Modified
@@ -198,7 +202,7 @@ object WebDavClient {
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
             val cleanUrl = sanitizeUrl(url)
-            val targetUrl = if (cleanUrl.endsWith("/")) "$cleanUrl$remoteFileName" else "$cleanUrl/$remoteFileName"
+            val targetUrl = buildChildUrl(cleanUrl, remoteFileName)
             val credential = if (user.isNotBlank() || pass.isNotBlank()) Credentials.basic(user, pass) else null
 
             val request = Request.Builder()
@@ -224,12 +228,54 @@ object WebDavClient {
         }
     }
 
-    private fun sanitizeUrl(url: String): String {
-        var clean = url.trim()
-        if (clean.isBlank()) return ""
-        if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
-            clean = "https://$clean"
+    /**
+     * WebDAV carries account credentials and backup ciphertext only over HTTPS.
+     * An explicitly supplied HTTP URL is rejected rather than silently downgraded.
+     * A bare host is interpreted as HTTPS for convenience.
+     */
+    internal fun sanitizeUrl(url: String): String {
+        val clean = url.trim()
+        require(clean.isNotEmpty()) { "WebDAV-Server-URL darf nicht leer sein." }
+        require(clean.none { it.isISOControl() }) { "Ungültige WebDAV-URL." }
+
+        val scheme = Regex("^([A-Za-z][A-Za-z0-9+.-]*)://").find(clean)?.groupValues?.get(1)
+        require(scheme == null || scheme.equals("https", ignoreCase = true)) {
+            "WebDAV erfordert HTTPS; unverschlüsseltes HTTP wird nicht unterstützt."
         }
-        return clean
+        val candidate = if (scheme == null) "https://$clean" else clean
+        val parsed = candidate.toHttpUrlOrNull()
+            ?: throw IllegalArgumentException("Ungültige WebDAV-URL.")
+        require(parsed.isHttps) { "WebDAV erfordert HTTPS." }
+        require(parsed.username.isEmpty() && parsed.password.isEmpty()) {
+            "Zugangsdaten gehören nicht in die WebDAV-URL."
+        }
+        require(parsed.encodedQuery == null && parsed.fragment == null) {
+            "WebDAV-Basis-URL darf keine Query und kein Fragment enthalten."
+        }
+        return parsed.toString()
+    }
+
+    /**
+     * Add exactly one encoded path segment; do not allow a remote name to escape
+     * the configured WebDAV base path.
+     */
+    internal fun buildChildUrl(baseUrl: String, childName: String, directory: Boolean = false): String {
+        val name = childName.trim()
+        require(name.isNotEmpty() && name != "." && name != "..") {
+            "Ungültiger WebDAV-Datei- oder Ordnername."
+        }
+        require('/' !in name && '\\' !in name && name.none { it.isISOControl() }) {
+            "WebDAV-Datei- und Ordnernamen müssen einzelne Pfadsegmente sein."
+        }
+        val base = baseUrl.toHttpUrlOrNull()
+            ?: throw IllegalArgumentException("Ungültige WebDAV-Basis-URL.")
+        require(base.isHttps && base.username.isEmpty() && base.password.isEmpty()) {
+            "WebDAV-Ziele müssen HTTPS verwenden und dürfen keine URL-Zugangsdaten enthalten."
+        }
+        return base.newBuilder()
+            .addPathSegment(name)
+            .apply { if (directory) addPathSegment("") }
+            .build()
+            .toString()
     }
 }
