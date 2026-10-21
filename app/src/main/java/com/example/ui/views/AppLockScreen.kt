@@ -1,5 +1,6 @@
 package com.example.ui.views
 
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import java.io.ByteArrayOutputStream
@@ -142,24 +143,37 @@ fun AppLockScreen(
      * intentional: older saves may have used a different username than the one
      * currently shown in the password manager.
      */
-    suspend fun retrieveMasterPasswordFromManager(showErrors: Boolean) {
+    suspend fun retrieveMasterPasswordFromManager(
+        showErrors: Boolean,
+        onlyIfAvailable: Boolean = false
+    ) {
         if (isRetrievingPasswordManagerCredential) return
         isRetrievingPasswordManagerCredential = true
         if (showErrors) errorMessage = null
         try {
             val credentialManager = CredentialManager.create(activity ?: context)
-            val response = credentialManager.getCredential(
-                context = activity ?: context,
-                request = GetCredentialRequest(
-                    credentialOptions = listOf(
-                        GetPasswordOption(
-                            allowedUserIds = emptySet(),
-                            isAutoSelectAllowed = false,
-                            allowedProviders = emptySet()
-                        )
+            val request = GetCredentialRequest(
+                credentialOptions = listOf(
+                    GetPasswordOption(
+                        allowedUserIds = emptySet(),
+                        isAutoSelectAllowed = false,
+                        allowedProviders = emptySet()
                     )
                 )
             )
+            val response = if (onlyIfAvailable) {
+                // Candidate probing is UI-free and supported on Android 14+.
+                // On older releases, keep automatic launch disabled but retain the manual button.
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+                val prepared = credentialManager.prepareGetCredential(request)
+                if (!prepared.hasCredentialResults(PasswordCredential.TYPE_PASSWORD_CREDENTIAL)) return
+                credentialManager.getCredential(activity ?: context, prepared.pendingGetCredentialHandle)
+            } else {
+                credentialManager.getCredential(
+                    context = activity ?: context,
+                    request = request
+                )
+            }
             val credential = response.credential as? PasswordCredential
                 ?: throw IllegalStateException("Der Passwortmanager hat keinen Passwort-Eintrag zurückgegeben.")
             enteredPassword = credential.password
@@ -226,7 +240,10 @@ fun AppLockScreen(
             !vaultStatus.keyFileEnabled &&
             !vaultStatus.totpEnabled
         ) {
-            retrieveMasterPasswordFromManager(showErrors = false)
+            retrieveMasterPasswordFromManager(
+                showErrors = false,
+                onlyIfAvailable = true
+            )
         }
     }
 
