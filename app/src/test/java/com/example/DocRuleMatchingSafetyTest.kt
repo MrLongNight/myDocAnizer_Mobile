@@ -88,4 +88,19 @@ class DocRuleMatchingSafetyTest {
         )
     }
 
+    @Test
+    fun preExistingConflictsDoNotBlockAnUnrelatedNewRule() {
+        val existing = listOf(
+            rule("broad", "vodafone"),
+            rule("invoice", "vodafone", "rechnung")
+        )
+        assertEquals(
+            false,
+            DocRuleRepository.hasPotentialConflictForNewRules(
+                existing,
+                listOf(rule("allianz", "allianz"))
+            )
+        )
+    }
+
 }

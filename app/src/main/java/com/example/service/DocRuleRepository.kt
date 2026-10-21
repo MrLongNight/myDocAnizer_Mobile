@@ -90,6 +90,19 @@ class DocRuleRepository(private val context: Context) {
             }
         }
 
+        /** Only reject conflicts introduced by the proposed rules; legacy conflicts elsewhere must not block unrelated edits. */
+        fun hasPotentialConflictForNewRules(
+            existingRules: List<DocRule>,
+            proposedRules: List<DocRule>
+        ): Boolean {
+            if (hasPotentialRuleConflict(proposedRules)) return true
+            val replacedIds = proposedRules.map { it.id }.toSet()
+            val base = existingRules.filterNot { it.id in replacedIds }
+            return proposedRules.any { candidate ->
+                findPotentialRuleConflict(base, candidate) != null
+            }
+        }
+
         private fun rulesCouldMatchSameDocument(left: DocRule, right: DocRule): Boolean {
             val leftRequired = left.matchKeywords.filter { it.isNotBlank() }
             val rightRequired = right.matchKeywords.filter { it.isNotBlank() }
@@ -204,11 +217,10 @@ class DocRuleRepository(private val context: Context) {
     }
 
     fun addRules(newRules: List<DocRule>): Boolean {
+        if (hasPotentialConflictForNewRules(_rules.value, newRules)) return false
         val replacedIds = newRules.map { it.id }.toSet()
         val base = _rules.value.filterNot { it.id in replacedIds }
-        val candidates = newRules + base
-        if (hasPotentialRuleConflict(candidates)) return false
-        saveRules(candidates)
+        saveRules(newRules + base)
         return true
     }
 
@@ -228,7 +240,10 @@ class DocRuleRepository(private val context: Context) {
         val current = _rules.value.map {
             if (it.id == ruleId) it.copy(isEnabled = enabled) else it
         }
-        if (enabled && hasPotentialRuleConflict(current)) return false
+        val candidate = current.firstOrNull { it.id == ruleId }
+        if (enabled && candidate != null &&
+            findPotentialRuleConflict(current.filterNot { it.id == ruleId }, candidate) != null
+        ) return false
         saveRules(current)
         return true
     }
