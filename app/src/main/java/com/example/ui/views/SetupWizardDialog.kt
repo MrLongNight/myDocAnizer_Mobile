@@ -415,7 +415,7 @@ fun SetupWizardDialog(
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
-                    }
+                        }
                     }
                 }
             }
