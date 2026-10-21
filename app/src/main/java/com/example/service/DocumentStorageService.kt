@@ -1483,7 +1483,7 @@ object DocumentStorageService {
      */
     internal fun isSafeBackupDocumentEntryName(entryName: String): Boolean {
         if (entryName.length > MAX_RESTORE_ENTRY_NAME_CHARS || entryName.any { it.isISOControl() }) return false
-        if (!entryName.startsWith("documents/") || '\\\\' in entryName) return false
+        if (!entryName.startsWith("documents/") || '\\' in entryName) return false
         val child = entryName.substringAfter("documents/", missingDelimiterValue = "")
         return child.isNotBlank() && child != "." && child != ".." &&
             '/' !in child && '\\\\' !in child
