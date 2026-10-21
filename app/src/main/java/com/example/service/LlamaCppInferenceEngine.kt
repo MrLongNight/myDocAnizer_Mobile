@@ -502,6 +502,7 @@ ws ::= [ \t\n\r]*
         params: InferenceParams = InferenceParams()
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
+            lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText)
         }
         val rawOutput = executeInference(
