@@ -163,29 +163,37 @@ class DocRuleRepository(private val context: Context) {
      * Schneller Regel-Check des OCR-Textes (Schritt 1 VOR dem LLM)
      * Gibt die erste passende Regel zurück oder null
      */
-    fun matchRule(ocrText: String): DocRule? {
-        if (ocrText.isBlank()) return null
-        val lowerText = ocrText.lowercase()
+    fun matchRule(ocrText: String): DocRule? =
+        findUniqueMatchingRule(_rules.value, ocrText)
 
-        for (rule in _rules.value) {
-            if (!rule.isEnabled || rule.matchKeywords.isEmpty()) continue
+    companion object {
+        /**
+         * Liefert nur dann eine Regel, wenn genau eine aktivierte Regel alle Pflicht-
+         * Keywords erfüllt und kein Ausschluss-Keyword findet. Bei Mehrdeutigkeit
+         * wird bewusst null geliefert, damit der Aufrufer in die Prüfung/LLM-Stufe
+         * wechseln kann, statt willkürlich die zuerst gespeicherte Regel anzuwenden.
+         */
+        fun findUniqueMatchingRule(rules: List<DocRule>, ocrText: String): DocRule? {
+            if (ocrText.isBlank()) return null
+            val normalizedText = ocrText.lowercase()
 
-            // 1. Ausschlusskriterien prüfen
-            val hasExcludedWord = rule.excludeKeywords.any {
-                it.isNotBlank() && DocRuleRepository.containsKeywordMatch(lowerText, it)
+            val matches = rules.filter { rule ->
+                if (!rule.isEnabled || rule.matchKeywords.isEmpty()) return@filter false
+
+                val hasExcludedWord = rule.excludeKeywords.any { keyword ->
+                    keyword.isNotBlank() &&
+                        containsKeywordMatch(normalizedText, keyword)
+                }
+                if (hasExcludedWord) return@filter false
+
+                rule.matchKeywords.all { keyword ->
+                    keyword.isNotBlank() &&
+                        containsKeywordMatch(normalizedText, keyword)
+                }
             }
-            if (hasExcludedWord) continue
 
-            // 2. Pflicht-Keywords prüfen (alle Keywords der Regel müssen vorkommen)
-            val allMatch = rule.matchKeywords.all {
-                it.isNotBlank() && DocRuleRepository.containsKeywordMatch(lowerText, it)
-            }
-
-            if (allMatch) {
-                return rule
-            }
+            return matches.singleOrNull()
         }
-        return null
     }
 
     /**
