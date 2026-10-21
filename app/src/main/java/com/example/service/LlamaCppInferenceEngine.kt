@@ -585,6 +585,11 @@ ws ::= [ \t\n\r]*
     private fun supportsNativeInference(): Boolean =
         Build.SUPPORTED_ABIS.any { it == "arm64-v8a" || it == "x86_64" }
 
+    fun executeFallbackInference(ocrText: String, systemPrompt: String): String {
+        lastInferenceMode = InferenceMode.RULE_FALLBACK
+        return createHeuristicFallbackResponse(ocrText).toJsonString()
+    }
+
     /**
      * Parst den rohen Modell-Output fehlertolerant in ein [DmsExtractionResponse] Objekt.
      * Filtert Markdown-Codeblöcke heraus und repariert gängige JSON-Ungenauigkeiten.
