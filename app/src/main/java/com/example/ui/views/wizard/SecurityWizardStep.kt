@@ -163,6 +163,7 @@ fun SecurityWizardStep(
     var bip39Confirmed by remember { mutableStateOf(false) }
     var bip39TestInput by remember { mutableStateOf("") }
     var generatedShares by remember { mutableStateOf<List<ShamirShare>>(emptyList()) }
+    var shamirSharesConfirmed by remember { mutableStateOf(false) }
     var recoveryCode by remember { mutableStateOf(vaultSecManager.generateRecoveryCode()) }
     var recoveryCodeCopied by remember { mutableStateOf(false) }
     var pdfGeneratedFile by remember { mutableStateOf<File?>(null) }
@@ -180,6 +181,13 @@ fun SecurityWizardStep(
     var securitySaveError by remember { mutableStateOf<String?>(null) }
 
     fun finishSecurityStep() {
+        if (selectedTier != VaultSecurityTier.UNENCRYPTED &&
+            selectedRecovery == VaultRecoveryMethod.SHAMIR_2_OF_3 &&
+            (!shamirSharesConfirmed || generatedShares.size != 3)
+        ) {
+            securitySaveError = "Speichere alle drei echten Shamir-Shares sicher getrennt und bestätige das, bevor du fortfährst."
+            return
+        }
         vaultSavedSuccessfully = true
         if (selectedTier != VaultSecurityTier.UNENCRYPTED &&
             selectedRecovery == VaultRecoveryMethod.EMERGENCY_PDF
@@ -203,11 +211,8 @@ fun SecurityWizardStep(
                     generatedWords = vaultSecManager.generateBip39Mnemonic()
                 }
             }
-            VaultRecoveryMethod.SHAMIR_2_OF_3 -> {
-                if (generatedShares.isEmpty()) {
-                    generatedShares = vaultSecManager.splitSecretShamir2of3()
-                }
-            }
+            // Shamir shares must be generated from the DEK created during setup. Do not
+            // generate an unregistered set before the vault exists.
             else -> {}
         }
     }
@@ -264,7 +269,7 @@ fun SecurityWizardStep(
         VaultRecoveryMethod.NONE -> noRecoveryAcknowledged
         VaultRecoveryMethod.BIP39_WORDS -> bip39Confirmed || bip39TestInput.isNotBlank()
         VaultRecoveryMethod.EMERGENCY_PDF -> true
-        VaultRecoveryMethod.SHAMIR_2_OF_3 -> true
+        VaultRecoveryMethod.SHAMIR_2_OF_3 -> selectedTier != VaultSecurityTier.UNENCRYPTED
         VaultRecoveryMethod.RECOVERY_CODE -> true
     }
 
@@ -1336,6 +1341,59 @@ fun SecurityWizardStep(
                         }
                     }
 
+                    if (vaultSavedSuccessfully &&
+                        selectedTier != VaultSecurityTier.UNENCRYPTED &&
+                        selectedRecovery == VaultRecoveryMethod.SHAMIR_2_OF_3 &&
+                        generatedShares.size == 3
+                    ) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().testTag("card_shamir_recovery_shares"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text("Deine echten Shamir-Shares", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                Text(
+                                    "Diese drei Teile gehören zum gerade eingerichteten Tresor. Bewahre sie getrennt auf; beliebige zwei werden zur Wiederherstellung benötigt. Erzeuge oder teile keine gemeinsame Kopie aller drei Teile.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                generatedShares.sortedBy { it.id }.forEach { share ->
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(share.label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            share.token,
+                                            fontFamily = FontFamily.Monospace,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                        TextButton(
+                                            onClick = { clipboardManager.setText(AnnotatedString(share.token)) },
+                                            modifier = Modifier.align(Alignment.End)
+                                        ) { Text("Share ${share.id} kopieren") }
+                                    }
+                                    if (share.id < 3) HorizontalDivider()
+                                }
+                                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Checkbox(
+                                        checked = shamirSharesConfirmed,
+                                        onCheckedChange = { shamirSharesConfirmed = it },
+                                        modifier = Modifier.testTag("checkbox_shamir_shares_saved")
+                                    )
+                                    Text(
+                                        "Ich habe alle drei Shares sicher und getrennt aufbewahrt und weiß, dass zwei davon zur Wiederherstellung nötig sind.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(top = 10.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     securitySaveError?.let { message ->
                         Text(
                             text = message,
@@ -1350,7 +1408,8 @@ fun SecurityWizardStep(
                             Text("Zurück")
                         }
                         Button(
-                            enabled = selectedTier == VaultSecurityTier.UNENCRYPTED || selectedFactorType != VaultFactorType.PASSKEY,
+                            enabled = (selectedTier == VaultSecurityTier.UNENCRYPTED || selectedFactorType != VaultFactorType.PASSKEY) &&
+                                (selectedRecovery != VaultRecoveryMethod.SHAMIR_2_OF_3 || !vaultSavedSuccessfully || shamirSharesConfirmed),
                             onClick = {
                                 securitySaveError = null
                                 if (selectedTier == VaultSecurityTier.UNENCRYPTED) {
@@ -1373,7 +1432,7 @@ fun SecurityWizardStep(
                                         onPasswordChange(effPass)
                                         // Enrollment must happen through BiometricPrompt.CryptoObject;
                                         // initializeVault cannot safely enroll an auth-per-use Keystore key itself.
-                                        vaultSecManager.initializeVault(
+                                        val setupResult = vaultSecManager.initializeVault(
                                             masterPassword = effPass,
                                             enableBiometrics = false,
                                             recoveryMethod = selectedRecovery,
@@ -1385,7 +1444,12 @@ fun SecurityWizardStep(
                                             recoveryCode = if (selectedRecovery == VaultRecoveryMethod.RECOVERY_CODE) recoveryCode else null,
                                             autoLockMinutes = autoLockMinutes
                                         )
+                                        generatedShares = setupResult.shamirShares.orEmpty()
                                         vaultSavedSuccessfully = true
+                                        if (selectedRecovery == VaultRecoveryMethod.SHAMIR_2_OF_3) {
+                                            securitySaveError = "Tresor ist eingerichtet. Speichere jetzt alle drei ausgegebenen Shares; Biometrie und Abschluss folgen nach deiner Bestätigung."
+                                            return@Button
+                                        }
                                     } catch (e: Exception) {
                                         securitySaveError = "Tresor-Sicherheit konnte nicht gespeichert werden: ${e.message ?: "unbekannter Fehler"}"
                                         return@Button
