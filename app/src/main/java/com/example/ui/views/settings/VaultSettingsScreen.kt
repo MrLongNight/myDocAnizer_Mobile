@@ -65,7 +65,7 @@ fun VaultSettingsScreen(
     val vaultSecManager = remember { VaultSecurityManager.getInstance(context) }
     val vaultStatus by vaultSecManager.vaultStatus.collectAsState()
     val vaultHeader by vaultSecManager.vaultHeader.collectAsState()
-    val hasCustomPassword = !vaultStatus.isUnencryptedMode && (
+    val hasCustomPassword = vaultHeader != null && !vaultStatus.isUnencryptedMode && (
         vaultStatus.factorType == VaultFactorType.PASSWORD ||
             vaultStatus.factorType == VaultFactorType.PASSWORD_AND_KEYFILE ||
             vaultStatus.factorType == VaultFactorType.PASSWORD_AND_TOTP
