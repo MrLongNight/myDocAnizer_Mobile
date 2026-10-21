@@ -905,15 +905,8 @@ class VaultSecurityManager private constructor(private val context: Context) {
             ciphertext = Base64.decode(encRecovery, Base64.NO_WRAP)
             iv = Base64.decode(ivRecovery, Base64.NO_WRAP)
             recoveredDek = decryptAesGcm(ciphertext, iv, kekRecovery)
-            if (recoveredDek.size != DEK_SIZE_BYTES) return null
-
-            // The recovery wrapper protects the DEK, not the surrounding metadata.
-            // Verify the DEK-derived metadata authenticator before accepting a recovered key.
-            val rawHeader = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null) ?: return null
-            val parsedHeader = VaultHeaderParserV2.parse(rawHeader)
-                ?.takeIf { it.vaultId == header.vaultId } ?: return null
-            if (authenticateOrUpgradeStoredHeaderMetadata(parsedHeader, recoveredDek) == null) return null
-
+            if (recoveredDek.size != DEK_SIZE_BYTES ||
+                !authenticateRecoveredDek(recoveredDek, header.vaultId)) return null
             recoveredDek.copyOf()
         } catch (_: Exception) {
             null
@@ -1208,8 +1201,20 @@ class VaultSecurityManager private constructor(private val context: Context) {
         return result
     }
 
-    private fun recoverDekWithShamirUnchecked(shareA: String, shareB: String): ByteArray? =
-        ShamirEngine.combine2of3(shareA.trim(), shareB.trim())
+    private fun recoverDekWithShamirUnchecked(shareA: String, shareB: String): ByteArray? {
+        val expectedVaultId = _vaultHeader.value?.vaultId ?: return null
+        var recoveredDek: ByteArray? = null
+        return try {
+            recoveredDek = ShamirEngine.combine2of3(shareA.trim(), shareB.trim()) ?: return null
+            if (recoveredDek.size != DEK_SIZE_BYTES ||
+                !authenticateRecoveredDek(recoveredDek, expectedVaultId)) return null
+            recoveredDek.copyOf()
+        } catch (_: Exception) {
+            null
+        } finally {
+            recoveredDek?.fill(0)
+        }
+    }
 
     // =========================================================================
     // 6. ANDROID KEYSTORE BIOMETRISCHE 2FA-BINDUNG
@@ -1396,6 +1401,18 @@ class VaultSecurityManager private constructor(private val context: Context) {
      * This migration authenticates the current legacy values; it cannot retrospectively prove
      * that unsigned metadata was never modified before this app version.
      */
+    /**
+     * Recovery wrappers can decrypt a DEK independently of the password wrapper, so every
+     * recovery path must also authenticate the persisted security metadata before accepting it.
+     */
+    private fun authenticateRecoveredDek(dek: ByteArray, expectedVaultId: String): Boolean {
+        if (dek.size != DEK_SIZE_BYTES) return false
+        val rawHeader = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null) ?: return false
+        val parsedHeader = VaultHeaderParserV2.parse(rawHeader)
+            ?.takeIf { it.vaultId == expectedVaultId } ?: return false
+        return authenticateOrUpgradeStoredHeaderMetadata(parsedHeader, dek) != null
+    }
+
     private fun authenticateOrUpgradeStoredHeaderMetadata(
         parsed: VaultHeaderV2,
         dek: ByteArray
@@ -1634,10 +1651,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             val decryptedDek = decryptAesGcm(encryptedBytes, ivBytes, derivedKek)
             dek = decryptedDek
             if (decryptedDek.size != DEK_SIZE_BYTES) return null
-            val rawHeader = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null) ?: return null
-            val parsedHeader = VaultHeaderParserV2.parse(rawHeader)
-                ?.takeIf { it.vaultId == header.vaultId } ?: return null
-            if (authenticateOrUpgradeStoredHeaderMetadata(parsedHeader, decryptedDek) == null) return null
+            if (!authenticateRecoveredDek(decryptedDek, header.vaultId)) return null
             replaceActiveDek(decryptedDek)
             decryptedDek.copyOf()
         } catch (e: Exception) {

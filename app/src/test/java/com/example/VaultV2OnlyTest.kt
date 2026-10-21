@@ -192,6 +192,54 @@ class VaultV2OnlyTest {
     }
 
     @Test
+    fun `all software recovery paths reject unauthenticated vault metadata`() {
+        val context = context()
+        val manager = VaultSecurityManager.getInstance(context)
+        val bip39 = manager.initializeVault(
+            masterPassword = "V2Bip39MetadataPassword2026!",
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.BIP39_WORDS
+        )
+        val words = bip39.bip39Words ?: error("Generated BIP-39 words expected")
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+        val rawBip39 = prefs.getString("vault_header_json_v2_active", null)
+            ?: error("Persisted V2 header expected")
+        assertTrue(
+            prefs.edit().putString(
+                "vault_header_json_v2_active",
+                org.json.JSONObject(rawBip39).put("autoLockMinutes", 6).toString()
+            ).commit()
+        )
+        resetSingleton()
+        assertNull(
+            "BIP-39 must not bypass the DEK-derived metadata authenticator",
+            VaultSecurityManager.getInstance(context).recoverDekWithBip39(words)
+        )
+
+        val shamirManager = VaultSecurityManager.getInstance(context)
+        val shamir = shamirManager.initializeVault(
+            masterPassword = "V2ShamirMetadataPassword2026!",
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.SHAMIR_2_OF_3
+        )
+        val shares = shamir.shamirShares ?: error("Generated Shamir shares expected")
+        val rawShamir = prefs.getString("vault_header_json_v2_active", null)
+            ?: error("Persisted Shamir V2 header expected")
+        assertTrue(
+            prefs.edit().putString(
+                "vault_header_json_v2_active",
+                org.json.JSONObject(rawShamir).put("autoLockMinutes", 7).toString()
+            ).commit()
+        )
+        resetSingleton()
+        assertNull(
+            "Shamir reconstruction must not bypass the DEK-derived metadata authenticator",
+            VaultSecurityManager.getInstance(context)
+                .recoverDekWithShamir(shares[0].token, shares[1].token)
+        )
+    }
+
+    @Test
     fun `recovery can rotate password without changing the original DEK`() {
         val context = context()
         val manager = VaultSecurityManager.getInstance(context)
