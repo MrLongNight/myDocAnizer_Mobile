@@ -972,7 +972,10 @@ fun SecurityWizardStep(
                     icon = Icons.Default.Description,
                     badge = "Beliebt",
                     isSelected = selectedRecovery == VaultRecoveryMethod.BIP39_WORDS,
-                    onClick = { selectedRecovery = VaultRecoveryMethod.BIP39_WORDS },
+                    onClick = {
+                        selectedRecovery = VaultRecoveryMethod.BIP39_WORDS
+                        pdfStatusMessage = null
+                    },
                     onInfoClick = {
                         activeInfoDialog = SecurityInfoContent(
                             title = "12 Sicherheitswörter (BIP-39)",
@@ -992,7 +995,10 @@ fun SecurityWizardStep(
                     icon = Icons.Default.Print,
                     badge = "Für Einsteiger",
                     isSelected = selectedRecovery == VaultRecoveryMethod.EMERGENCY_PDF,
-                    onClick = { selectedRecovery = VaultRecoveryMethod.EMERGENCY_PDF },
+                    onClick = {
+                        selectedRecovery = VaultRecoveryMethod.EMERGENCY_PDF
+                        pdfStatusMessage = null
+                    },
                     onInfoClick = {
                         activeInfoDialog = SecurityInfoContent(
                             title = "Notfall-Kit PDF",
@@ -1012,7 +1018,10 @@ fun SecurityWizardStep(
                     icon = Icons.Default.CallSplit,
                     badge = "Multi-Device",
                     isSelected = selectedRecovery == VaultRecoveryMethod.SHAMIR_2_OF_3,
-                    onClick = { selectedRecovery = VaultRecoveryMethod.SHAMIR_2_OF_3 },
+                    onClick = {
+                        selectedRecovery = VaultRecoveryMethod.SHAMIR_2_OF_3
+                        pdfStatusMessage = null
+                    },
                     onInfoClick = {
                         activeInfoDialog = SecurityInfoContent(
                             title = "Shamir's Secret Sharing (2 von 3)",
@@ -1032,7 +1041,10 @@ fun SecurityWizardStep(
                     icon = Icons.Default.VpnKey,
                     badge = "Kompakt",
                     isSelected = selectedRecovery == VaultRecoveryMethod.RECOVERY_CODE,
-                    onClick = { selectedRecovery = VaultRecoveryMethod.RECOVERY_CODE },
+                    onClick = {
+                        selectedRecovery = VaultRecoveryMethod.RECOVERY_CODE
+                        pdfStatusMessage = null
+                    },
                     onInfoClick = {
                         activeInfoDialog = SecurityInfoContent(
                             title = "Einmaliger Notfall-Schlüssel",
@@ -1053,7 +1065,10 @@ fun SecurityWizardStep(
                     badge = "Experte (Riskant)",
                     isSelected = selectedRecovery == VaultRecoveryMethod.NONE,
                     isWarning = true,
-                    onClick = { selectedRecovery = VaultRecoveryMethod.NONE },
+                    onClick = {
+                        selectedRecovery = VaultRecoveryMethod.NONE
+                        pdfStatusMessage = null
+                    },
                     onInfoClick = {
                         activeInfoDialog = SecurityInfoContent(
                             title = "Keine Notfall-Wiederherstellung",
