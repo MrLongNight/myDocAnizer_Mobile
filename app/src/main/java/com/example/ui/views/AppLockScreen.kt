@@ -253,11 +253,13 @@ fun AppLockScreen(
             )
         } else if (
             activity != null &&
-            !vaultStatus.biometric2FaEnabled &&
+            (!vaultStatus.biometric2FaEnabled || !isBiometricAvailable) &&
             !vaultStatus.isUnencryptedMode &&
             !vaultStatus.keyFileEnabled &&
             !vaultStatus.totpEnabled
         ) {
+            // Also probe the password manager when biometric unlock is configured
+            // but the device can no longer offer a usable biometric prompt.
             retrieveMasterPasswordFromManager(
                 showErrors = false,
                 onlyIfAvailable = true
