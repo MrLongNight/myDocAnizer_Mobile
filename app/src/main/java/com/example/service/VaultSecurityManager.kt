@@ -891,22 +891,37 @@ class VaultSecurityManager private constructor(private val context: Context) {
     }
 
     private fun recoverDekWithBip39Unchecked(words: List<String>): ByteArray? {
-        val header = _vaultHeader.value ?: return false.let { null }
+        val header = _vaultHeader.value ?: return null
         if (!validateBip39Mnemonic(words)) return null
         val encRecovery = header.encryptedDekByRecoveryBase64 ?: return null
         val ivRecovery = header.recoveryDekIvBase64 ?: return null
+        var kekRecovery: ByteArray? = null
+        var ciphertext: ByteArray? = null
+        var iv: ByteArray? = null
+        var recoveredDek: ByteArray? = null
 
         return try {
-            val kekRecovery = deriveKekFromBip39(words)
-            try {
-                val ciphertext = Base64.decode(encRecovery, Base64.NO_WRAP)
-                val iv = Base64.decode(ivRecovery, Base64.NO_WRAP)
-                decryptAesGcm(ciphertext, iv, kekRecovery)
-            } finally {
-                kekRecovery.fill(0)
-            }
-        } catch (e: Exception) {
+            kekRecovery = deriveKekFromBip39(words)
+            ciphertext = Base64.decode(encRecovery, Base64.NO_WRAP)
+            iv = Base64.decode(ivRecovery, Base64.NO_WRAP)
+            recoveredDek = decryptAesGcm(ciphertext, iv, kekRecovery)
+            if (recoveredDek.size != DEK_SIZE_BYTES) return null
+
+            // The recovery wrapper protects the DEK, not the surrounding metadata.
+            // Verify the DEK-derived metadata authenticator before accepting a recovered key.
+            val rawHeader = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null) ?: return null
+            val parsedHeader = VaultHeaderParserV2.parse(rawHeader)
+                ?.takeIf { it.vaultId == header.vaultId } ?: return null
+            if (authenticateOrUpgradeStoredHeaderMetadata(parsedHeader, recoveredDek) == null) return null
+
+            recoveredDek.copyOf()
+        } catch (_: Exception) {
             null
+        } finally {
+            kekRecovery?.fill(0)
+            ciphertext?.fill(0)
+            iv?.fill(0)
+            recoveredDek?.fill(0)
         }
     }
 

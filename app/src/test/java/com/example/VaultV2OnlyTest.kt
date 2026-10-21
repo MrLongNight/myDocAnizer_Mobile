@@ -167,6 +167,31 @@ class VaultV2OnlyTest {
     }
 
     @Test
+    fun `BIP-39 recovery rejects metadata tampering before returning the DEK`() {
+        val context = context()
+        val manager = VaultSecurityManager.getInstance(context)
+        val setup = manager.initializeVault(
+            masterPassword = "V2Bip39TamperPassword2026!",
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.BIP39_WORDS
+        )
+        val words = setup.bip39Words ?: error("Generated BIP-39 words expected")
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+        val raw = prefs.getString("vault_header_json_v2_active", null)
+            ?: error("Persisted V2 header expected")
+        val tampered = org.json.JSONObject(raw).put("autoLockMinutes", 6)
+        assertTrue(prefs.edit().putString("vault_header_json_v2_active", tampered.toString()).commit())
+
+        resetSingleton()
+        val reloaded = VaultSecurityManager.getInstance(context)
+        assertNull(
+            "Recovery must reject a validly shaped but unauthenticated header",
+            reloaded.recoverDekWithBip39(words)
+        )
+        assertNull("Rejected recovery must not install an active DEK", reloaded.getActiveDek())
+    }
+
+    @Test
     fun `recovery can rotate password without changing the original DEK`() {
         val context = context()
         val manager = VaultSecurityManager.getInstance(context)
