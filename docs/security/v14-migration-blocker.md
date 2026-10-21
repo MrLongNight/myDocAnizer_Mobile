@@ -22,3 +22,15 @@ Status: BLOCKIERT — keine automatische Migration aktiviert.
 ## Entscheidung für diesen Arbeitslauf
 
 V14 wird nicht als erledigt markiert, bis die Laufzeitintegration und die Rollbacktests vorliegen. Die App bleibt auf dem bisherigen v1-Laufzeitformat, damit die vorhandenen Unlock-Pfade nicht durch einen unvollständigen Formatwechsel beschädigt werden.
+
+
+## Aktualisierung 2026-10-21 – v2-Faktorprüfung unabhängig gehärtet
+
+Die eigenständige v2-Kryptokomponente `VaultHeaderCryptoV2` wurde so eingeschränkt, dass sie nur tatsächlich implementierte Faktoren akzeptiert:
+
+- `ONE_FACTOR / PASSWORD`
+- `TWO_FACTOR / PASSWORD_AND_KEYFILE` mit genau 64 hexadezimalen Zeichen als 256-Bit-Keyfile-Token.
+
+TOTP, Passkey, unverschlüsselter Modus oder widersprüchliche Faktor-Metadaten werden vom v2-Parser abgelehnt, solange dieser Kryptopfad sie nicht vollständig umsetzt. Password+Keyfile gehen gemeinsam in die Argon2id-Keyableitung ein; Keyfile-Token werden vor der Ableitung hex-normalisiert. AAD bindet die Faktor-Metadaten, sodass ein Downgrade der gespeicherten Faktor-Erklärung nicht als Passwort-only-Unlock funktionieren darf. Neue Unit-Tests decken fehlende/falsche Keyfile, widersprüchliche Faktor-Metadaten und einen Downgrade-Versuch ab.
+
+**Das hebt den V14-Blocker nicht auf.** `VaultSecurityManager` persistiert den kanonischen v1-Header weiterhin unter `vault_header_json_v1`; `VaultHeaderV2` ist noch nicht der Laufzeit-Header. Vor der Umschaltung müssen v1-Recovery-, Shamir-, Keyfile-Hash- und Biometrie-Metadaten verlustfrei modelliert, die Staging-/Readback-/Rollback-Sequenz implementiert und alle Fehlerpfade getestet werden. Automatische Neuinitialisierung oder destruktives Ersetzen des v1-Headers bleibt unzulässig.
