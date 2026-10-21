@@ -36,6 +36,7 @@ object VaultHeaderCryptoV2 {
         dek: ByteArray,
         securityTier: String = "ONE_FACTOR",
         factorType: String = "PASSWORD",
+        keyFileToken: CharArray? = null,
         autoLockMinutes: Int = 5,
         iterations: Int = MIN_ITERATIONS,
         memoryKb: Int = MIN_MEMORY_KB
@@ -46,10 +47,7 @@ object VaultHeaderCryptoV2 {
             vaultId.all { it.isLetterOrDigit() || it == '-' || it == '_' }) { "Invalid vault ID" }
         require(createdAt > 0L) { "Invalid creation timestamp" }
         validateKdf(iterations, memoryKb)
-        require(securityTier in listOf("UNENCRYPTED", "ONE_FACTOR", "TWO_FACTOR")) { "Invalid security tier" }
-        require(factorType in listOf("NONE", "PASSWORD", "KEYFILE", "PASSWORD_AND_KEYFILE", "PASSWORD_AND_TOTP", "PASSKEY")) {
-            "Invalid factor type"
-        }
+        validateFactorConfiguration(securityTier, factorType, keyFileToken)
         require(autoLockMinutes in 0..1440) { "Invalid auto-lock duration" }
 
         val salt = ByteArray(SALT_BYTES).also(random::nextBytes)
@@ -69,7 +67,12 @@ object VaultHeaderCryptoV2 {
             factorType = factorType,
             autoLockMinutes = autoLockMinutes
         )
-        val kek = deriveKey(password, salt, iterations, memoryKb)
+        val kdfInput = buildKdfInput(password, keyFileToken, securityTier, factorType)
+        val kek = try {
+            deriveKey(kdfInput, salt, iterations, memoryKb)
+        } finally {
+            kdfInput.fill('\u0000')
+        }
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(kek, "AES"), GCMParameterSpec(TAG_BITS, iv))
@@ -84,13 +87,23 @@ object VaultHeaderCryptoV2 {
         }
     }
 
-    fun unwrapDek(header: VaultHeaderV2, password: CharArray): ByteArray {
+    fun unwrapDek(
+        header: VaultHeaderV2,
+        password: CharArray,
+        keyFileToken: CharArray? = null
+    ): ByteArray {
         require(password.isNotEmpty()) { "Password cannot be empty" }
         require(VaultHeaderParserV2.parse(header.toJson()) != null) { "Invalid or unsupported vault header" }
+        validateFactorConfiguration(header.securityTier, header.factorType, keyFileToken)
         val salt = decode(header.saltBase64, SALT_BYTES, "salt")
         val iv = decode(header.ivBase64, IV_BYTES, "IV")
         val encrypted = decode(header.encryptedDekBase64, DEK_BYTES + TAG_BITS / 8, "encrypted DEK")
-        val kek = deriveKey(password, salt, header.argon2Iterations, header.argon2MemoryKb)
+        val kdfInput = buildKdfInput(password, keyFileToken, header.securityTier, header.factorType)
+        val kek = try {
+            deriveKey(kdfInput, salt, header.argon2Iterations, header.argon2MemoryKb)
+        } finally {
+            kdfInput.fill('\u0000')
+        }
         try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(kek, "AES"), GCMParameterSpec(TAG_BITS, iv))
@@ -110,6 +123,54 @@ object VaultHeaderCryptoV2 {
             salt.fill(0)
             iv.fill(0)
             encrypted.fill(0)
+        }
+    }
+
+    /**
+     * v2 supports only factor combinations whose cryptographic behavior is implemented here.
+     * Unsupported declarations fail closed rather than being treated as password-only protection.
+     */
+    private fun validateFactorConfiguration(
+        securityTier: String,
+        factorType: String,
+        keyFileToken: CharArray?
+    ) {
+        when (securityTier) {
+            "ONE_FACTOR" -> {
+                require(factorType == "PASSWORD") { "v2 one-factor mode requires PASSWORD" }
+                require(keyFileToken == null) { "A key file cannot be silently ignored in one-factor mode" }
+            }
+            "TWO_FACTOR" -> {
+                require(factorType == "PASSWORD_AND_KEYFILE") {
+                    "v2 two-factor mode supports only PASSWORD_AND_KEYFILE"
+                }
+                require(isValidKeyFileToken(keyFileToken)) {
+                    "v2 two-factor mode requires a valid 256-bit key-file token"
+                }
+            }
+            else -> throw IllegalArgumentException("Unsupported v2 security tier")
+        }
+    }
+
+    private fun isValidKeyFileToken(token: CharArray?): Boolean =
+        token != null && token.size == 64 && token.all {
+            it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F'
+        }
+
+    private fun buildKdfInput(
+        password: CharArray,
+        keyFileToken: CharArray?,
+        securityTier: String,
+        factorType: String
+    ): CharArray {
+        validateFactorConfiguration(securityTier, factorType, keyFileToken)
+        if (securityTier == "ONE_FACTOR") return password.copyOf()
+
+        val token = requireNotNull(keyFileToken)
+        return CharArray(password.size + 1 + token.size).also { combined ->
+            password.copyInto(combined, destinationOffset = 0)
+            combined[password.size] = ':'
+            token.copyInto(combined, destinationOffset = password.size + 1)
         }
     }
 
