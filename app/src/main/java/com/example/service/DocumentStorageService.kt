@@ -1302,7 +1302,7 @@ object DocumentStorageService {
                     when {
                         entryName == "doc_index.json" && !entry.isDirectory -> {
                             if (indexJsonString != null) throw SecurityException("Doppelter Dokumentindex im Backup.")
-                            val bytes = readCurrentZipEntryBounded(zis, MAX_RESTORE_INDEX_BYTES)
+                            val bytes = readCurrentZipEntryBounded(zis, minOf(MAX_RESTORE_INDEX_BYTES, MAX_RESTORE_TOTAL_BYTES - totalExpandedBytes))
                             totalExpandedBytes += bytes.size
                             if (totalExpandedBytes > MAX_RESTORE_TOTAL_BYTES) {
                                 bytes.fill(0)
@@ -1312,7 +1312,7 @@ object DocumentStorageService {
                         }
                         entryName == "vault_metadata.json" && !entry.isDirectory -> {
                             if (vaultMetadataJsonString != null) throw SecurityException("Doppelte Tresor-Metadaten im Backup.")
-                            val bytes = readCurrentZipEntryBounded(zis, MAX_RESTORE_METADATA_BYTES)
+                            val bytes = readCurrentZipEntryBounded(zis, minOf(MAX_RESTORE_METADATA_BYTES, MAX_RESTORE_TOTAL_BYTES - totalExpandedBytes))
                             totalExpandedBytes += bytes.size
                             if (totalExpandedBytes > MAX_RESTORE_TOTAL_BYTES) {
                                 bytes.fill(0)
@@ -1329,7 +1329,7 @@ object DocumentStorageService {
                             if (destFile.canonicalFile.parentFile != tempExtractDir.canonicalFile) {
                                 throw SecurityException("Ungültiger Pfad im Archiv erkannt (Zip Slip Schutz).")
                             }
-                            val copiedBytes = copyCurrentZipEntryBounded(zis, destFile, MAX_RESTORE_DOCUMENT_BYTES)
+                            val copiedBytes = copyCurrentZipEntryBounded(zis, destFile, minOf(MAX_RESTORE_DOCUMENT_BYTES, MAX_RESTORE_TOTAL_BYTES - totalExpandedBytes))
                             totalExpandedBytes += copiedBytes
                             if (totalExpandedBytes > MAX_RESTORE_TOTAL_BYTES) {
                                 destFile.delete()
@@ -1348,6 +1348,10 @@ object DocumentStorageService {
                 ?: throw SecurityException("Backup enthält keinen Dokumentindex.")
             if (parsedIndex.length() > MAX_RESTORE_ENTRIES) {
                 throw SecurityException("Zu viele Dokumente im Backup-Index.")
+            }
+            for (index in 0 until parsedIndex.length()) {
+                // Validate every entry's JSON type before restoring metadata or files.
+                parsedIndex.getJSONObject(index)
             }
             val metadataToRestore = vaultMetadataJsonString?.let {
                 try { jsonToVaultMetadata(JSONObject(it)) }
@@ -1493,18 +1497,23 @@ object DocumentStorageService {
         input: java.util.zip.ZipInputStream,
         maxBytes: Long
     ): ByteArray {
+        require(maxBytes >= 0L) { "Kein Restbudget für Backupdaten vorhanden." }
         val output = java.io.ByteArrayOutputStream()
         val buffer = ByteArray(8192)
         var total = 0L
-        while (true) {
-            val count = input.read(buffer)
-            if (count < 0) break
-            total += count
-            if (total > maxBytes) throw SecurityException("Archiveintrag überschreitet das Größenlimit.")
-            output.write(buffer, 0, count)
+        try {
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count == 0) continue
+                total += count
+                if (total > maxBytes) throw SecurityException("Archiveintrag überschreitet das Größenlimit.")
+                output.write(buffer, 0, count)
+            }
+            return output.toByteArray()
+        } finally {
+            buffer.fill(0)
         }
-        buffer.fill(0)
-        return output.toByteArray()
     }
 
     private fun copyCurrentZipEntryBounded(
