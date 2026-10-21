@@ -80,6 +80,8 @@ class VaultV2OnlyTest {
         assertEquals("PASSWORD_AND_KEYFILE", parsed.factorType)
         manager.lockVault()
         assertFalse(manager.unlockVault(password = password))
+        assertFalse(manager.unlockVault(password = "", keyFileToken = token))
+        assertFalse(manager.unlockVault(password = password, keyFileToken = token.dropLast(2)))
         assertFalse(manager.unlockVault(password = password, keyFileToken = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
         assertTrue(manager.unlockVault(password = password, keyFileToken = token))
         assertArrayEquals(setup.dek, manager.getActiveDek())
@@ -108,6 +110,35 @@ class VaultV2OnlyTest {
         assertNotNull(after.encryptedDekByRecoveryBase64)
         assertNotNull(after.recoveryCodeHash)
         assertTrue(reloaded.unlockWithPassword(password))
+    }
+
+    @Test
+    fun `generated recovery credentials recover the exact original DEK`() {
+        val context = context()
+        val manager = VaultSecurityManager.getInstance(context)
+
+        val bip39Setup = manager.initializeVault(
+            masterPassword = "V2GeneratedBip39Password2026!",
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.BIP39_WORDS
+        )
+        val words = bip39Setup.bip39Words ?: error("Generated BIP-39 words expected")
+        assertTrue(manager.validateBip39Mnemonic(words))
+        val bip39RecoveredDek = manager.recoverDekWithBip39(words)
+        assertNotNull("Returned generated mnemonic must unlock the persisted recovery wrapper", bip39RecoveredDek)
+        assertArrayEquals(bip39Setup.dek, bip39RecoveredDek)
+        bip39RecoveredDek?.fill(0)
+
+        val codeSetup = manager.initializeVault(
+            masterPassword = "V2GeneratedRecoveryCodePassword2026!",
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.RECOVERY_CODE
+        )
+        val code = codeSetup.recoveryCode ?: error("Generated recovery code expected")
+        val codeRecoveredDek = manager.recoverDekWithRecoveryCode(code)
+        assertNotNull("Returned generated recovery code must unlock the persisted recovery wrapper", codeRecoveredDek)
+        assertArrayEquals(codeSetup.dek, codeRecoveredDek)
+        codeRecoveredDek?.fill(0)
     }
 
     @Test
