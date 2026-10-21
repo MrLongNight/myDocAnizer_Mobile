@@ -31,6 +31,52 @@ class VaultHeaderCryptoV2Test {
     }
 
     @Test
+    fun `two factor v2 requires the correct password and key file`() {
+        val token = "a".repeat(64).toCharArray()
+        val header = VaultHeaderCryptoV2.createHeader(
+            vaultId = vaultId,
+            createdAt = 1729177200000L,
+            password = password,
+            dek = dek,
+            securityTier = "TWO_FACTOR",
+            factorType = "PASSWORD_AND_KEYFILE",
+            keyFileToken = token
+        )
+
+        assertArrayEquals(dek, VaultHeaderCryptoV2.unwrapDek(header, password, token))
+
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            VaultHeaderCryptoV2.unwrapDek(header, password)
+        }
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            VaultHeaderCryptoV2.unwrapDek(header, password, "b".repeat(64).toCharArray())
+        }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            VaultHeaderCryptoV2.createHeader(
+                vaultId = vaultId,
+                createdAt = 1729177200000L,
+                password = password,
+                dek = dek,
+                securityTier = "TWO_FACTOR",
+                factorType = "PASSWORD_AND_KEYFILE"
+            )
+        }
+    }
+
+    @Test
+    fun `one factor v2 cannot silently ignore a supplied key file`() {
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            VaultHeaderCryptoV2.createHeader(
+                vaultId = vaultId,
+                createdAt = 1729177200000L,
+                password = password,
+                dek = dek,
+                keyFileToken = "c".repeat(64).toCharArray()
+            )
+        }
+    }
+
+    @Test
     fun `each header gets a fresh random IV`() {
         val first = newHeader()
         val second = newHeader()
