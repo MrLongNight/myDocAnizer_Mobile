@@ -1293,26 +1293,49 @@ class ExampleRobolectricTest {
     val context = ApplicationProvider.getApplicationContext<Application>()
     val secManager = com.example.service.VaultSecurityManager.getInstance(context)
 
-    val dek = secManager.generateRandomDek()
-    val shares = secManager.splitSecretShamir2of3(dek)
-    assertEquals(3, shares.size)
+    // Recovery is an authenticated vault operation: create the matching V2 header and
+    // let initialization produce shares for the exact DEK stored by that header.
+    val setupRes = secManager.initializeVault(
+      masterPassword = "ShamirReconstructionTestPassword2026!",
+      enableBiometrics = false,
+      recoveryMethod = com.example.service.VaultRecoveryMethod.SHAMIR_2_OF_3
+    )
+    val dek = setupRes.dek.copyOf()
+    val shares = setupRes.shamirShares
+      ?: error("SHAMIR_2_OF_3 initialization must return its generated shares")
+    val recoveredKeys = mutableListOf<ByteArray>()
 
-    // Test combinations: (1, 2), (1, 3), (2, 3)
-    val rec12 = secManager.recoverDekWithShamir(shares[0].token, shares[1].token)
-    assertNotNull(rec12)
-    assertTrue(rec12!!.contentEquals(dek))
+    try {
+      assertEquals(3, shares.size)
 
-    val rec13 = secManager.recoverDekWithShamir(shares[0].token, shares[2].token)
-    assertNotNull(rec13)
-    assertTrue(rec13!!.contentEquals(dek))
+      // Test combinations: (1, 2), (1, 3), (2, 3), all against the persisted authenticated V2 header.
+      val rec12 = requireNotNull(
+        secManager.recoverDekWithShamir(shares[0].token, shares[1].token)
+      ) { "Shares 1+2 should recover the configured vault DEK" }
+      recoveredKeys += rec12
+      assertTrue(rec12.contentEquals(dek))
 
-    val rec23 = secManager.recoverDekWithShamir(shares[1].token, shares[2].token)
-    assertNotNull(rec23)
-    assertTrue(rec23!!.contentEquals(dek))
+      val rec13 = requireNotNull(
+        secManager.recoverDekWithShamir(shares[0].token, shares[2].token)
+      ) { "Shares 1+3 should recover the configured vault DEK" }
+      recoveredKeys += rec13
+      assertTrue(rec13.contentEquals(dek))
 
-    // Same share repeated must fail
-    val recSame = secManager.recoverDekWithShamir(shares[0].token, shares[0].token)
-    org.junit.Assert.assertNull(recSame)
+      val rec23 = requireNotNull(
+        secManager.recoverDekWithShamir(shares[1].token, shares[2].token)
+      ) { "Shares 2+3 should recover the configured vault DEK" }
+      recoveredKeys += rec23
+      assertTrue(rec23.contentEquals(dek))
+
+      // Same share repeated must fail.
+      val recSame = secManager.recoverDekWithShamir(shares[0].token, shares[0].token)
+      if (recSame != null) recoveredKeys += recSame
+      org.junit.Assert.assertNull(recSame)
+    } finally {
+      recoveredKeys.forEach { it.fill(0) }
+      dek.fill(0)
+      setupRes.dek.fill(0)
+    }
   }
 
   @Test
