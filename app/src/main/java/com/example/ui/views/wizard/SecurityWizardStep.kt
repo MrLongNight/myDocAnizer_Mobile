@@ -86,6 +86,7 @@ fun SecurityWizardStep(
     onBiometricToggle: (Boolean) -> Unit,
     passwordValue: String,
     onPasswordChange: (String) -> Unit,
+    onSecurityComplete: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -164,6 +165,9 @@ fun SecurityWizardStep(
     var recoveryCodeCopied by remember { mutableStateOf(false) }
     var pdfGeneratedFile by remember { mutableStateOf<File?>(null) }
     var pdfStatusMessage by remember { mutableStateOf<String?>(null) }
+    var showEmergencyPdfPassphraseDialog by remember { mutableStateOf(false) }
+    var emergencyPdfPassphrase by remember { mutableStateOf("") }
+    var emergencyPdfPassphraseConfirm by remember { mutableStateOf("") }
     var noRecoveryAcknowledged by remember { mutableStateOf(false) }
 
     // Substep 4: Biometrie & Alltagsschutz
@@ -777,21 +781,21 @@ fun SecurityWizardStep(
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                             Text(
-                                                text = "Automatisch sichern & autofill aktivieren",
+                                                text = "Master-Passwort optional speichern",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }
                                     Text(
-                                        text = "Autofill beim Fokussieren",
+                                        text = "Optional",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
                                 Text(
-                                    text = "Wenn Google Passwort-Manager als Autofill-Dienst aktiv ist, kann Android beim Antippen des Passwortfelds Vorschläge zum Generieren oder Ausfüllen anbieten. Gespeichert wird erst nach deiner Bestätigung. Der Button bleibt als manuelle Alternative.",
+                                    text = "Du kannst das gerade bestätigte Master-Passwort über den Android Credential Manager an deinen eingerichteten Passwort-Manager übergeben. Der Passwort-Manager zeigt seinen eigenen Speicherdialog; erst nach deiner Bestätigung wird der Eintrag gespeichert. Autofill-Vorschläge beim Passwortfeld sind eine separate Android-Funktion.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -825,7 +829,7 @@ fun SecurityWizardStep(
                                 ) {
                                     Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text(if (isSavingToGoogleManager) "Speichere..." else "Jetzt im Google Passwort-Manager sichern")
+                                    Text(if (isSavingToGoogleManager) "Öffne Speicherdialog..." else "Master-Passwort speichern")
                                 }
 
                                 googleManagerStatusMsg?.let { msg ->
@@ -1063,7 +1067,25 @@ fun SecurityWizardStep(
                 )
 
                 // Details zur aktuell gewählten Notfallmethode
-                if (selectedRecovery == VaultRecoveryMethod.BIP39_WORDS) {
+                if (selectedRecovery == VaultRecoveryMethod.EMERGENCY_PDF) {
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Notfall-Kit PDF", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Das verschlüsselte Recovery-PDF wird nach dem Speichern der Tresor-Sicherheit erzeugt. Dafür legst du eine separate Passphrase fest, die nicht im PDF enthalten ist.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            pdfStatusMessage?.let { message ->
+                                Text(message, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                } else if (selectedRecovery == VaultRecoveryMethod.BIP39_WORDS) {
                     Card(
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
@@ -1272,7 +1294,7 @@ fun SecurityWizardStep(
                             ) {
                                 Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                                 Text(
-                                    text = "Sicherheitseinstellungen erfolgreich gespeichert! Klicke unten auf 'Weiter', um fortzufahren.",
+                                    text = "Sicherheitseinstellungen erfolgreich gespeichert.",
                                     color = MaterialTheme.colorScheme.primary,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold
@@ -1310,6 +1332,14 @@ fun SecurityWizardStep(
                                     )
                                 }
                                 vaultSavedSuccessfully = true
+                                if (selectedTier != VaultSecurityTier.UNENCRYPTED &&
+                                    selectedRecovery == VaultRecoveryMethod.EMERGENCY_PDF
+                                ) {
+                                    pdfStatusMessage = null
+                                    showEmergencyPdfPassphraseDialog = true
+                                } else {
+                                    onSecurityComplete()
+                                }
                             },
                             modifier = Modifier.weight(1f).testTag("btn_wizard_security_finish")
                         ) {
@@ -1321,6 +1351,101 @@ fun SecurityWizardStep(
                 }
             }
         }
+    }
+
+    // Das Emergency Kit benötigt den initialisierten Vault-DEK und eine getrennte Passphrase.
+    if (showEmergencyPdfPassphraseDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showEmergencyPdfPassphraseDialog = false
+                emergencyPdfPassphrase = ""
+                emergencyPdfPassphraseConfirm = ""
+            },
+            title = { Text("Notfall-Kit PDF erstellen") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Lege eine eigene Recovery-Passphrase mit mindestens 20 Zeichen fest. Sie wird nicht im PDF gespeichert und muss getrennt vom Ausdruck aufbewahrt werden."
+                    )
+                    OutlinedTextField(
+                        value = emergencyPdfPassphrase,
+                        onValueChange = { emergencyPdfPassphrase = it },
+                        label = { Text("Recovery-Passphrase") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = emergencyPdfPassphraseConfirm,
+                        onValueChange = { emergencyPdfPassphraseConfirm = it },
+                        label = { Text("Passphrase wiederholen") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true
+                    )
+                    if (emergencyPdfPassphrase.isNotEmpty() && emergencyPdfPassphrase.length < 20) {
+                        Text("Mindestens 20 Zeichen erforderlich.", color = MaterialTheme.colorScheme.error)
+                    }
+                    if (emergencyPdfPassphraseConfirm.isNotEmpty() &&
+                        emergencyPdfPassphrase != emergencyPdfPassphraseConfirm
+                    ) {
+                        Text("Die Passphrasen stimmen nicht überein.", color = MaterialTheme.colorScheme.error)
+                    }
+                    pdfStatusMessage?.let { message ->
+                        Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = emergencyPdfPassphrase.length >= 20 &&
+                        emergencyPdfPassphrase == emergencyPdfPassphraseConfirm,
+                    onClick = {
+                        val passphrase = emergencyPdfPassphrase.toCharArray()
+                        emergencyPdfPassphrase = ""
+                        emergencyPdfPassphraseConfirm = ""
+                        val target = File(context.cacheDir, "myDocAnizer_Notfall_Emergency_Kit.pdf")
+                        val file = vaultSecManager.generateEmergencyPdf(target, passphrase)
+                        if (file == null || !file.exists() || file.length() <= 0L) {
+                            pdfStatusMessage = "Notfall-PDF konnte nicht erzeugt werden. Prüfe, ob der Tresor entsperrt ist, und versuche es erneut."
+                        } else {
+                            pdfGeneratedFile = file
+                            try {
+                                val uri = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    file
+                                )
+                                val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(uri, "application/pdf")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                try {
+                                    context.startActivity(Intent.createChooser(viewIntent, "Notfall-Kit PDF anzeigen"))
+                                } catch (_: Exception) {
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "application/pdf"
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "Notfall-Kit PDF öffnen oder exportieren"))
+                                }
+                                showEmergencyPdfPassphraseDialog = false
+                                pdfStatusMessage = "Notfall-Kit PDF wurde erzeugt und zum Öffnen bereitgestellt."
+                                onSecurityComplete()
+                            } catch (e: Exception) {
+                                pdfStatusMessage = "PDF wurde erzeugt, konnte aber nicht geöffnet werden. Datei: ${file.name}"
+                            }
+                        }
+                    }
+                ) { Text("PDF erzeugen und öffnen") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showEmergencyPdfPassphraseDialog = false
+                    emergencyPdfPassphrase = ""
+                    emergencyPdfPassphraseConfirm = ""
+                }) { Text("Abbrechen") }
+            }
+        )
     }
 
     // =========================================================================
