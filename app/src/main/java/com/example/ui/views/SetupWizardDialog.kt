@@ -312,109 +312,109 @@ fun SetupWizardDialog(
                     }
 
                     if (WizardStep.fromId(currentStepId) !is WizardStep.SecurityAndBiometrics) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (isLastStep && !isManualReconfig) {
-                            OutlinedButton(
-                                onClick = {
-                                    if (customPassword.isBlank() && !isUnencryptedMode) {
-                                        showSecurityRequiredDialog = true
-                                        return@OutlinedButton
-                                    }
-                                    viewModel.setSyncPasswordKey(customPassword)
-                                    viewModel.setBiometricAuthEnabled(biometricEnabled)
-                                    viewModel.setAutoCloudSyncEnabled(autoCloudSyncEnabled)
-                                    viewModel.updateCloudSyncConfig(
-                                        cloudSyncConfig.copy(
-                                            enableGoogleDrive = enableDrive,
-                                            enableWebDavNas = enableNas,
-                                            enableLocalVault = true,
-                                            enableManualUsbExport = enableManualUsb,
-                                            webDavUrl = webDavUrl,
-                                            webDavUsername = webDavUser,
-                                            webDavPassword = webDavPass,
-                                            autoMirrorToBackupDir = autoMirror,
-                                            isAirGappedStrict = false,
-                                            syncTrigger = if (autoSyncEnabled) "AUTO_AFTER_SCAN" else "MANUAL",
-                                            syncTarget = if (enableDrive && enableNas) "HYBRID_ALL" else if (enableNas) "WEBDAV_NAS" else if (enableDrive) "GOOGLE_DRIVE" else if (enableManualUsb) "MANUAL_USB" else "OFFLINE_ONLY"
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isLastStep && !isManualReconfig) {
+                                OutlinedButton(
+                                    onClick = {
+                                        if (customPassword.isBlank() && !isUnencryptedMode) {
+                                            showSecurityRequiredDialog = true
+                                            return@OutlinedButton
+                                        }
+                                        viewModel.setSyncPasswordKey(customPassword)
+                                        viewModel.setBiometricAuthEnabled(biometricEnabled)
+                                        viewModel.setAutoCloudSyncEnabled(autoCloudSyncEnabled)
+                                        viewModel.updateCloudSyncConfig(
+                                            cloudSyncConfig.copy(
+                                                enableGoogleDrive = enableDrive,
+                                                enableWebDavNas = enableNas,
+                                                enableLocalVault = true,
+                                                enableManualUsbExport = enableManualUsb,
+                                                webDavUrl = webDavUrl,
+                                                webDavUsername = webDavUser,
+                                                webDavPassword = webDavPass,
+                                                autoMirrorToBackupDir = autoMirror,
+                                                isAirGappedStrict = false,
+                                                syncTrigger = if (autoSyncEnabled) "AUTO_AFTER_SCAN" else "MANUAL",
+                                                syncTarget = if (enableDrive && enableNas) "HYBRID_ALL" else if (enableNas) "WEBDAV_NAS" else if (enableDrive) "GOOGLE_DRIVE" else if (enableManualUsb) "MANUAL_USB" else "OFFLINE_ONLY"
+                                            )
                                         )
-                                    )
-                                    viewModel.setWizardCompleted(true)
-                                    viewModel.dismissFirstStepsTour(markCompleted = true)
-                                    onFinish()
-                                },
-                                modifier = Modifier.testTag("btn_wizard_skip_tour")
-                            ) {
-                                Text("Tour überspringen")
-                            }
-                        }
-
-                        Button(
-                            onClick = {
-                                val currentStepItem = WizardStep.fromId(currentStepId)
-                                if (currentStepItem is WizardStep.SecurityAndBiometrics) {
-                                    if (customPassword.isBlank() && !isUnencryptedMode) {
-                                        showSecurityRequiredDialog = true
-                                        return@Button
-                                    }
+                                        viewModel.setWizardCompleted(true)
+                                        viewModel.dismissFirstStepsTour(markCompleted = true)
+                                        onFinish()
+                                    },
+                                    modifier = Modifier.testTag("btn_wizard_skip_tour")
+                                ) {
+                                    Text("Tour überspringen")
                                 }
-                                if (!isLastStep) {
-                                    if (currentStepItem is WizardStep.LlmModelSelection) {
-                                        val selectedModel = availableModels.find { it.isSelected }
-                                        if (selectedModel != null && !selectedModel.isDownloaded && !selectedModel.isDownloading) {
-                                            viewModel.startBackgroundDownload(selectedModel.id)
+                            }
+    
+                            Button(
+                                onClick = {
+                                    val currentStepItem = WizardStep.fromId(currentStepId)
+                                    if (currentStepItem is WizardStep.SecurityAndBiometrics) {
+                                        if (customPassword.isBlank() && !isUnencryptedMode) {
+                                            showSecurityRequiredDialog = true
+                                            return@Button
                                         }
                                     }
-                                    stepIndex = (safeStepIndex + 1).coerceAtMost(activeSteps.size - 1)
-                                } else {
-                                    if (customPassword.isBlank() && !isUnencryptedMode) {
-                                        showSecurityRequiredDialog = true
-                                        return@Button
-                                    }
-                                    viewModel.setSyncPasswordKey(customPassword)
-                                    viewModel.setBiometricAuthEnabled(biometricEnabled)
-                                    viewModel.setAutoCloudSyncEnabled(autoCloudSyncEnabled)
-
-                                    viewModel.updateCloudSyncConfig(
-                                        cloudSyncConfig.copy(
-                                            enableGoogleDrive = enableDrive,
-                                            enableWebDavNas = enableNas,
-                                            enableLocalVault = true,
-                                            enableManualUsbExport = enableManualUsb,
-                                            webDavUrl = webDavUrl,
-                                            webDavUsername = webDavUser,
-                                            webDavPassword = webDavPass,
-                                            autoMirrorToBackupDir = autoMirror,
-                                            isAirGappedStrict = false,
-                                            syncTrigger = if (autoSyncEnabled) "AUTO_AFTER_SCAN" else "MANUAL",
-                                            syncTarget = if (enableDrive && enableNas) "HYBRID_ALL" else if (enableNas) "WEBDAV_NAS" else if (enableDrive) "GOOGLE_DRIVE" else if (enableManualUsb) "MANUAL_USB" else "OFFLINE_ONLY"
+                                    if (!isLastStep) {
+                                        if (currentStepItem is WizardStep.LlmModelSelection) {
+                                            val selectedModel = availableModels.find { it.isSelected }
+                                            if (selectedModel != null && !selectedModel.isDownloaded && !selectedModel.isDownloading) {
+                                                viewModel.startBackgroundDownload(selectedModel.id)
+                                            }
+                                        }
+                                        stepIndex = (safeStepIndex + 1).coerceAtMost(activeSteps.size - 1)
+                                    } else {
+                                        if (customPassword.isBlank() && !isUnencryptedMode) {
+                                            showSecurityRequiredDialog = true
+                                            return@Button
+                                        }
+                                        viewModel.setSyncPasswordKey(customPassword)
+                                        viewModel.setBiometricAuthEnabled(biometricEnabled)
+                                        viewModel.setAutoCloudSyncEnabled(autoCloudSyncEnabled)
+    
+                                        viewModel.updateCloudSyncConfig(
+                                            cloudSyncConfig.copy(
+                                                enableGoogleDrive = enableDrive,
+                                                enableWebDavNas = enableNas,
+                                                enableLocalVault = true,
+                                                enableManualUsbExport = enableManualUsb,
+                                                webDavUrl = webDavUrl,
+                                                webDavUsername = webDavUser,
+                                                webDavPassword = webDavPass,
+                                                autoMirrorToBackupDir = autoMirror,
+                                                isAirGappedStrict = false,
+                                                syncTrigger = if (autoSyncEnabled) "AUTO_AFTER_SCAN" else "MANUAL",
+                                                syncTarget = if (enableDrive && enableNas) "HYBRID_ALL" else if (enableNas) "WEBDAV_NAS" else if (enableDrive) "GOOGLE_DRIVE" else if (enableManualUsb) "MANUAL_USB" else "OFFLINE_ONLY"
+                                            )
                                         )
-                                    )
-
-                                    if (!isManualReconfig) {
-                                        viewModel.setWizardCompleted(true)
+    
+                                        if (!isManualReconfig) {
+                                            viewModel.setWizardCompleted(true)
+                                        }
+                                        onFinish()
                                     }
-                                    onFinish()
-                                }
-                            },
-                            modifier = Modifier.testTag("btn_wizard_next")
-                        ) {
-                            Text(
-                                if (isLastStep) {
-                                    if (isManualReconfig) "Speichern" else "Fertig & Tour starten"
-                                } else if (safeStepIndex == 0) {
-                                    "Einrichtung starten"
-                                } else "Weiter"
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Icon(
-                                imageVector = if (isLastStep) Icons.Default.Check else Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                                },
+                                modifier = Modifier.testTag("btn_wizard_next")
+                            ) {
+                                Text(
+                                    if (isLastStep) {
+                                        if (isManualReconfig) "Speichern" else "Fertig & Tour starten"
+                                    } else if (safeStepIndex == 0) {
+                                        "Einrichtung starten"
+                                    } else "Weiter"
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(
+                                    imageVector = if (isLastStep) Icons.Default.Check else Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                     }
                     }
                 }
