@@ -5,9 +5,9 @@
 | Kennzahl | Aktueller Stand |
 |---|---|
 | Micro-APs insgesamt | **119** |
-| Einzelstatus dokumentiert | **40** |
-| Einzelstatus noch abzugleichen | **79** |
-| Dokumentierte Statusverteilung | 1 abgenommen · 7 getestet · 24 Patch erstellt · 5 nicht gestartet · 1 ADR freigegeben · 1 Audit dokumentiert · 1 ADR erstellt |
+| Einzelstatus dokumentiert | **41** |
+| Einzelstatus noch abzugleichen | **78** |
+| Dokumentierte Statusverteilung | 1 abgenommen · 7 getestet · 25 Patch erstellt · 5 nicht gestartet · 1 ADR freigegeben · 1 Audit dokumentiert · 1 ADR erstellt |
 | Tests | 23 Testklassen inkl. `VaultTwoFactorSecurityTest`; vorhanden heißt nicht automatisch ausgeführt oder bestanden |
 | Build/Tests | GitHub Actions Run `39633700992` auf Commit `d509ebb` erfolgreich: `assembleDebug`, `testDebugUnitTest`, `connectedDebugAndroidTest`, APK-Metadatenprüfung und Artefakt-Upload |
 
@@ -343,7 +343,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## C05 – Google-Drive-Client und Transfers absichern
 **Abhängigkeit:** C04; Uploads ausschließlich aus D10-verschlüsselten Containern.  
 **Prompt:** Implementiere zuverlässige Drive-Uploads/Downloads großer Container mit Resumable Upload, begrenzten Retries und Retry-After bei geeigneten 429/5xx, getrennten Auth-/Quota-/Netz-/Formatfehlern und sicherem Abbruch. Prüfe Containerintegrität vor dem Anwenden eines Downloads. Bei 401 kontrolliert stoppen und Neuautorisierung anfordern. Logs dürfen keine Tokens, Inhalte, Klartextnamen oder Recovery-Secrets enthalten. **Abnahme:** Tests für Resume, 401, 403, 429, 5xx, Netzabbruch, ungültigen Container und Abbruch.
-## C06 – WebDAV-HTTPS und Zertifikatsvertrauen
+## C06 – WebDAV-HTTPS und Zertifikatsvertrauen — **[PATCH ERSTELLT – CI OFFEN; TOFU OFFEN]**
 **Prompt:** Erzwinge HTTPS und Hostnamenprüfung. Beziehe Anmeldedaten ausschließlich aus S08-SecretStore. Für bewusst unterstützte selbstsignierte NAS-Zertifikate nur explizites Trust-on-first-use mit SHA-256-Fingerprint pro Host; geändertes Zertifikat blockieren, bis der Nutzer bewusst erneut prüft. Keine globale Trust-all-Implementierung oder stille HTTP-Ausnahme. **Abnahme:** Tests für gültiges, falsches, abgelaufenes/geändertes Zertifikat und fehlende Zugangsdaten.
 
 ## C07 – Verschlüsseltes Sync-Manifest und Differenzabgleich
@@ -538,3 +538,4 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | D15 || D15 | NICHT GESTARTET | – | Nein | Alle dauerhaft gespeicherten Einstellungen verschlüsseln | DB/Persistenztests |
 | P01 | PATCH ERSTELLT | direkt in main | Ja | Bestehende Audit-/TLS-ADR dokumentiert; alle drei Verbindungstypen müssen im Code bestätigt werden | Sicherheitsmatrix vor P02 |
 | P10 | PATCH ERSTELLT | direkt in main | Ja | SHA-256-Ersatzschlüssel-Fallback entfernt; P2pSyncSecurityTest laut Statusbericht verifiziert; Aufrufer-Audit separat prüfen | Testlauf und Aufrufer-Audit prüfen |
+| C06 | PATCH ERSTELLT | WebDavClient.kt / WebDavTransportSecurityTest.kt | Ja | HTTP explizit abgewiesen; Bare-Host wird HTTPS; Redirects deaktiviert; URL-Zugangsdaten, Query/Fragment und Path-Traversal-Namen abgewiesen. CI/Unit-Tests sowie Zertifikats-TOFU-/Fingerprint-Pinning stehen noch aus | CI prüfen, dann TOFU pro Host mit SHA-256-Fingerprint implementieren und testen |
