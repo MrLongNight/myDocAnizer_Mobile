@@ -56,6 +56,9 @@ fun PendingRuleSuggestionDialog(
     var selectedLogo by remember { mutableStateOf(suggestion.suggestedRule.targetLogo) }
     var showIconPicker by remember { mutableStateOf(false) }
     var customFieldsMap by remember { mutableStateOf(suggestion.suggestedRule.targetCustomFields) }
+    var selectedExistingRuleId by remember(suggestion.matchingRules) {
+        mutableStateOf(suggestion.matchingRules.firstOrNull()?.id.orEmpty())
+    }
 
     // Neuer Tab-Zustand im Dialog: 0 = Regel-Felder & Zusatzdaten, 1 = OCR-Volltext & Textkopie
     var activeDialogTab by remember { mutableIntStateOf(0) }
@@ -183,6 +186,52 @@ fun PendingRuleSuggestionDialog(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (suggestion.matchingRules.size > 1) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                "Mehrdeutiger Regel-Treffer",
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                "Diese ${suggestion.matchingRules.size} gespeicherten Regeln passen auf das Dokument. Wähle aus, welche für dieses Dokument gelten soll. Es wird nicht automatisch eine davon bevorzugt.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            suggestion.matchingRules.forEach { matched ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { selectedExistingRuleId = matched.id }
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = selectedExistingRuleId == matched.id,
+                                        onClick = { selectedExistingRuleId = matched.id }
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(matched.name, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "Ziel: ${matched.targetMainCategoryId}/${matched.targetSubCategoryId} · Auslöser: ${matched.matchKeywords.joinToString()}",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Header-Zeile mit KI-Logo & Live-Icon
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -1009,6 +1058,13 @@ fun PendingRuleSuggestionDialog(
                 ) {
                     OutlinedButton(
                         onClick = {
+                            if (suggestion.matchingRules.size > 1) {
+                                val selected = suggestion.matchingRules.firstOrNull { it.id == selectedExistingRuleId }
+                                if (selected != null) {
+                                    suggestion.onSingleUseOnly(selected)
+                                    return@OutlinedButton
+                                }
+                            }
                             val kwList = keywordsStr.split(",")
                                 .map { it.trim().lowercase() }
                                 .filter { it.isNotEmpty() }

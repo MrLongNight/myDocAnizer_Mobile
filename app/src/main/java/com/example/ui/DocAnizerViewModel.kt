@@ -2006,6 +2006,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         bitmap = processed,
                         ocrText = ocrText,
                         suggestedRule = suggestedRule,
+                        matchingRules = matchingRules,
                         onSingleUseOnly = { finalRule ->
                             dmsManager.clearPendingRuleSuggestion()
                             saveProcessedBitmapWithRule(
@@ -2045,7 +2046,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         val ocrText: String,
         val matchedRule: com.example.model.DocRule?,
         val suggestedRule: com.example.model.DocRule?,
-        val isColor: Boolean
+        val isColor: Boolean,
+        val matchingRules: List<com.example.model.DocRule> = emptyList()
     )
 
     private var backgroundTriageJob: kotlinx.coroutines.Job? = null
@@ -2072,7 +2074,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     preferredMode = preferredMode
                 )
                 val ocrText = OcrService.recognizeText(processed, "", "")
-                val matchedRule = ruleRepo.matchRule(ocrText)
+                val matchingRules = ruleRepo.matchingRules(ocrText)
+                val matchedRule = matchingRules.singleOrNull()
                 val suggestedRule: com.example.model.DocRule? = if (matchedRule == null) {
                     val aiClass = llmService.classifyDocumentText(ocrText)
                     val smartKeywords = if (aiClass.smartKeywords.isNotEmpty()) {
@@ -2139,7 +2142,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     ocrText = ocrText,
                     matchedRule = matchedRule,
                     suggestedRule = suggestedRule,
-                    isColor = isColor
+                    isColor = isColor,
+                    matchingRules = matchingRules
                 )
             } catch (e: Exception) {
                 Log.e("DocAnizerViewModel", "Hintergrund-Triage Ausnahme: ${e.message}", e)
@@ -2163,7 +2167,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
 
                 val ocrText = triage?.ocrText ?: OcrService.recognizeText(finalBitmap, "", "")
                 val isColor = triage?.isColor ?: true
-                val matchedRule = triage?.matchedRule ?: ruleRepo.matchRule(ocrText)
+                val matchingRules = triage?.matchingRules ?: ruleRepo.matchingRules(ocrText)
+                val matchedRule = triage?.matchedRule ?: matchingRules.singleOrNull()
 
                 if (matchedRule != null) {
                     saveProcessedBitmapWithRule(

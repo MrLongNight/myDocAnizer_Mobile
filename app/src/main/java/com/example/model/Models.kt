@@ -547,6 +547,8 @@ data class PendingRuleSuggestion(
     val bitmap: android.graphics.Bitmap,
     val ocrText: String,
     val suggestedRule: DocRule,
+    /** Existing rules that actually matched the same OCR text; empty unless ambiguous. */
+    val matchingRules: List<DocRule> = emptyList(),
     val onSingleUseOnly: (DocRule) -> Unit,
     val onSaveAsPermanentRule: (DocRule) -> Unit,
     val onDismiss: () -> Unit
