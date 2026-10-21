@@ -146,10 +146,9 @@ dependencies {
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.runner)
-  // D14: PDF-Textlayer im erzeugten Scan-PDF automatisiert prüfen.
-  // PDFBox wird nur im Instrumentation-Test verwendet; BouncyCastle-Transitives
-  // werden ausgeschlossen, damit sie nicht mit der App-Version kollidieren.
-  androidTestImplementation(libs.pdfbox.android) {
+  // PDFBox wird für den PDF-Inhaltstest benötigt. Als App-Runtime-Abhängigkeit
+  // sind seine Assets zuverlässig im Ziel-APK verfügbar, auch im Instrumentierungstest.
+  implementation(libs.pdfbox.android) {
     exclude(group = "org.bouncycastle", module = "bcprov-jdk15to18")
     exclude(group = "org.bouncycastle", module = "bcpkix-jdk15to18")
     exclude(group = "org.bouncycastle", module = "bcutil-jdk15to18")

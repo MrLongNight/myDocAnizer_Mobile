@@ -28,9 +28,8 @@ class PdfTextLayerInstrumentedTest {
     fun generatedScanPdfContainsHeadersButDoesNotEmbedOcrTextLayer() = runBlocking {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
-        // PDFBox is an androidTest dependency, so its bundled assets live in the test APK.
-        // Initialize the loader with the instrumentation context rather than the target app context.
-        PDFBoxResourceLoader.init(instrumentation.context)
+        // PDFBox is packaged with the app so its assets are available in the target context.
+        PDFBoxResourceLoader.init(context)
 
         val ocrSentinel = "D14_OCR_TEXT_LAYER_SENTINEL_${UUID.randomUUID().toString().replace("-", "")}"
         val outputDir = File(context.cacheDir, "d14-pdf-audit-${UUID.randomUUID()}")
