@@ -167,7 +167,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## S07 – FLAG_SECURE und sensitive Screens — **[IMPLEMENTIERUNG VORHANDEN – GERÄTETEST OFFEN]**
 **Prompt:** Setze `FLAG_SECURE` rechtzeitig vor dem Rendern sensibler Inhalte und steuere Debug-Ausnahmen ausschließlich über ein explizites Build-Flag bzw. `BuildConfig.DEBUG`, nicht über Emulatorerkennung. Sorge dafür, dass Recents/Screenshots und offene Detailansichten nach Sperrung keine sensiblen Inhalte mehr zeigen. Keine Navigation oder Sicherheitsarchitektur nebenbei refactoren. **Abnahme:** dokumentierter manueller Testplan für Screenshot, Recents, App-Hintergrund, Activity-Neustart und Lock auf einer offenen Detailseite.
 
-## S08 – SecretStore-Grundkomponente — **[KERNKOMPONENTE ERSTELLT – INSTRUMENTATIONSTEST OFFEN]**
+## S08 – SecretStore-Grundkomponente — **[CI-TESTS BESTANDEN – PHYSISCHER GERÄTETEST OFFEN]**
 **Prompt:** Baue einen testbaren `SecretStore` für langlebige Geheimnisse. Verwende AES-GCM mit einem nicht exportierbaren Android-Keystore-Key, eindeutiger Nonce, Formatversion und Integritätsprüfung. Dokumentiere die Authentifizierungsbindung des Keys und API-Level-Fallbacks. Ungültiger Tag oder Keystore-Fehler darf niemals Klartextfallback auslösen. In diesem Schritt nur API und Kernkomponente samt synthetischen Tests erstellen; bestehende Prefs noch nicht migrieren. **Abnahme:** Roundtrip, falscher Tag, fehlender/invalidierter Key und Fehlerpfade getestet.
 
 ## S09 – Legacy-Secrets verlustfrei migrieren — **[BLOCKIERT – VERBRAUCHER-AUDIT OFFEN]**
