@@ -151,7 +151,6 @@ fun SecurityWizardStep(
     val coroutineScope = rememberCoroutineScope()
     var isSavingToGoogleManager by remember { mutableStateOf(false) }
     var googleManagerStatusMsg by remember { mutableStateOf<String?>(null) }
-    var autoSaveToGooglePasswordManager by remember { mutableStateOf(true) }
     var isRegisteringPasskey by remember { mutableStateOf(false) }
     var passkeyRegisterStatus by remember { mutableStateOf<String?>(null) }
 
@@ -599,7 +598,7 @@ fun SecurityWizardStep(
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                         Text(
-                                            text = "Passwortlose Anmeldung über Android Hardware-Sicherheitsmodul oder Biometrie.",
+                                            text = "WebAuthn-Passkey-Registrierung; noch nicht zur Tresorverschlüsselung nutzbar.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -784,9 +783,10 @@ fun SecurityWizardStep(
                                             )
                                         }
                                     }
-                                    Switch(
-                                        checked = autoSaveToGooglePasswordManager,
-                                        onCheckedChange = { autoSaveToGooglePasswordManager = it }
+                                    Text(
+                                        text = "Autofill beim Fokussieren",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
@@ -809,12 +809,12 @@ fun SecurityWizardStep(
                                                     credManager.createCredential(context, req)
                                                     googleManagerStatusMsg = "✅ Im Google Passwort-Manager hinterlegt!"
                                                 } else {
-                                                    googleManagerStatusMsg = "✅ Lokal als Master-Schlüssel aktiv."
+                                                    googleManagerStatusMsg = "Android Credential Manager ist auf diesem Gerät nicht verfügbar."
                                                 }
                                             } catch (e: CreateCredentialCancellationException) {
-                                                googleManagerStatusMsg = "Speichern abgebrochen."
+                                                googleManagerStatusMsg = "Speichern im Passwort-Manager abgebrochen."
                                             } catch (e: Throwable) {
-                                                googleManagerStatusMsg = "✅ Lokal als Master-Schlüssel aktiv."
+                                                googleManagerStatusMsg = "Google Passwort-Manager konnte nicht speichern: ${e.localizedMessage ?: "unbekannter Fehler"}"
                                             } finally {
                                                 isSavingToGoogleManager = false
                                             }

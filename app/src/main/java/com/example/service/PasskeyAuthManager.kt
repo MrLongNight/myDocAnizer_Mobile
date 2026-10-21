@@ -13,7 +13,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.UUID
 
 /**
  * FIDO2 / WebAuthn Passkey Manager unter Verwendung von AndroidX CredentialManager.
@@ -125,7 +124,7 @@ class PasskeyAuthManager(private val context: Context) {
      */
     suspend fun authenticatePasskey(
         activityContext: Context,
-        rpId: String = "mydocanizer.local"
+        rpId: String = "mydocanizer.com"
     ): Result<String> = withContext(Dispatchers.Main) {
         val manager = credentialManager ?: return@withContext Result.failure(Exception("Credential Manager auf diesem Gerät nicht verfügbar."))
         try {
