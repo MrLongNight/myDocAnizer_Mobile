@@ -67,6 +67,40 @@ class SecretStoreInstrumentedTest {
     }
 
     @Test
+    fun legacyMigrationIsIdempotentAcrossRepositoryRecreation() {
+        val legacyPassword = "synthetic-idempotent-migration-password"
+        val legacyPrefs = context.getSharedPreferences("mydocanizer_prefs", Context.MODE_PRIVATE)
+        assertTrue(legacyPrefs.edit().putString("sync_master_password", legacyPassword).commit())
+
+        val firstRepository = SettingsRepository(context)
+        assertEquals(legacyPassword, firstRepository.syncPasswordKey.value)
+        assertFalse(legacyPrefs.contains("sync_master_password"))
+        val encryptedPrefs = context.getSharedPreferences("mydocanizer_secret_store", Context.MODE_PRIVATE)
+        val firstPayload = encryptedPrefs.getString("secret_v1_sync_master_password", null)
+        assertNotNull(firstPayload)
+
+        val secondRepository = SettingsRepository(context)
+        assertEquals(legacyPassword, secondRepository.syncPasswordKey.value)
+        assertEquals(firstPayload, encryptedPrefs.getString("secret_v1_sync_master_password", null))
+        assertFalse(legacyPrefs.contains("sync_master_password"))
+    }
+
+    @Test
+    fun legacyPlaintextIsPreservedWhenSecretStoreRejectsOversizedValue() {
+        // SecretStore intentionally rejects values above its documented 64 KiB limit.
+        val oversizedLegacyPassword = "x".repeat(64 * 1024 + 1)
+        val legacyPrefs = context.getSharedPreferences("mydocanizer_prefs", Context.MODE_PRIVATE)
+        assertTrue(legacyPrefs.edit().putString("sync_master_password", oversizedLegacyPassword).commit())
+
+        val repository = SettingsRepository(context)
+
+        assertEquals("", repository.syncPasswordKey.value)
+        assertTrue("legacy plaintext must remain available if encrypted migration fails", legacyPrefs.contains("sync_master_password"))
+        assertEquals(oversizedLegacyPassword, legacyPrefs.getString("sync_master_password", null))
+        assertNull(store.get("sync_master_password"))
+    }
+
+    @Test
     fun encryptedSecretRoundTrips() {
         val secret = "synthetic-secret-for-test-only".toByteArray(Charsets.UTF_8)
         assertTrue(store.put("instrumentation_test", secret))
