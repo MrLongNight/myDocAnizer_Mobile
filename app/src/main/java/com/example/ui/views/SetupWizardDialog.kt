@@ -250,7 +250,10 @@ fun SetupWizardDialog(
                                 biometricEnabled = biometricEnabled,
                                 onBiometricToggle = { biometricEnabled = it },
                                 passwordValue = customPassword,
-                                onPasswordChange = { customPassword = it }
+                                onPasswordChange = { customPassword = it },
+                                onSecurityComplete = {
+                                    stepIndex = (safeStepIndex + 1).coerceAtMost(activeSteps.size - 1)
+                                }
                             )
                             is WizardStep.BackupAndRecoveryStrategy -> StepBackupAndRecoveryStrategy(
                                 viewModel = viewModel,
@@ -279,7 +282,8 @@ fun SetupWizardDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Row(
+                if (WizardStep.fromId(currentStepId) !is WizardStep.SecurityAndBiometrics) {
+                    Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -412,6 +416,7 @@ fun SetupWizardDialog(
                             )
                         }
                     }
+                }
                 }
             }
         }
