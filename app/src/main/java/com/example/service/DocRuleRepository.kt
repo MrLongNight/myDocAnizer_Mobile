@@ -62,25 +62,24 @@ class DocRuleRepository(private val context: Context) {
             return text.contains(kw, ignoreCase = true)
         }
 
+        /**
+         * Liefert nur dann eine Regel, wenn genau eine aktivierte Regel alle Pflicht-
+         * Keywords erfüllt und kein Ausschluss-Keyword findet. Bei Mehrdeutigkeit
+         * wird null geliefert, damit der Aufrufer prüfen oder die LLM-Stufe verwenden kann.
+         */
         fun findUniqueMatchingRule(rules: List<DocRule>, ocrText: String): DocRule? {
             if (ocrText.isBlank()) return null
             val normalizedText = ocrText.lowercase()
-
             val matches = rules.filter { rule ->
                 if (!rule.isEnabled || rule.matchKeywords.isEmpty()) return@filter false
-
-                val hasExcludedWord = rule.excludeKeywords.any { keyword ->
-                    keyword.isNotBlank() &&
-                        containsKeywordMatch(normalizedText, keyword)
+                val excluded = rule.excludeKeywords.any { keyword ->
+                    keyword.isNotBlank() && containsKeywordMatch(normalizedText, keyword)
                 }
-                if (hasExcludedWord) return@filter false
-
+                if (excluded) return@filter false
                 rule.matchKeywords.all { keyword ->
-                    keyword.isNotBlank() &&
-                        containsKeywordMatch(normalizedText, keyword)
+                    keyword.isNotBlank() && containsKeywordMatch(normalizedText, keyword)
                 }
             }
-
             return matches.singleOrNull()
         }
 
@@ -158,28 +157,35 @@ class DocRuleRepository(private val context: Context) {
     fun addRules(newRules: List<DocRule>) {
         val current = _rules.value.toMutableList()
         newRules.forEach { nr ->
-               fun findUniqueMatchingRule(rules: List<DocRule>, ocrText: String): DocRule? {
-            if (ocrText.isBlank()) return null
-            val normalizedText = ocrText.lowercase()
-
-            val matches = rules.filter { rule ->
-                if (!rule.isEnabled || rule.matchKeywords.isEmpty()) return@filter false
-
-                val hasExcludedWord = rule.excludeKeywords.any { keyword ->
-                    keyword.isNotBlank() &&
-                        containsKeywordMatch(normalizedText, keyword)
-                }
-                if (hasExcludedWord) return@filter false
-
-                rule.matchKeywords.all { keyword ->
-                    keyword.isNotBlank() &&
-                        containsKeywordMatch(normalizedText, keyword)
-                }
-            }
-
-            return matches.singleOrNull()
+            current.removeAll { it.id == nr.id }
+            current.add(0, nr)
         }
+        saveRules(current)
     }
+
+    fun updateRule(rule: DocRule) {
+        val current = _rules.value.map { if (it.id == rule.id) rule else it }
+        saveRules(current)
+    }
+
+    fun deleteRule(ruleId: String) {
+        val current = _rules.value.filter { it.id != ruleId }
+        saveRules(current)
+    }
+
+    fun toggleRule(ruleId: String, enabled: Boolean) {
+        val current = _rules.value.map {
+            if (it.id == ruleId) it.copy(isEnabled = enabled) else it
+        }
+        saveRules(current)
+    }
+
+    /**
+     * Schneller Regel-Check des OCR-Textes (Schritt 1 VOR dem LLM)
+     * Gibt die erste passende Regel zurück oder null
+     */
+    fun matchRule(ocrText: String): DocRule? =
+        findUniqueMatchingRule(_rules.value, ocrText)
 
     /**
      * Prüft, ob bereits eine existierende Regel für diesen Absender oder Dokumenttyp vorliegt.
