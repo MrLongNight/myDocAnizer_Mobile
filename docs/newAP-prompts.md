@@ -534,6 +534,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | S10 | PATCH ERSTELLT | direkt in main | Ja | ExternalIntentPolicyTest laut Statusbericht verifiziert; Widget-Cold-Start-Test bleibt offen | D01 |
 | D01 | AUDIT DOKUMENTIERT | docs/security/document-data-flow.md | Ja | Codepfad-Inventar erstellt; dynamische Geräte-/Share-/Restore-Abnahme bleibt für Folge-APs offen | D02 |
 | D02 | ADR ERSTELLT | docs/security/adr-003-sqlcipher-room-database.md | Ja | SQLCipher for Android 4.19.1 / Room 2.7.0 als technischer Vorschlag; Runtime bleibt bis D03 und DB01–DB04 blockiert | D03 |
+| DB03 | PATCH ERSTELLT | AppDatabase.kt / DatabaseDowngradeSafetyTest.kt | Ja | Destruktiven Downgrade-Fallback entfernt; Emulator-Abnahme dieses Commits steht noch aus | DB04 |
 | D13 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; Restore-/Geräteabnahme separat prüfen | D14 |
 | D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | D15 |
 | D15 | NICHT GESTARTET | – | Nein | Alle dauerhaft gespeicherten Einstellungen verschlüsseln | DB/Persistenztests |

@@ -179,17 +179,26 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "mydocanizer_database"
-                )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
-                    .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
-                    .build()
+                val instance = buildDatabase(context.applicationContext, "mydocanizer_database")
                 INSTANCE = instance
                 instance
             }
         }
+
+        /**
+         * Shared production builder, exposed internally so instrumentation tests can verify
+         * migration policy against an isolated database without touching the user's database.
+         */
+        internal fun buildDatabase(context: Context, databaseName: String): AppDatabase =
+            Room.databaseBuilder(
+                context.applicationContext,
+                AppDatabase::class.java,
+                databaseName
+            )
+                .addMigrations(
+                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9
+                )
+                .build()
     }
 }
