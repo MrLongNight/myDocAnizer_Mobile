@@ -179,7 +179,6 @@ object VaultHeaderParserV2 {
             val recoveryMethod = json.optString("recoveryMethod", "NONE")
             if (recoveryMethod !in setOf("NONE", "BIP39_WORDS", "EMERGENCY_PDF", "SHAMIR_2_OF_3", "RECOVERY_CODE")) return null
             if (domainSecurityTier == "TWO_FACTOR" && domainFactorType != "PASSWORD_AND_KEYFILE") return null
-            if (securityTier == "TWO_FACTOR" && optionalString("keyFileTokenHash") == null) return null
             val shares = json.optJSONArray("shamirShareHashes")
             val shareHashes = mutableListOf<String>()
             if (shares != null) {

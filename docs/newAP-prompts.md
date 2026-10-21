@@ -508,7 +508,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | M00 | ABGENOMMEN | micro-ap-M00.patch | Ja | Bestanden | V01 |
 | V01 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V02 |
 | V02 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V03 |
-| V03 | IN ARBEIT | VaultHeaderV2.kt, VaultHeaderV2Test.kt, VaultV2OnlyTest.kt | Ja | Pflichtfelder/Typen, Dezimalzahlen und optionale Secret-Typen fail-closed; automatische Recovery-Credentials und Faktor-Negativtests ergänzt; Recovery-/Biometrie-/2FA-Metadaten werden zusätzlich auf Konsistenz geprüft. CI-Abnahme ausstehend | CI: Parser-, Recovery- und Faktor-Negativtests müssen bestehen |
+| V03 | IN ARBEIT | VaultHeaderV2.kt, VaultHeaderV2Test.kt, VaultV2OnlyTest.kt | Ja | Pflichtfelder/Typen, Dezimalzahlen und optionale Secret-Typen fail-closed; automatische Recovery-Credentials und Faktor-Negativtests ergänzt; Recovery-/Biometrie-/2FA-Metadaten werden zusätzlich auf Konsistenz geprüft; fehlender Keyfile-Verifier wird beim Laden persistierter 2FA-Header fail-closed abgewiesen (staged crypto headers bleiben parsebar). CI-Abnahme ausstehend | CI: Parser-, Recovery- und Faktor-Negativtests müssen bestehen |
 | V04 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V05 |
 | V05 | ADR FREIGEGEBEN | docs/security/adr-002-totp-decision.md | Ja | Optionale 2FA: Passwort + zufällige Schlüsseldatei; TOTP ist kein kryptografischer Faktor | V06 |
 | V06 | PATCH ERSTELLT | direkt in main | Ja | Unlock-Guard und Tests für Passwort+Keyfile ergänzt; CI-Lauf offen | V06A/V06B |

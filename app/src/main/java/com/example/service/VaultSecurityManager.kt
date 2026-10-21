@@ -1309,6 +1309,9 @@ class VaultSecurityManager private constructor(private val context: Context) {
 
     private fun loadVaultHeader(): VaultHeader? {
         val v2 = VaultHeaderParserV2.parse(prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null)) ?: return null
+        // A staged crypto header may exist before the manager adds the token hash, but a
+        // persisted active two-factor vault must never load without that verifier.
+        if (v2.securityTier == "TWO_FACTOR" && v2.keyFileTokenHash.isNullOrBlank()) return null
         val domainTier = runCatching { VaultSecurityTier.valueOf(v2.domainSecurityTier) }
             .getOrDefault(if (v2.securityTier == "TWO_FACTOR") VaultSecurityTier.TWO_FACTOR else VaultSecurityTier.ONE_FACTOR)
         val domainFactor = runCatching { VaultFactorType.valueOf(v2.domainFactorType) }

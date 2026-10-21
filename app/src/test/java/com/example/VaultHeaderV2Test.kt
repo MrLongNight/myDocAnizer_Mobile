@@ -157,10 +157,15 @@ class VaultHeaderV2Test {
             .put("recoveryMethod", "SHAMIR_2_OF_3")
         assertNull("Shamir recovery requires exactly three share hashes", VaultHeaderParserV2.parse(shamirWithNoShares.toString()))
 
-        val twoFactorWithoutHash = org.json.JSONObject(createValidV2Header().toJson())
-            .put("securityTier", "TWO_FACTOR")
-            .put("factorType", "PASSWORD_AND_KEYFILE")
-        assertNull("Two-factor headers require a key-file token hash", VaultHeaderParserV2.parse(twoFactorWithoutHash.toString()))
+        // The parser is also used while a new crypto header is staged, before
+        // VaultSecurityManager adds the persisted token-hash verifier.
+        val stagedTwoFactorHeader = createValidV2Header().copy(
+            securityTier = "TWO_FACTOR",
+            factorType = "PASSWORD_AND_KEYFILE",
+            domainSecurityTier = "TWO_FACTOR",
+            domainFactorType = "PASSWORD_AND_KEYFILE"
+        )
+        assertNotNull("A structurally valid staged two-factor crypto header must parse", VaultHeaderParserV2.parse(stagedTwoFactorHeader.toJson()))
     }
 
     @Test

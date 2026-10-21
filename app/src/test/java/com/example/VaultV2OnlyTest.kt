@@ -88,6 +88,31 @@ class VaultV2OnlyTest {
     }
 
     @Test
+    fun `persisted two factor header without token hash fails closed`() {
+        val context = context()
+        val password = "V2MissingTokenHashPassword2026!"
+        val token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        val manager = VaultSecurityManager.getInstance(context)
+        manager.initializeVault(
+            masterPassword = password,
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.NONE,
+            securityTier = VaultSecurityTier.TWO_FACTOR,
+            factorType = VaultFactorType.PASSWORD_AND_KEYFILE,
+            keyFileToken = token
+        )
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+        val json = org.json.JSONObject(prefs.getString("vault_header_json_v2_active", null)!!)
+        json.remove("keyFileTokenHash")
+        assertTrue(prefs.edit().putString("vault_header_json_v2_active", json.toString()).commit())
+
+        resetSingleton()
+        val reloaded = VaultSecurityManager.getInstance(context)
+        assertNull("Persisted two-factor header without verifier must not load", reloaded.vaultHeader.value)
+        assertFalse(reloaded.unlockVault(password = password, keyFileToken = token))
+    }
+
+    @Test
     fun `recovery metadata remains in V2 across process reload`() {
         val context = context()
         val password = "V2MetadataFixturePassword2026!"
