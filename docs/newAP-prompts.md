@@ -7,9 +7,9 @@
 | Micro-APs insgesamt | **119** |
 | Einzelstatus dokumentiert | **40** |
 | Einzelstatus noch abzugleichen | **79** |
-| Dokumentierte Statusverteilung | 1 abgenommen · 2 getestet · 27 Patch erstellt · 2 in Arbeit · 5 nicht gestartet · 1 ADR freigegeben · 1 Audit dokumentiert · 1 ADR erstellt |
+| Dokumentierte Statusverteilung | 1 abgenommen · 6 getestet · 24 Patch erstellt · 1 in Arbeit · 5 nicht gestartet · 1 ADR freigegeben · 1 Audit dokumentiert · 1 ADR erstellt |
 | Tests | 23 Testklassen inkl. `VaultTwoFactorSecurityTest`; vorhanden heißt nicht automatisch ausgeführt oder bestanden |
-| Build/Tests | GitHub Actions führt jetzt `assembleDebug testDebugUnitTest` aus; Ergebnis der aktuellen Änderungen wird separat geprüft |
+| Build/Tests | GitHub Actions Run `39633700992` auf Commit `d509ebb` erfolgreich: `assembleDebug`, `testDebugUnitTest`, `connectedDebugAndroidTest`, APK-Metadatenprüfung und Artefakt-Upload |
 
 Fehlende Einzelstatus sind eine Dokumentationslücke, kein Beweis dafür, dass ein Arbeitspaket nicht umgesetzt wurde.
 
@@ -507,12 +507,12 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | M00 | ABGENOMMEN | micro-ap-M00.patch | Ja | Bestanden | V01 |
 | V01 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V02 |
 | V02 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V03 |
-| V03 | IN ARBEIT | VaultHeaderV2.kt, VaultHeaderV2Test.kt, VaultV2OnlyTest.kt | Ja | Pflichtfelder/Typen, Dezimalzahlen und optionale Secret-Typen fail-closed; automatische Recovery-Credentials und Faktor-Negativtests ergänzt; Recovery-/Biometrie-/2FA-Metadaten werden zusätzlich auf Konsistenz geprüft; fehlender Keyfile-Verifier wird beim Laden persistierter 2FA-Header fail-closed abgewiesen (staged crypto headers bleiben parsebar). CI-Abnahme ausstehend | CI: Parser-, Recovery- und Faktor-Negativtests müssen bestehen |
+| V03 | GETESTET (CI) | VaultHeaderV2.kt, VaultHeaderV2Test.kt, VaultV2OnlyTest.kt | Ja | Parser-, Recovery- und Faktor-Negativtests einschließlich Pflichtfeld-/Typvalidierung liefen in GitHub Actions Run `39633700992` erfolgreich; staged crypto headers bleiben parsebar. Gesamt-Abnahme V01–V04 weiterhin separat abgleichen | V04 / Gesamt-Abnahme V01–V04 |
 | V04 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V05 |
 | V05 | ADR FREIGEGEBEN | docs/security/adr-002-totp-decision.md | Ja | Optionale 2FA: Passwort + zufällige Schlüsseldatei; TOTP ist kein kryptografischer Faktor | V06 |
-| V06 | IN ARBEIT | Branch `fix/vault-totp-cleartext-cleanup` | Noch nicht gemergt | Legacy-TOTP wird nicht mehr als Vault-Faktor akzeptiert; Klartextfeld wird beim Laden entfernt; Regressionstests ergänzt, CI ausstehend | CI-Ergebnis prüfen; danach V06A/V06B gegen die freigegebene Passwort+Keyfile-Architektur abnehmen |
-| V06A | PATCH ERSTELLT | direkt in main | Ja | Wizard bietet nur Passwort+Keyfile als neue kryptografische 2FA; .key-Export ergänzt; UI-Tests/CI offen | V06B |
-| V06B | PATCH ERSTELLT | direkt in main | Ja | Manager verlangt beide Faktoren und prüft Keyfile-Hash; .key-Import und Negativtests ergänzt. Die aktuelle TOTP-Bereinigung ist noch nicht gemergt; CI und spezifische Geräteabnahme offen | CI/Instrumentierung, danach Statusabgleich |
+| V06 | GETESTET (CI) | main, Commit `d509ebb` (PR #3) | Ja | Legacy-TOTP wird nicht mehr als Vault-Faktor akzeptiert; neue Header serialisieren kein TOTP-Secret, bestehende Klartextfelder werden beim Laden entfernt. GitHub Actions Run `39633700992`: Build, Unit-, Instrumentierungs- und APK-Prüfschritte erfolgreich | V06A/V06B separat abnehmen; manuelle Geräteprüfung bleibt offen |
+| V06A | PATCH ERSTELLT | direkt in main | Ja | Wizard bietet nur Passwort+Keyfile als neue kryptografische 2FA; `.key`-Export ergänzt; Gesamt-CI grün, gezielte UI-/Geräteabnahme des Exports noch offen | V06B |
+| V06B | PATCH ERSTELLT | direkt in main | Ja | Manager verlangt beide Faktoren und prüft Keyfile-Hash; `.key`-Import und Negativtests ergänzt; Gesamt-CI grün, gezielte Import-/Geräteabnahme bleibt offen | V06A/V06B gezielt auf Gerät prüfen |
 | V07 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V08 |
 | V08 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V09 |
 | V09 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V10 |
@@ -521,7 +521,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | V12 | PATCH ERSTELLT | direkt in main | Ja | PDF-Regressionstest ergänzt; explizites Notfalldokument und Geräterestore abzunehmen | V12B/V13 |
 | V12B | NICHT GESTARTET | – | Nein | Unauffällige Druckvariante erstellen | V12 |
 | V13 | PATCH ERSTELLT | direkt in main | Ja | CryptoObject-Instrumented-Test ergänzt; Gerätetest offen | V14 |
-| V14 | IN ARBEIT | VaultSecurityManager.kt, VaultHeaderV2.kt, VaultV2OnlyTest.kt | Ja | Codeprüfung bestätigt V2-only-Headerpfad; Negativ-Regressionstest für alte Header-Schlüssel ergänzt, CI-Abnahme ausstehend. Keine Migration/Fallbacks. | CI-Ergebnis des neuen Negativtests; danach Gesamtstatus V01–V04 separat abnehmen |
+| V14 | GETESTET (CI) | VaultSecurityManager.kt, VaultHeaderV2.kt, VaultV2OnlyTest.kt | Ja | V2-only-Headerpfad und Negativ-Regressionstest für alte Header-Schlüssel liefen in GitHub Actions Run `39633700992` erfolgreich. Keine Migration/Fallbacks | Gesamtstatus V01–V04 separat abnehmen |
 | V15 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; weitere AP-Abnahme separat prüfen | S01 |
 | V16 | NICHT GESTARTET | – | Nein | Passkey muss echte Wiederherstellung ermöglichen | V09/V10 |
 | V17 | NICHT GESTARTET | – | Nein | Sicherheitsfragen nur zusätzlicher, begrenzt starker Faktor | V10/V16 |
