@@ -79,12 +79,24 @@ class DocRuleMatchingSafetyTest {
     }
 
     @Test
-    fun disjointRulesCanCoexist() {
+    fun rulesWithDifferentTriggersCanCoexist() {
         assertEquals(
             false,
             DocRuleRepository.hasPotentialRuleConflict(
                 listOf(rule("vodafone", "vodafone"), rule("allianz", "allianz"))
             )
+        )
+    }
+
+    @Test
+    fun overlappingRuntimeMatchesCanBeListedForUserDecision() {
+        val rules = listOf(
+            rule("broad", "vodafone"),
+            rule("invoice", "vodafone", "rechnung")
+        )
+        assertEquals(
+            listOf("broad", "invoice"),
+            DocRuleRepository.findMatchingRules(rules, "Vodafone Rechnung Februar").map { it.id }
         )
     }
 
