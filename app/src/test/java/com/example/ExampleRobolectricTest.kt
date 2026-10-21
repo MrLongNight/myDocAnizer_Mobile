@@ -1298,20 +1298,20 @@ class ExampleRobolectricTest {
     assertEquals(3, shares.size)
 
     // Test combinations: (1, 2), (1, 3), (2, 3)
-    val rec12 = secManager.recoverDekWithShamir(shares[0].token, shares[1].token)
+    val rec12 = com.example.service.ShamirEngine.combine2of3(shares[0].token, shares[1].token)
     assertNotNull(rec12)
     assertTrue(rec12!!.contentEquals(dek))
 
-    val rec13 = secManager.recoverDekWithShamir(shares[0].token, shares[2].token)
+    val rec13 = com.example.service.ShamirEngine.combine2of3(shares[0].token, shares[2].token)
     assertNotNull(rec13)
     assertTrue(rec13!!.contentEquals(dek))
 
-    val rec23 = secManager.recoverDekWithShamir(shares[1].token, shares[2].token)
+    val rec23 = com.example.service.ShamirEngine.combine2of3(shares[1].token, shares[2].token)
     assertNotNull(rec23)
     assertTrue(rec23!!.contentEquals(dek))
 
     // Same share repeated must fail
-    val recSame = secManager.recoverDekWithShamir(shares[0].token, shares[0].token)
+    val recSame = com.example.service.ShamirEngine.combine2of3(shares[0].token, shares[0].token)
     org.junit.Assert.assertNull(recSame)
   }
 
