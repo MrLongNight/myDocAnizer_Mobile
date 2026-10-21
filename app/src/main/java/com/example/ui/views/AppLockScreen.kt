@@ -60,8 +60,6 @@ import com.example.R
 import com.example.ui.DocAnizerViewModel
 import com.example.ui.components.AppLogoBanner
 
-private const val MASTER_PASSWORD_CREDENTIAL_ID = "myDocAnizer-Master-Key"
-
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun AppLockScreen(
@@ -139,18 +137,96 @@ fun AppLockScreen(
                 com.example.service.BiometricAuthManager.BiometricHardwareStatus.AVAILABLE
     }
 
-    // Only auto-prompt when a biometric-wrapped DEK is actually configured in the vault header.
-    LaunchedEffect(activity, isBiometricAvailable, vaultStatus.biometric2FaEnabled) {
+    /**
+     * Requests a stored password through the system UI. An empty user-ID filter is
+     * intentional: older saves may have used a different username than the one
+     * currently shown in the password manager.
+     */
+    suspend fun retrieveMasterPasswordFromManager(showErrors: Boolean) {
+        if (isRetrievingPasswordManagerCredential) return
+        isRetrievingPasswordManagerCredential = true
+        if (showErrors) errorMessage = null
+        try {
+            val credentialManager = CredentialManager.create(activity ?: context)
+            val response = credentialManager.getCredential(
+                context = activity ?: context,
+                request = GetCredentialRequest(
+                    credentialOptions = listOf(
+                        GetPasswordOption(
+                            allowedUserIds = emptySet(),
+                            isAutoSelectAllowed = false,
+                            allowedProviders = emptySet()
+                        )
+                    )
+                )
+            )
+            val credential = response.credential as? PasswordCredential
+                ?: throw IllegalStateException("Der Passwortmanager hat keinen Passwort-Eintrag zurückgegeben.")
+            enteredPassword = credential.password
+            val unlocked = if (vaultStatus.isUnencryptedMode) {
+                vaultSecManager.unlockUnencryptedVault()
+            } else {
+                vaultSecManager.unlockVault(
+                    password = credential.password,
+                    keyFileToken = if (vaultStatus.keyFileEnabled) enteredKeyFileToken else null,
+                    totpCode = if (vaultStatus.totpEnabled) enteredTotpCode else null
+                )
+            }
+            if (unlocked && viewModel.completeVaultUnlock()) {
+                errorMessage = null
+                showPasswordDialog = false
+            } else {
+                showPasswordDialog = true
+                passwordError = if (vaultStatus.keyFileEnabled && enteredKeyFileToken.isBlank()) {
+                    "Master-Passwort wurde geladen. Für diesen Tresor wird zusätzlich die Schlüsseldatei (.key) benötigt."
+                } else if (vaultStatus.totpEnabled && enteredTotpCode.isBlank()) {
+                    "Master-Passwort wurde geladen. Für diesen Tresor wird zusätzlich der Authenticator-Code benötigt."
+                } else {
+                    "Der gespeicherte Passwort-Eintrag konnte diesen Tresor nicht entsperren. Prüfe das Master-Passwort oder verwende die manuelle Eingabe."
+                }
+            }
+        } catch (_: NoCredentialException) {
+            if (showErrors) {
+                errorMessage = "Kein passender Passwort-Eintrag gefunden. Prüfe den aktiven Passwortmanager oder gib das Master-Passwort manuell ein."
+            }
+        } catch (e: GetCredentialException) {
+            if (showErrors) {
+                errorMessage = "Passwortmanager-Abfrage abgebrochen oder nicht verfügbar: ${e.message ?: "keine weiteren Details"}"
+            }
+        } catch (e: Exception) {
+            if (showErrors) {
+                errorMessage = "Passwortmanager konnte keinen gültigen Masterkey bereitstellen: ${e.message ?: "unbekannter Fehler"}"
+            }
+        } finally {
+            isRetrievingPasswordManagerCredential = false
+        }
+    }
+
+    // Biometric unlock has priority when a biometric-wrapped DEK exists.
+    // Otherwise, request a password-manager credential automatically for a simple
+    // password vault; if none exists or the picker is cancelled, retain manual unlock.
+    LaunchedEffect(
+        activity,
+        isBiometricAvailable,
+        vaultStatus.biometric2FaEnabled,
+        vaultStatus.isUnencryptedMode,
+        vaultStatus.keyFileEnabled,
+        vaultStatus.totpEnabled
+    ) {
         if (activity != null && isBiometricAvailable && vaultStatus.biometric2FaEnabled) {
             viewModel.authenticateBiometric(
                 activity = activity,
-                onSuccess = {
-                    errorMessage = null
-                },
-                onError = { err ->
-                    errorMessage = err
-                }
+                onSuccess = { errorMessage = null },
+                onError = { err -> errorMessage = err }
             )
+        } else if (
+            activity != null &&
+            !vaultStatus.biometric2FaEnabled &&
+            !vaultStatus.isUnencryptedMode &&
+            !vaultStatus.keyFileEnabled &&
+            !vaultStatus.totpEnabled
+        ) {
+            retrieveMasterPasswordFromManager(showErrors = false)
         }
     }
 
@@ -437,55 +513,8 @@ fun AppLockScreen(
 
                 Button(
                     onClick = {
-                        isRetrievingPasswordManagerCredential = true
-                        errorMessage = null
                         coroutineScope.launch {
-                            try {
-                                val credentialManager = CredentialManager.create(context)
-                                val response = credentialManager.getCredential(
-                                    context = context,
-                                    request = GetCredentialRequest(
-                                        credentialOptions = listOf(
-                                            GetPasswordOption(
-                                                allowedUserIds = setOf(MASTER_PASSWORD_CREDENTIAL_ID),
-                                                isAutoSelectAllowed = false,
-                                                allowedProviders = emptySet()
-                                            )
-                                        )
-                                    )
-                                )
-                                val credential = response.credential as? PasswordCredential
-                                    ?: throw IllegalStateException("Der Passwortmanager hat keinen Passwort-Eintrag zurückgegeben.")
-                                enteredPassword = credential.password
-                                val unlocked = if (vaultStatus.isUnencryptedMode) {
-                                    vaultSecManager.unlockUnencryptedVault()
-                                } else {
-                                    vaultSecManager.unlockVault(
-                                        password = credential.password,
-                                        keyFileToken = if (vaultStatus.keyFileEnabled) enteredKeyFileToken else null,
-                                        totpCode = if (vaultStatus.totpEnabled) enteredTotpCode else null
-                                    )
-                                }
-                                if (unlocked && viewModel.completeVaultUnlock()) {
-                                    errorMessage = null
-                                    showPasswordDialog = false
-                                } else {
-                                    showPasswordDialog = true
-                                    passwordError = if (vaultStatus.keyFileEnabled && enteredKeyFileToken.isBlank()) {
-                                        "Master-Passwort wurde geladen. Für diesen Tresor wird zusätzlich die Schlüsseldatei (.key) benötigt."
-                                    } else {
-                                        "Der gespeicherte Eintrag konnte diesen Tresor nicht entsperren. Prüfe das Master-Passwort und gegebenenfalls weitere Faktoren."
-                                    }
-                                }
-                            } catch (_: NoCredentialException) {
-                                errorMessage = "Kein passender Passwort-Eintrag gefunden. Prüfe, ob er unter „$MASTER_PASSWORD_CREDENTIAL_ID“ gespeichert wurde."
-                            } catch (e: GetCredentialException) {
-                                errorMessage = "Passwortmanager-Abruf abgebrochen oder nicht verfügbar: ${e.message ?: "keine weiteren Details"}"
-                            } catch (e: Exception) {
-                                errorMessage = "Passwortmanager konnte den Masterkey nicht bereitstellen: ${e.message ?: "unbekannter Fehler"}"
-                            } finally {
-                                isRetrievingPasswordManagerCredential = false
-                            }
+                            retrieveMasterPasswordFromManager(showErrors = true)
                         }
                     },
                     enabled = !isRetrievingPasswordManagerCredential,
