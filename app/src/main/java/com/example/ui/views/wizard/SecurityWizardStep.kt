@@ -47,9 +47,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.credentials.CreatePasswordRequest
+import androidx.fragment.app.FragmentActivity
 import androidx.credentials.CredentialManager
 import androidx.credentials.exceptions.CreateCredentialCancellationException
 import kotlinx.coroutines.launch
+import com.example.service.BiometricAuthManager
 import com.example.service.ShamirShare
 import com.example.service.VaultFactorType
 import com.example.service.VaultRecoveryMethod
@@ -175,6 +177,19 @@ fun SecurityWizardStep(
     val bioStatusLabel = remember { viewModel.getBiometricStatusLabel() }
     var autoLockMinutes by remember { mutableIntStateOf(5) }
     var vaultSavedSuccessfully by remember { mutableStateOf(false) }
+    var securitySaveError by remember { mutableStateOf<String?>(null) }
+
+    fun finishSecurityStep() {
+        vaultSavedSuccessfully = true
+        if (selectedTier != VaultSecurityTier.UNENCRYPTED &&
+            selectedRecovery == VaultRecoveryMethod.EMERGENCY_PDF
+        ) {
+            pdfStatusMessage = null
+            showEmergencyPdfPassphraseDialog = true
+        } else {
+            onSecurityComplete()
+        }
+    }
 
     // Modaler Info-Dialog State
     var activeInfoDialog by remember { mutableStateOf<SecurityInfoContent?>(null) }
@@ -218,10 +233,6 @@ fun SecurityWizardStep(
                 viewModel.setSecurityMethod("PASSWORD")
             }
         }
-    }
-
-    LaunchedEffect(isBiometricActive) {
-        onBiometricToggle(isBiometricActive)
     }
 
     val isPasswordMatching = password.isNotBlank() && password == passwordConfirm
@@ -1292,7 +1303,14 @@ fun SecurityWizardStep(
                             Text("• Stufe: ${selectedTier?.getDisplayName() ?: "Nicht gewählt"}", style = MaterialTheme.typography.bodySmall)
                             Text("• Faktoren: ${selectedFactorType.getDisplayName()}", style = MaterialTheme.typography.bodySmall)
                             Text("• Notfall-Schutz: ${selectedRecovery.getDisplayName()}", style = MaterialTheme.typography.bodySmall)
-                            Text("• Biometrie: ${if (isBiometricActive) "Aktiviert (Fingerabdruck/Face)" else "Deaktiviert"}", style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                "• Biometrie: " + when {
+                                    !isBiometricActive -> "Deaktiviert"
+                                    vaultSecManager.vaultHeader.value?.biometric2FaEnabled == true -> "Kryptografisch eingerichtet"
+                                    else -> "Nach dem Speichern noch zu bestätigen"
+                                },
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                     }
 
@@ -1318,6 +1336,15 @@ fun SecurityWizardStep(
                         }
                     }
 
+                    securitySaveError?.let { message ->
+                        Text(
+                            text = message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { currentSubStep = 3 }, modifier = Modifier.weight(1f)) {
                             Text("Zurück")
@@ -1325,42 +1352,89 @@ fun SecurityWizardStep(
                         Button(
                             enabled = selectedTier == VaultSecurityTier.UNENCRYPTED || selectedFactorType != VaultFactorType.PASSKEY,
                             onClick = {
+                                securitySaveError = null
                                 if (selectedTier == VaultSecurityTier.UNENCRYPTED) {
-                                    viewModel.setUnencryptedModeConfirmed(true)
-                                    onPasswordChange("")
-                                    vaultSecManager.setUnencryptedModeEnabled(true)
-                                } else {
-                                    viewModel.setUnencryptedModeConfirmed(false)
-                                    val effPass = if (selectedFactorType == VaultFactorType.KEYFILE) keyFileToken else password
-                                    onPasswordChange(effPass)
-                                    vaultSecManager.initializeVault(
-                                        masterPassword = effPass,
-                                        enableBiometrics = isBiometricActive,
-                                        recoveryMethod = selectedRecovery,
-                                        bip39Words = if (selectedRecovery == VaultRecoveryMethod.BIP39_WORDS) generatedWords else null,
-                                        securityTier = selectedTier ?: VaultSecurityTier.ONE_FACTOR,
-                                        factorType = selectedFactorType,
-                                        totpSecret = null,
-                                        keyFileToken = if (selectedFactorType == VaultFactorType.KEYFILE || selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE) keyFileToken else null,
-                                        recoveryCode = if (selectedRecovery == VaultRecoveryMethod.RECOVERY_CODE) recoveryCode else null,
-                                        autoLockMinutes = autoLockMinutes
+                                    if (!vaultSavedSuccessfully) {
+                                        viewModel.setUnencryptedModeConfirmed(true)
+                                        onPasswordChange("")
+                                        vaultSecManager.setUnencryptedModeEnabled(true)
+                                        vaultSavedSuccessfully = true
+                                    }
+                                    onBiometricToggle(false)
+                                    isBiometricActive = false
+                                    finishSecurityStep()
+                                    return@Button
+                                }
+
+                                if (!vaultSavedSuccessfully) {
+                                    try {
+                                        viewModel.setUnencryptedModeConfirmed(false)
+                                        val effPass = if (selectedFactorType == VaultFactorType.KEYFILE) keyFileToken else password
+                                        onPasswordChange(effPass)
+                                        // Enrollment must happen through BiometricPrompt.CryptoObject;
+                                        // initializeVault cannot safely enroll an auth-per-use Keystore key itself.
+                                        vaultSecManager.initializeVault(
+                                            masterPassword = effPass,
+                                            enableBiometrics = false,
+                                            recoveryMethod = selectedRecovery,
+                                            bip39Words = if (selectedRecovery == VaultRecoveryMethod.BIP39_WORDS) generatedWords else null,
+                                            securityTier = selectedTier ?: VaultSecurityTier.ONE_FACTOR,
+                                            factorType = selectedFactorType,
+                                            totpSecret = null,
+                                            keyFileToken = if (selectedFactorType == VaultFactorType.KEYFILE || selectedFactorType == VaultFactorType.PASSWORD_AND_KEYFILE) keyFileToken else null,
+                                            recoveryCode = if (selectedRecovery == VaultRecoveryMethod.RECOVERY_CODE) recoveryCode else null,
+                                            autoLockMinutes = autoLockMinutes
+                                        )
+                                        vaultSavedSuccessfully = true
+                                    } catch (e: Exception) {
+                                        securitySaveError = "Tresor-Sicherheit konnte nicht gespeichert werden: ${e.message ?: "unbekannter Fehler"}"
+                                        return@Button
+                                    }
+                                }
+
+                                if (isBiometricActive && vaultSecManager.vaultHeader.value?.biometric2FaEnabled != true) {
+                                    val activity = context as? FragmentActivity
+                                    val cipher = vaultSecManager.createBiometricEnrollmentCipher()
+                                    if (activity == null || cipher == null) {
+                                        securitySaveError = "Biometrie konnte nicht vorbereitet werden. Prüfe eine aktive Android-Activity und die Gerätesperre. Du kannst es erneut versuchen oder die Biometrie ausschalten und mit dem Master-Passwort fortfahren."
+                                        return@Button
+                                    }
+
+                                    securitySaveError = "Bitte bestätige jetzt die biometrische Einrichtung im Android-Dialog."
+                                    BiometricAuthManager(context).showBiometricPromptForCipher(
+                                        activity = activity,
+                                        cipher = cipher,
+                                        title = "Tresor-Biometrie aktivieren",
+                                        subtitle = "Bestätige die Verschlüsselung des Tresor-Schlüssels",
+                                        onSuccess = { authenticatedCipher ->
+                                            if (vaultSecManager.completeBiometricEnrollment(authenticatedCipher)) {
+                                                onBiometricToggle(true)
+                                                securitySaveError = null
+                                                finishSecurityStep()
+                                            } else {
+                                                securitySaveError = "Biometrie konnte nicht kryptografisch eingerichtet werden. Der Tresor ist weiterhin mit dem Master-Passwort geschützt. Versuche es erneut oder schalte Biometrie aus."
+                                            }
+                                        },
+                                        onError = { error ->
+                                            securitySaveError = "Biometrische Einrichtung abgebrochen oder fehlgeschlagen: $error. Versuche es erneut oder schalte Biometrie aus, um mit dem Master-Passwort fortzufahren."
+                                        }
                                     )
+                                    return@Button
                                 }
-                                vaultSavedSuccessfully = true
-                                if (selectedTier != VaultSecurityTier.UNENCRYPTED &&
-                                    selectedRecovery == VaultRecoveryMethod.EMERGENCY_PDF
-                                ) {
-                                    pdfStatusMessage = null
-                                    showEmergencyPdfPassphraseDialog = true
-                                } else {
-                                    onSecurityComplete()
-                                }
+
+                                val biometricReady = vaultSecManager.vaultHeader.value?.biometric2FaEnabled == true
+                                onBiometricToggle(isBiometricActive && biometricReady)
+                                finishSecurityStep()
                             },
                             modifier = Modifier.weight(1f).testTag("btn_wizard_security_finish")
                         ) {
                             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Sicherheit speichern")
+                            Text(
+                                if (vaultSavedSuccessfully && isBiometricActive &&
+                                    vaultSecManager.vaultHeader.value?.biometric2FaEnabled != true
+                                ) "Biometrie bestätigen" else "Sicherheit speichern"
+                            )
                         }
                     }
                 }
