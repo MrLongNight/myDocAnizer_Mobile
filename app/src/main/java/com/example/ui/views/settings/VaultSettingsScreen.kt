@@ -88,6 +88,8 @@ fun VaultSettingsScreen(
     var showEmergencyPdfPassphraseDialog by remember { mutableStateOf(false) }
     var emergencyRecoveryPassphrase by remember { mutableStateOf("") }
     var emergencyRecoveryPassphraseConfirm by remember { mutableStateOf("") }
+    var pendingShamirShares by remember { mutableStateOf<List<ShamirShare>>(emptyList()) }
+    var pendingShamirSharesConfirmed by remember { mutableStateOf(false) }
 
     var actionFeedbackMessage by remember { mutableStateOf<String?>(null) }
     var actionIsError by remember { mutableStateOf(false) }
@@ -989,22 +991,87 @@ fun VaultSettingsScreen(
                                 }
 
                                 VaultRecoveryMethod.SHAMIR_2_OF_3 -> {
-                                    Text("Aktive Shamir-Shares (2 von 3 Schwellenwert):", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                                    val shares = remember { vaultSecManager.splitSecretShamir2of3() }
-                                    shares.forEach { share ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                    Text("Shamir-Recovery (2 von 3)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        "Die ursprünglichen Shares werden aus Sicherheitsgründen nicht im Tresor gespeichert und können hier nicht erneut angezeigt werden. Es werden keine zufälligen Shares mehr fälschlich als aktiv ausgegeben.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        "Du kannst einen Ersatzsatz erzeugen. Bis du ihn bestätigst, bleiben die bisherigen Shares aktiv. Nach erfolgreicher Aktivierung funktioniert nur noch der neue Satz.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (pendingShamirShares.isEmpty()) {
+                                        Button(
+                                            onClick = {
+                                                val generated = runCatching { vaultSecManager.splitSecretShamir2of3() }
+                                                pendingShamirShares = generated.getOrElse {
+                                                    actionFeedbackMessage = "Ersatz-Shares konnten nicht erzeugt werden. Entsperre den Tresor erneut und versuche es wieder."
+                                                    actionIsError = true
+                                                    emptyList()
+                                                }
+                                                pendingShamirSharesConfirmed = false
+                                                if (pendingShamirShares.isNotEmpty()) {
+                                                    actionFeedbackMessage = "Ersatzsatz erzeugt. Sichere jeden Share getrennt; erst danach aktivieren."
+                                                    actionIsError = false
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth().testTag("btn_generate_pending_shamir_shares")
                                         ) {
-                                            Text(share.label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                            IconButton(
-                                                onClick = { clipboardManager.setText(AnnotatedString(share.token)) },
-                                                modifier = Modifier.size(24.dp)
-                                            ) {
-                                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
-                                            }
+                                            Icon(Icons.Default.CallSplit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Ersatzsatz erzeugen")
                                         }
+                                    } else {
+                                        Text("Ersatzsatz – noch nicht aktiv", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                        pendingShamirShares.sortedBy { it.id }.forEach { share ->
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Text(share.label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                                Text(share.token, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.labelSmall)
+                                                TextButton(
+                                                    onClick = { clipboardManager.setText(AnnotatedString(share.token)) },
+                                                    modifier = Modifier.align(Alignment.End)
+                                                ) { Text("Share ${share.id} kopieren") }
+                                            }
+                                            if (share.id < 3) HorizontalDivider()
+                                        }
+                                        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Checkbox(
+                                                checked = pendingShamirSharesConfirmed,
+                                                onCheckedChange = { pendingShamirSharesConfirmed = it },
+                                                modifier = Modifier.testTag("checkbox_pending_shamir_shares_saved")
+                                            )
+                                            Text(
+                                                "Ich habe alle drei neuen Shares getrennt und sicher gespeichert.",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                modifier = Modifier.padding(top = 10.dp)
+                                            )
+                                        }
+                                        Button(
+                                            enabled = pendingShamirSharesConfirmed,
+                                            onClick = {
+                                                if (vaultSecManager.activateShamirRecoveryShares(pendingShamirShares)) {
+                                                    pendingShamirShares = emptyList()
+                                                    pendingShamirSharesConfirmed = false
+                                                    actionFeedbackMessage = "Neuer Shamir-Satz aktiviert. Die zuvor aktiven Shares sind jetzt ungültig."
+                                                    actionIsError = false
+                                                } else {
+                                                    actionFeedbackMessage = "Ersatzsatz konnte nicht aktiviert werden. Der bisherige Satz bleibt unverändert."
+                                                    actionIsError = true
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth().testTag("btn_activate_pending_shamir_shares")
+                                        ) { Text("Ersatzsatz aktivieren") }
+                                        TextButton(
+                                            onClick = {
+                                                pendingShamirShares = emptyList()
+                                                pendingShamirSharesConfirmed = false
+                                                actionFeedbackMessage = "Ersatzsatz verworfen; bisherige Shares bleiben aktiv."
+                                                actionIsError = false
+                                            },
+                                            modifier = Modifier.align(Alignment.End)
+                                        ) { Text("Abbrechen") }
                                     }
                                 }
 
