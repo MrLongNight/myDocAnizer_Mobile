@@ -15,7 +15,7 @@ Stand: 2026-10-18 — Repository `main`. Dieses Dokument ist das Audit-Ergebnis 
 
 ## 2. Persistierte Geheimnisse und Schlüsselmaterial
 
-- `mydocanizer_vault_security.xml` (SharedPreferences-Datei aus `getSharedPreferences("mydocanizer_vault_security", ...)`): enthält `vault_header_json_v1`, inklusive verschlüsseltem DEK, Salt/IV und weiteren Recovery-/Faktor-Metadaten. Im Header werden auch TOTP-Secret und weitere Authentifizierungsmetadaten serialisiert; das TOTP-Secret ist kein verschlüsselter SecretStore-Wert.
+- `mydocanizer_vault_security.xml` (SharedPreferences-Datei aus `getSharedPreferences("mydocanizer_vault_security", ...)`): enthält den aktiven V2-Header `vault_header_json_v2_active` mit verschlüsseltem DEK, Salt/IV und Recovery-/Faktor-Metadaten. Der frühere V1-Befund zu einem Klartext-TOTP-Secret ist historisch; der aktive V2-Serializer schreibt das Feld nicht mehr und der Loader entfernt ein solches Legacy-Feld aus einem ansonsten gültigen V2-Header. Das ist keine pauschale Bestätigung, dass alle SharedPreferences verschlüsselt sind.
 - `mydocanizer_prefs.xml` (SharedPreferences-Datei aus `getSharedPreferences("mydocanizer_prefs", ...)`): enthält das Legacy-Feld `sync_master_password`, die WebDAV-Zugangsdaten `cloud_sync_webdav_user`/`cloud_sync_webdav_pass` und `biometric_auth_enabled`. `sync_master_password` wird in `SecretStore` migriert. Die WebDAV-Passphrase wird jetzt ebenfalls per `SecretStore` gespeichert; die Migration aus `cloud_sync_webdav_pass` entfernt Klartext erst nach erfolgreichem Roundtrip. `cloud_sync_webdav_user` ist ein Benutzername und kein Authentifizierungsgeheimnis. Der Google-Drive-Access-Token wird in `CloudSyncConfig` geführt, aber von `SettingsRepository` nicht persistent geladen/gespeichert; Token-Lifecycle und echte OAuth-Erneuerung bleiben separat zu prüfen.
 - Android Keystore: Biometrie-DEK-Wrapping-Key unter Alias `myDocAnizer_vault_biometric_key_v2` (neuer auth-gebundener Schlüsselpfad). Schlüsselmaterial sollte nicht exportiert werden; Verlust/Invalidierung muss auf Passwort-Recovery zurückfallen.
 - Room-Datenbank `mydocanizer_database` und zugehörige WAL/SHM-Dateien: enthalten App-Daten. Die Backupregeln schließen sie vom Cloud-Backup aus; Geräteübertragungsregeln sind separat zu prüfen.
@@ -24,7 +24,7 @@ Stand: 2026-10-18 — Repository `main`. Dieses Dokument ist das Audit-Ergebnis 
 
 ## 3. Unlock- und Lock-Pfade vor S02–S04
 
-- `VaultSecurityManager.unlockVault(password, keyFileToken, totpCode)`: Passwort-/Keyfile-Ableitung und optional TOTP-Prüfung; bei Erfolg setzt sie `activeDek`.
+- `VaultSecurityManager.unlockVault(password, keyFileToken, totpCode)`: gibt den DEK nach erfolgreicher Passwort- bzw. Passwort+Keyfile-Prüfung frei. `totpCode` bleibt nur als quellkompatibler Parameter, wird aber ignoriert; Legacy-TOTP wird nicht geprüft oder als Vault-Faktor verwendet.
 - `VaultSecurityManager.unlockWithPassword(password)`: Wrapper für den obigen Pfad.
 - `VaultSecurityManager.completeBiometricUnlock(Cipher)`: neuer Pfad, der eine vom erfolgreichen `BiometricPrompt.CryptoObject` zurückgegebene Cipher benötigt.
 - `DocAnizerViewModel.authenticateBiometric(...)`: muss bei Vault-Biometrie den CryptoObject-Pfad verwenden; reine UI-Erfolgsmeldung darf keinen Vault-DEK freigeben.
@@ -53,4 +53,4 @@ Die Produktionsaufrufstellen im `DocAnizerViewModel`, `DmsManager` und `Document
 2. Die neuen Lease-/Lock-/Biometriepfade müssen lokal getestet und auf echten Geräten validiert werden.
 3. Die atomare v1→v2-Laufzeitmigration ist separat in `docs/security/v14-migration-blocker.md` blockiert.
 5. Klartext-Legacy-Secret-Migration in einen Keystore-basierten SecretStore: S08/S09.
-6. TOTP bleibt eine separate offene Produktentscheidung in `docs/security/adr-002-totp-decision.md`; dieses Inventar nimmt keine Entscheidung vorweg.
+6. Die TOTP-Entscheidung ist in `docs/security/adr-002-totp-decision.md` abgeschlossen: TOTP ist kein kryptografischer Tresor-Faktor; die Laufzeitbereinigung ist in Commit `d509ebb` umgesetzt.
