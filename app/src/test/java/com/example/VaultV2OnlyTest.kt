@@ -167,6 +167,33 @@ class VaultV2OnlyTest {
     }
 
     @Test
+    fun `recovery can rotate password without changing the original DEK`() {
+        val context = context()
+        val manager = VaultSecurityManager.getInstance(context)
+        val oldPassword = "V2RecoveryRotateOldPassword2026!"
+        val newPassword = "V2RecoveryRotateNewPassword2026!"
+        val recoveryCode = "ROTATE-RECOVERY-CODE-2026"
+        val setup = manager.initializeVault(
+            masterPassword = oldPassword,
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.RECOVERY_CODE,
+            recoveryCode = recoveryCode
+        )
+
+        manager.lockVault()
+        val recoveredDek = manager.recoverDekWithRecoveryCode(recoveryCode)
+            ?: error("Valid recovery code must recover the DEK")
+        assertArrayEquals(setup.dek, recoveredDek)
+        assertTrue(manager.resetPasswordWithRecoveredDek(newPassword, recoveredDek))
+        recoveredDek.fill(0)
+
+        manager.lockVault()
+        assertFalse(manager.unlockWithPassword(oldPassword))
+        assertTrue(manager.unlockWithPassword(newPassword))
+        assertArrayEquals(setup.dek, manager.getActiveDek())
+    }
+
+    @Test
     fun `legacy header keys are ignored and never migrated into V2`() {
         val context = context()
         val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)

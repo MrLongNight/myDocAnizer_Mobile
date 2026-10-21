@@ -883,6 +883,10 @@ fun VaultRecoveryModal(
                         val dek = recoveredDek ?: return@Button
                         val success = vaultSecManager.resetPasswordWithRecoveredDek(newMasterPass, dek)
                         if (success) {
+                            // The manager has copied the DEK into its protected session state.
+                            // Wipe the recovery result held by this dialog before leaving it.
+                            dek.fill(0)
+                            recoveredDek = null
                             onRecoverySuccess(newMasterPass)
                         } else {
                             passError = "Fehler beim Setzen des neuen Master-Passworts."
@@ -895,7 +899,11 @@ fun VaultRecoveryModal(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = {
+                recoveredDek?.fill(0)
+                recoveredDek = null
+                onDismiss()
+            }) {
                 Text("Abbrechen")
             }
         }
