@@ -1148,9 +1148,18 @@ class VaultSecurityManager private constructor(private val context: Context) {
     // =========================================================================
 
     /**
-     * Teilt den 32-Byte DEK mathematisch in 3 Teile mit einem 2-von-3 Schwellenwert auf.
+     * Erzeugt einen Shamir-Satz für den aktuell entsperrten DEK.
+     *
+     * Ein neu erzeugter Satz ist zunächst nur ein Ersatzkandidat und wird nicht automatisch
+     * als aktiver Recovery-Satz registriert. Erst activateShamirRecoveryShares() prüft alle
+     * drei Teile gegen den aktiven DEK und ersetzt danach die gespeicherten Prüfsummen.
+     * Der optionale Parameter ist nur für die mathematische 2-aus-3-Utilityverwendung gedacht;
+     * damit erzeugte Shares werden niemals als aktiver Recovery-Satz registriert.
      */
     fun splitSecretShamir2of3(secret: ByteArray? = null): List<ShamirShare> {
+        if (secret != null) require(secret.size == DEK_SIZE_BYTES) {
+            "Shamir recovery only supports a 256-bit DEK"
+        }
         val shares = if (secret != null) {
             ShamirEngine.split2of3(secret)
         } else {
@@ -1161,26 +1170,61 @@ class VaultSecurityManager private constructor(private val context: Context) {
             ShamirShare(
                 id = 1,
                 label = "Share 1: Desktop-Companion",
-                description = "Export via WLAN P2P Sync oder sicheren QR-Code auf den Desktop-PC.",
+                description = "Verwahrung an einem getrennten Ort; aktiver Satz erst nach Bestätigung.",
                 token = shares[0]
             ),
             ShamirShare(
                 id = 2,
-                label = "Share 2: Verschlüsseltes Cloud-Backup",
-                description = "Automatisches Backup im Google Drive oder WebDAV Cloud-Speicher.",
+                label = "Share 2: Zweiter sicherer Ort",
+                description = "Verwahrung getrennt von Share 1; aktiver Satz erst nach Bestätigung.",
                 token = shares[1]
             ),
             ShamirShare(
                 id = 3,
                 label = "Share 3: Vertrauensperson / Schließfach",
-                description = "Physischer Notiz-Token zum Ausdrucken oder für eine Vertrauensperson.",
+                description = "Verwahrung an einem dritten Ort; aktiver Satz erst nach Bestätigung.",
                 token = shares[2]
             )
         )
     }
 
     /**
-     * Rekonstruiert den 32-Byte DEK aus beliebigen 2 der 3 Shamir-Teilschlüssel.
+     * Macht einen neuen vollständigen Shamir-Satz aktiv. Bis zum erfolgreichen Aufruf bleiben
+     * die bisherigen Shares gültig. Aktivierung erfordert den entsperrten Tresor und drei
+     * zusammengehörige Shares, deren alle Paare exakt den aktiven DEK rekonstruieren.
+     */
+    @Synchronized
+    fun activateShamirRecoveryShares(shares: List<ShamirShare>): Boolean {
+        val header = _vaultHeader.value ?: return false
+        if (header.recoveryMethod != VaultRecoveryMethod.SHAMIR_2_OF_3 || shares.size != 3) return false
+        val ordered = shares.map { it.copy(token = it.token.trim()) }.sortedBy { it.id }
+        if (ordered.map { it.id } != listOf(1, 2, 3)) return false
+        if (ordered.any { parseShamirShareId(it.token) != it.id }) return false
+
+        return withUnlockedKey { activeDek ->
+            val reconstructed = listOf(
+                ShamirEngine.combine2of3(ordered[0].token, ordered[1].token),
+                ShamirEngine.combine2of3(ordered[0].token, ordered[2].token),
+                ShamirEngine.combine2of3(ordered[1].token, ordered[2].token)
+            )
+            try {
+                if (reconstructed.any { it == null || it.size != DEK_SIZE_BYTES }) return@withUnlockedKey false
+                if (reconstructed.any { !MessageDigest.isEqual(activeDek, it!!) }) return@withUnlockedKey false
+
+                val updatedHeader = header.copy(
+                    shamirShareHashes = ordered.map { hashShamirShare(it.token) }
+                )
+                runCatching { saveVaultHeader(updatedHeader) }.isSuccess
+            } finally {
+                reconstructed.filterNotNull().forEach { it.fill(0) }
+            }
+        } ?: false
+    }
+
+    /**
+     * Rekonstruiert den DEK nur aus Shares, deren SHA-256-Prüfsummen zu dem aktiven
+     * Shamir-Recovery-Satz im Header passen. Das verhindert versehentliche Mischungen,
+     * veränderte Token und Shares aus einem älteren Satz.
      */
     @Synchronized
     fun recoverDekWithShamir(shareA: String, shareB: String): ByteArray? {
@@ -1190,8 +1234,60 @@ class VaultSecurityManager private constructor(private val context: Context) {
         return result
     }
 
-    private fun recoverDekWithShamirUnchecked(shareA: String, shareB: String): ByteArray? =
-        ShamirEngine.combine2of3(shareA.trim(), shareB.trim())
+    private fun recoverDekWithShamirUnchecked(shareA: String, shareB: String): ByteArray? {
+        val header = _vaultHeader.value ?: return null
+        if (!hasValidShamirMetadata(header)) return null
+        if (!matchesStoredShamirShare(shareA, header) || !matchesStoredShamirShare(shareB, header)) return null
+        val dek = ShamirEngine.combine2of3(shareA.trim(), shareB.trim()) ?: return null
+        if (dek.size != DEK_SIZE_BYTES) {
+            dek.fill(0)
+            return null
+        }
+        return dek
+    }
+
+    private fun hasValidShamirMetadata(header: VaultHeader): Boolean {
+        if (header.recoveryMethod != VaultRecoveryMethod.SHAMIR_2_OF_3) return false
+        val hashes = header.shamirShareHashes
+        return hashes.size == 3 &&
+            hashes.all { Regex("(?i)[0-9a-f]{64}").matches(it) } &&
+            hashes.map { it.lowercase(Locale.ROOT) }.distinct().size == 3
+    }
+
+    private fun matchesStoredShamirShare(token: String, header: VaultHeader): Boolean {
+        val clean = token.trim()
+        val id = parseShamirShareId(clean) ?: return false
+        val expected = header.shamirShareHashes.getOrNull(id - 1) ?: return false
+        val tokenBytes = clean.toByteArray(Charsets.UTF_8)
+        val actual = try {
+            calculateSha256(tokenBytes)
+        } finally {
+            tokenBytes.fill(0)
+        }
+        val expectedBytes = expected.lowercase(Locale.ROOT).toByteArray(Charsets.US_ASCII)
+        val actualBytes = actual.lowercase(Locale.ROOT).toByteArray(Charsets.US_ASCII)
+        return try {
+            MessageDigest.isEqual(expectedBytes, actualBytes)
+        } finally {
+            expectedBytes.fill(0)
+            actualBytes.fill(0)
+        }
+    }
+
+    private fun hashShamirShare(token: String): String {
+        val bytes = token.trim().toByteArray(Charsets.UTF_8)
+        return try {
+            calculateSha256(bytes)
+        } finally {
+            bytes.fill(0)
+        }
+    }
+
+    private fun parseShamirShareId(token: String): Int? {
+        val match = Regex("""MYDOC-S([1-3])-([A-Za-z0-9+/]+={0,2})""").matchEntire(token.trim())
+            ?: return null
+        return match.groupValues[1].toIntOrNull()
+    }
 
     // =========================================================================
     // 6. ANDROID KEYSTORE BIOMETRISCHE 2FA-BINDUNG
