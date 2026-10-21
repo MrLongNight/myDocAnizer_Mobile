@@ -282,6 +282,14 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## L01 – Laufzeit- und APK-Inventur (AUDIT)
 **Prompt:** Prüfe aktuell `LlamaCppInferenceEngine`, `LlmService`, JNI-Aufrufe, `System.loadLibrary`, CMake/NDK, `jniLibs`, Gradle-Artefakte, Modellkatalog, Downloads und tatsächlichen APK-Inhalt. Dokumentiere, was wirklich kompiliert und ladbar ist, und unterscheide echte Inferenz von regelbasierten Heuristiken. Noch keine Native-Bibliotheken hinzufügen und keine Funktion entfernen. **Abnahme:** reproduzierbares Inventar mit bestätigten Dateien/ABIs und offenen Punkten.
 
+**Status (21.10.2026): AUDIT IM REPOSITORY ABGESCHLOSSEN – APK/Device noch offen.**
+- `app/build.gradle.kts`: `minSdk = 24`; keine `externalNativeBuild`-/CMake-Konfiguration und keine ABI-Filter.
+- Vollständiger getrackter Dateibaum: keine C/C++-JNI-Implementierung, `CMakeLists.txt`, `jniLibs/` oder `.so`-Datei; `gradle/libs.versions.toml` enthält keine llama.cpp-/NDK-Abhängigkeit.
+- `LlamaCppInferenceEngine` ruft `System.loadLibrary("llama_android")` auf und deklariert `nativeExecuteLlamaWithGrammar`, deren native Implementierung im Repository nicht vorhanden ist. Fehlende Bibliothek bzw. Inferenzfehler führen in Kotlin-Heuristiken; diese ignorieren den Modellprompt teilweise und sind keine LLM-Inferenz.
+- `LlmService.generateRulesFromPrompt()` nutzt feste Themenzweige statt Modellinferenz; `queryDocumentAssistant()` ruft regelbasierte `LlmToolExecutor`-Logik direkt auf. Weitere LLM-Aufrufpfade können ebenfalls in den Engine-Fallback wechseln.
+- Noch nicht geprüft: Inhalt der tatsächlich gebauten APK/AAB, transitive native Artefakte und Laufzeit auf Gerät.
+- Quellen für L02: offizielles [llama.cpp Android-Beispiel](https://github.com/ggml-org/llama.cpp/tree/master/examples/llama.android) und [Build-Dokumentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md). Das Beispiel darf nicht unverändert übernommen werden: dessen aktueller Gradle-Stand hat andere SDK-Anforderungen als dieses Projekt (`minSdk 24`).
+
 ## L02 – Native lokale KI-Integration verbindlich vorbereiten
 **Produktentscheidung:** echte native Modellinferenz lokal auf dem Gerät.  
 **Prompt:** Verwende das L01-Audit, um den nativen Integrationspfad für llama.cpp zu bestimmen: fest versionierter Upstream, passende NDK/CMake-Version, unterstützte ABIs, Modellformat/Lizenz, RAM-/Kontextgrenzen, APK-Größe und 16-KB-Alignment. Erstelle den Implementierungsplan für L08A–L11A. Die Wahl echter nativer Inferenz ist getroffen; nicht auf einen weiteren Nutzerentscheid warten und regelbasierte Heuristiken nicht als Ersatz-KI deklarieren. Bei belegtem technischen Blocker Befund und Alternativen vorlegen, bevor ein Rückbau erwogen wird. **Abnahme:** reproduzierbarer Native-Integrationsplan und klarer Build-/Geräteumfang.

@@ -1,6 +1,6 @@
 # Lokale LLM-Funktionen – Live-Todo
 
-**Stand:** 21.10.2026 · **Branch:** `main` · **Prüfbasis:** Repository-Code und Dokumentation; kein APK-/Gerätetest in dieser Prüfung.
+**Stand:** 21.10.2026 · **Branch:** `main` · **Prüfbasis:** vollständige Repository-Dateiinventur plus gezielter Code-/Dokumenten-Audit; kein APK-/Gerätetest.
 **Statusbegriffe:** ✅ belegt/erledigt · 🟡 teilweise belegt · ⛔ blockiert/offen
 
 ## Zielzustand
@@ -20,7 +20,7 @@ Alle vorgesehenen KI-Funktionen laufen wirklich lokal über das ausgewählte `.g
 
 ## Priorisierte To-dos
 
-- [x] **Quellcode-Inventur:** zentrale LLM-, Regel-, Chat-, Tool- und Dokumenten-Aufrufpfade sowie vorhandene LLM-Dokumentation geprüft; keine native Implementierung im getrackten Repository gefunden.
+- [x] **L01 – Laufzeit-/Repository-Audit:** Kotlin/JNI-Aufrufpfad und Feature-Aufrufer geprüft; keine native Implementierung/Builddefinition im getrackten Repository gefunden. APK bleibt ungeprüft.
 - [ ] **P0 – Native Wahrheit herstellen:** L01-L02 abschließen, dann L08A-L11A umsetzen. Abnahme: ausgewähltes GGUF generiert auf unterstütztem Android-Gerät echte Tokens; APK enthält passende native Bibliothek/ABI; JNI- und Negativtests bestehen.
 - [ ] **P1 – Ehrliche Laufzeit:** explizite Zustände `LOCAL_LLM`, `RULE_FALLBACK`, `ERROR`; stille Heuristik-Fallbacks und fest behauptete Confidence/TPS beseitigen.
 - [ ] **P2 – Smarte Regeln:** echten LLM-Regelentwurf und -verfeinerung implementieren; vorhandene Regeln semantisch berücksichtigen; freigegebene Regeln automatisch, neue/konfliktbehaftete Änderungen kontrolliert anwenden.
@@ -31,4 +31,4 @@ Alle vorgesehenen KI-Funktionen laufen wirklich lokal über das ausgewählte `.g
 
 Eine Funktion gilt erst als echte LLM-Funktion, wenn der Test belegt, dass das gewählte GGUF-Modell über die paketierte native llama.cpp-Laufzeit die Antwort erzeugt hat. Tests, die nur JSON, Regex, Schlüsselwörter oder Fallback-Ergebnisse prüfen, zählen dafür nicht. Der deterministische Backup-Pfad muss auch ohne Modell weiterarbeiten und darf nie als KI-Inferenz erscheinen.
 
-**Grenze des aktuellen Befunds:** Repository-Prüfung ist abgeschlossen; tatsächlicher APK-Inhalt, ABI-/JNI-Lauffähigkeit, Build und echte Geräte-Inferenz sind noch nicht verifiziert.
+**Aktueller Nachweis:** L01 ist als Repository-Audit erledigt. L02 und L08A–L11A bleiben offen; tatsächlicher APK-Inhalt, ABI-/JNI-Lauffähigkeit, Build und echte Geräte-Inferenz sind noch nicht verifiziert.
