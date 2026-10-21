@@ -11,7 +11,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import javax.crypto.Cipher
-import javax.crypto.UserNotAuthenticatedException
+import android.security.keystore.UserNotAuthenticatedException
 
 @RunWith(AndroidJUnit4::class)
 class VaultBiometricCryptoTest {
