@@ -265,6 +265,29 @@ class VaultV2OnlyTest {
         assertNotNull("Returned generated recovery code must unlock the persisted recovery wrapper", codeRecoveredDek)
         assertArrayEquals(codeSetup.dek, codeRecoveredDek)
         codeRecoveredDek?.fill(0)
+
+        val shamirSetup = manager.initializeVault(
+            masterPassword = "V2GeneratedShamirPassword2026!",
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.SHAMIR_2_OF_3
+        )
+        val shares = shamirSetup.shamirShares ?: error("Generated Shamir shares expected")
+        assertEquals("2-of-3 recovery must return exactly three shares", 3, shares.size)
+        val sharePairs = listOf(
+            shares[0] to shares[1],
+            shares[0] to shares[2],
+            shares[1] to shares[2]
+        )
+        sharePairs.forEachIndexed { index, (first, second) ->
+            val recovered = manager.recoverDekWithShamir(first.token, second.token)
+            assertNotNull("Share pair ${index + 1} must recover the original DEK", recovered)
+            assertArrayEquals("Share pair ${index + 1} must recover the exact original DEK", shamirSetup.dek, recovered)
+            recovered?.fill(0)
+        }
+        assertNull(
+            "A duplicated share must not satisfy the 2-of-3 threshold",
+            manager.recoverDekWithShamir(shares[0].token, shares[0].token)
+        )
     }
 
     @Test
