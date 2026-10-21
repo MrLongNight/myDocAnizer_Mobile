@@ -167,7 +167,8 @@ fun AppLockScreen(
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
                 val prepared = credentialManager.prepareGetCredential(request)
                 if (!prepared.hasCredentialResults(PasswordCredential.TYPE_PASSWORD_CREDENTIAL)) return
-                credentialManager.getCredential(activity ?: context, prepared.pendingGetCredentialHandle)
+                val pendingHandle = prepared.pendingGetCredentialHandle ?: return
+                credentialManager.getCredential(activity ?: context, pendingHandle)
             } else {
                 credentialManager.getCredential(
                     context = activity ?: context,
