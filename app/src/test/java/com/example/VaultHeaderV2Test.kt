@@ -79,6 +79,31 @@ class VaultHeaderV2Test {
     }
 
     @Test
+    fun `v2 parser rejects factor declarations not enforced by its crypto path`() {
+        assertNull(
+            VaultHeaderParserV2.parse(
+                createValidV2Header().copy(securityTier = "TWO_FACTOR").toJson()
+            )
+        )
+        assertNull(
+            VaultHeaderParserV2.parse(
+                createValidV2Header().copy(
+                    securityTier = "TWO_FACTOR",
+                    factorType = "PASSWORD_AND_TOTP"
+                ).toJson()
+            )
+        )
+        assertNull(
+            VaultHeaderParserV2.parse(
+                createValidV2Header().copy(
+                    securityTier = "UNENCRYPTED",
+                    factorType = "NONE"
+                ).toJson()
+            )
+        )
+    }
+
+    @Test
     fun `test v2 parser rejects invalid salt length`() {
         // Salt with 8 bytes instead of 16
         val invalidSalt = ByteArray(8) { 0x01.toByte() }
