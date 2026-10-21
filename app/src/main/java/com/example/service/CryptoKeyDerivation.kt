@@ -44,8 +44,8 @@ internal object CryptoKeyDerivation {
         require(vaultDek.size == VAULT_DEK_BYTES) { "Vault DEK must be exactly 256 bits" }
         require(vaultId.isNotBlank() && vaultId.length <= 256) { "Invalid vault ID" }
 
-        val salt = "\${DOMAIN_PREFIX}:salt:\${vaultId}".toByteArray(Charsets.UTF_8)
-        val info = "\${DOMAIN_PREFIX}:subkey:\${purpose.wireName}".toByteArray(Charsets.UTF_8)
+        val salt = "${DOMAIN_PREFIX}:salt:${vaultId}".toByteArray(Charsets.UTF_8)
+        val info = "${DOMAIN_PREFIX}:subkey:${purpose.wireName}".toByteArray(Charsets.UTF_8)
         return try {
             derive(vaultDek, salt, info, HASH_LENGTH_BYTES)
         } finally {
