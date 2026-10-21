@@ -1904,8 +1904,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 analysisReport.append("OCR-Länge: ${ocrText.length} Zeichen\n")
                 analysisReport.append("Vorschau: ${ocrText.take(100).replace("\n", " ")}...\n")
 
-                // 2. Regelwerk VOR KI abgleichen
-                val matchedRule = ruleRepo.matchRule(ocrText)
+                // 2. Alle konkreten Treffer sammeln; Mehrdeutigkeit später dem Nutzer anzeigen.
+                val matchingRules = ruleRepo.matchingRules(ocrText)
+                val matchedRule = matchingRules.singleOrNull()
                 
                 if (matchedRule != null) {
                     analysisReport.append("REGEL-TREFFER: '${matchedRule.name}'\n")
@@ -2212,6 +2213,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         bitmap = finalBitmap,
                         ocrText = ocrText,
                         suggestedRule = suggestedRule,
+                        matchingRules = matchingRules,
                         onSingleUseOnly = { finalRule ->
                             dmsManager.clearPendingRuleSuggestion()
                             saveProcessedBitmapWithRule(
