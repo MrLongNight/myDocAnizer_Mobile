@@ -10,7 +10,7 @@ Stand: 2026-10-21 (S08-CI-Nachweis und S09-SecretStore-Migration aktualisiert). 
 | S07 | Implementierung vorhanden | `FLAG_SECURE` wird ohne Emulatorerkennung gesteuert; Debug-Ausnahme über `BuildConfig.DEBUG`. Screenshot-, Recents- und Geräteprüfung offen. |
 | S08 | GETESTET (CI-Emulator) | `SecretStore` speichert kleine Secrets als versionierte AES-GCM-Payload mit 12-Byte-IV, AAD pro Secret-Namen und nicht exportierbarem Android-Keystore-AES-Schlüssel. Ungültiger Tag, fehlender Schlüssel und fehlerhaftes Format führen zu `null`/Fehler, nicht zu Klartextfallback. `connectedDebugAndroidTest` lief am 21.10.2026 auf dem API-35-x86_64-Emulator erfolgreich; physischer Gerätetest bleibt separat offen. |
 | S09 | In Arbeit: zentrale Persistenz umgestellt | `SettingsRepository` lädt `sync_master_password` über `SecretStore`; beim ersten Start wird ein vorhandener Legacy-Wert verschlüsselt geschrieben, anschließend per entschlüsseltem Roundtrip verglichen und erst danach aus `mydocanizer_prefs` entfernt. Neue Änderungen schreiben ebenfalls in `SecretStore` und aktualisieren den Flow erst nach verifiziertem Roundtrip. Die öffentliche `StateFlow<String>`-API bleibt vorerst als Kompatibilitätsgrenze bestehen; Verbraucher in ViewModel/UI halten den Wert weiterhin zeitweise im Speicher. Instrumentationstests für Migration und Update ergänzt, aber noch nicht ausgeführt. Weitere S01-Secrets/Token und Fehler-/Gerätetests bleiben offen. |
-| S10 | Policy und Unit-Tests vorhanden | `ExternalIntentPolicy` erlaubt nur bekannte Tab-Werte und die explizite Aktion `CASH_EXPENSE`. `MainActivity` verwirft externe Aktionen während unvollständiger Authentifizierung und speichert sie nicht für spätere Ausführung. Cold-start-/Widget-Integrationstest offen. |
+| S10 | One-shot-Sanitization implementiert; Testlauf offen | `ExternalIntentPolicy.consume()` extrahiert nur die erlaubten Navigationswerte und entfernt danach alle Extras, `Intent.data` und `clipData`. `MainActivity` führt diese Bereinigung vor der Lock-Prüfung aus; gesperrte oder nicht authentifizierte externe Befehle bleiben nicht für einen späteren Activity-Neustart erhalten. Nicht unterstützte URI-Deep-Links werden verworfen. `ExternalIntentPolicyInstrumentedTest` ergänzt; Build-/Instrumentationlauf für diesen Patch noch offen. |
 
 ## Zusätzliche Sicherheitskorrektur: Auto-Mirror
 
@@ -30,8 +30,8 @@ Stand: 2026-10-21 (S08-CI-Nachweis und S09-SecretStore-Migration aktualisiert). 
 ## Teststatus
 
 - Vorhandene/ergänzte Unit-Tests: `AuthenticationBackoffManagerTest`, `ExternalIntentPolicyTest`.
-- Neue Android-Instrumentationstests: `SecretStoreInstrumentedTest`.
-- Für Commit `f6d00636bec784e598128c3b1e72a2dbd40cfe58` liegt der erfolgreiche [GitHub-Actions-Lauf 39558067219](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39558067219) vor: `./gradlew assembleDebug testDebugUnitTest --stacktrace --no-daemon` und `./gradlew connectedDebugAndroidTest --stacktrace --no-daemon` endeten beide mit `BUILD SUCCESSFUL`; die Instrumentierung lief auf Android API 35, x86_64. Das bestätigt S08 für diesen Baseline-Commit, nicht die neu hinzugefügte S09-Migration. Für die aktuellen S09-Änderungen wurde in der verfügbaren GitHub-Actions-Abfrage noch kein Workflow-Lauf gefunden. `pre-commit.ci - push` meldet `error`; Ursache nicht belegt.
+- Neue Android-Instrumentationstests: `SecretStoreInstrumentedTest`, `ExternalIntentPolicyInstrumentedTest`.
+- Für Commit `f6d00636bec784e598128c3b1e72a2dbd40cfe58` liegt der erfolgreiche [GitHub-Actions-Lauf 39558067219](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39558067219) vor: `./gradlew assembleDebug testDebugUnitTest --stacktrace --no-daemon` und `./gradlew connectedDebugAndroidTest --stacktrace --no-daemon` endeten beide mit `BUILD SUCCESSFUL`; die Instrumentierung lief auf Android API 35, x86_64. Das bestätigt S08 für diesen Baseline-Commit, nicht die neu hinzugefügte S09-Migration. Der Nutzer bestätigt, dass der Build nach den S09-Änderungen fehlerfrei war; ein erfolgreicher Instrumentationstest für die S09-Migration ist damit nicht belegt. `pre-commit.ci - push` meldete für den damaligen Commit `error`; Ursache nicht belegt. Die anschließenden S10-Code-/Teständerungen wurden noch nicht gebaut oder ausgeführt.
 - Die integrierte Benutzertest-Checkliste wurde um SecretStore, Backoff, Screenshots/Recents, externe Intents und Auto-Mirror erweitert: `docs/security/benutzer-testplan-gesamt.md`.
 
 ## Architektur- und Nutzungsgrenze
@@ -42,7 +42,8 @@ Der SecretStore verschlüsselt Werte im Ruhezustand mit einem appgebundenen Keys
 
 1. S08-CI-Nachweis für `assembleDebug`, `testDebugUnitTest` und `connectedDebugAndroidTest` liegt vor; bei nächster lokaler Synchronisierung denselben Gradle-Befehl auf der tatsächlich verwendeten Arbeitskopie wiederholen.
 2. Optionalen physischen Gerätetest für SecretStore/Keystore-Keyverlust getrennt protokollieren; Emulator- und Hardwarestatus nicht vermischen.
-3. S09-Migration für `sync_master_password` auf dem aktuellen Commit durch Build, Unit- und Instrumentationstests prüfen. Insbesondere den Fall „Legacy-Pref bleibt bei fehlgeschlagenem Schreiben/Verifizieren erhalten“ testen.
-4. Die übrigen S01-Einträge auf weitere Passwörter/Tokens abgleichen; pro Secret nur nach verifiziertem Roundtrip den Klartext entfernen. Keine Klartext-Fallbacks hinzufügen.
-5. Backoff-/ExternalIntent-Tests sowie Widget-Cold-Start, Lock-Fälle und D13-/Auto-Mirror-Klartext-/Fehlerfälle getrennt weiter abnehmen.
+3. S10-Änderungen durch `./gradlew assembleDebug testDebugUnitTest` und `./gradlew connectedDebugAndroidTest` prüfen; insbesondere One-shot-Sanitization, URI-/ClipData-Entfernung und den Cold-start-/Lock-Fall abnehmen.
+4. S09-Migration für `sync_master_password` mit Instrumentationstests prüfen. Insbesondere den Fall „Legacy-Pref bleibt bei fehlgeschlagenem Schreiben/Verifizieren erhalten“ testen.
+5. Die übrigen S01-Einträge auf weitere Passwörter/Tokens abgleichen; pro Secret nur nach verifiziertem Roundtrip den Klartext entfernen. Keine Klartext-Fallbacks hinzufügen.
+6. Backoff-/ExternalIntent-Tests sowie Widget-Cold-Start, Lock-Fälle und D13-/Auto-Mirror-Klartext-/Fehlerfälle getrennt weiter abnehmen.
 
