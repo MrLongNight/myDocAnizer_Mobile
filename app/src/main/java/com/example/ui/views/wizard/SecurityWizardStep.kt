@@ -1360,6 +1360,9 @@ fun SecurityWizardStep(
                 showEmergencyPdfPassphraseDialog = false
                 emergencyPdfPassphrase = ""
                 emergencyPdfPassphraseConfirm = ""
+                currentSubStep = 3
+                vaultSavedSuccessfully = false
+                pdfStatusMessage = "PDF-Erstellung abgebrochen. Wähle eine andere Recovery-Methode oder starte die PDF-Erstellung erneut."
             },
             title = { Text("Notfall-Kit PDF erstellen") },
             text = {
@@ -1443,7 +1446,10 @@ fun SecurityWizardStep(
                     showEmergencyPdfPassphraseDialog = false
                     emergencyPdfPassphrase = ""
                     emergencyPdfPassphraseConfirm = ""
-                }) { Text("Abbrechen") }
+                    currentSubStep = 3
+                    vaultSavedSuccessfully = false
+                    pdfStatusMessage = "PDF-Erstellung abgebrochen. Wähle eine andere Recovery-Methode oder starte die PDF-Erstellung erneut."
+                }) { Text("Zurück zur Recovery-Auswahl") }
             }
         )
     }
