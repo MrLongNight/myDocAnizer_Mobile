@@ -315,8 +315,8 @@ fun SetupWizardDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isLastStep && !isManualReconfig) {
                         if (WizardStep.fromId(currentStepId) !is WizardStep.SecurityAndBiometrics) {
+                        if (isLastStep && !isManualReconfig) {
                             OutlinedButton(
                                 onClick = {
                                     if (customPassword.isBlank() && !isUnencryptedMode) {
