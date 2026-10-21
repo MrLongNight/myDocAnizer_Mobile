@@ -193,6 +193,52 @@ class VaultV2OnlyTest {
         assertArrayEquals(setup.dek, manager.getActiveDek())
     }
 
+
+    @Test
+    fun `legacy TOTP secret is scrubbed from persisted V2 header and does not gate unlock`() {
+        val context = context()
+        val password = "V2LegacyTotpCleanupPassword2026!"
+        val manager = VaultSecurityManager.getInstance(context)
+        manager.initializeVault(password, false, VaultRecoveryMethod.NONE)
+        manager.lockVault()
+
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+        val raw = prefs.getString("vault_header_json_v2_active", null)
+            ?: error("V2 header expected")
+        val legacyHeader = org.json.JSONObject(raw)
+            .put("totpSecret", "JBSWY3DPEHPK3PXP")
+        assertTrue(prefs.edit().putString("vault_header_json_v2_active", legacyHeader.toString()).commit())
+
+        resetSingleton()
+        val reloaded = VaultSecurityManager.getInstance(context)
+        assertNull(reloaded.vaultHeader.value?.totpSecret)
+
+        val sanitizedRaw = prefs.getString("vault_header_json_v2_active", null)
+            ?: error("Sanitized V2 header expected")
+        assertFalse("Legacy TOTP secret must be removed from persistent JSON",
+            org.json.JSONObject(sanitizedRaw).has("totpSecret"))
+        assertTrue("Password remains the valid cryptographic unlock factor",
+            reloaded.unlockVault(password = password, totpCode = null))
+    }
+
+    @Test
+    fun `new vault setup rejects TOTP secret persistence`() {
+        val context = context()
+        val manager = VaultSecurityManager.getInstance(context)
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+        prefs.edit().remove("vault_header_json_v2_active").commit()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            manager.initializeVault(
+                masterPassword = "V2NoTotpPersistencePassword2026!",
+                enableBiometrics = false,
+                recoveryMethod = VaultRecoveryMethod.NONE,
+                totpSecret = "JBSWY3DPEHPK3PXP"
+            )
+        }
+        assertNull(prefs.getString("vault_header_json_v2_active", null))
+    }
+
     @Test
     fun `legacy header keys are ignored and never migrated into V2`() {
         val context = context()

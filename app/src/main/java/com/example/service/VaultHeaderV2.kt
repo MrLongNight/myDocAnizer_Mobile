@@ -34,6 +34,7 @@ data class VaultHeaderV2(
     val shamirShareHashes: List<String> = emptyList(),
     val hasEmergencyPin: Boolean = false,
     val emergencyPinSaltBase64: String? = null,
+    /** Legacy-only parse field. Never serialized or used to gate vault unlock. */
     val totpSecret: String? = null,
     val keyFileTokenHash: String? = null,
     val recoveryCodeHash: String? = null
@@ -66,7 +67,6 @@ data class VaultHeaderV2(
             put("shamirShareHashes", org.json.JSONArray().apply { shamirShareHashes.forEach { put(it) } })
             put("hasEmergencyPin", hasEmergencyPin)
             emergencyPinSaltBase64?.let { put("emergencyPinSaltBase64", it) }
-            totpSecret?.let { put("totpSecret", it) }
             keyFileTokenHash?.let { put("keyFileTokenHash", it) }
             recoveryCodeHash?.let { put("recoveryCodeHash", it) }
         }.toString()
