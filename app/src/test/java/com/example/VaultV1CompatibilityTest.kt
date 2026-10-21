@@ -84,6 +84,41 @@ class VaultV1CompatibilityTest {
     }
 
     @Test
+    fun `successful password only v1 unlock stages verified v2 without changing canonical v1 header`() {
+        val context = context()
+        val manager = VaultSecurityManager.getInstance(context)
+        val password = "StageV2FixturePassword2026!"
+        val setup = manager.initializeVault(
+            masterPassword = password,
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.NONE
+        )
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+        val originalV1 = prefs.getString("vault_header_json_v1", null)
+            ?: error("Expected canonical v1 header")
+
+        manager.lockVault()
+        assertTrue(manager.unlockWithPassword(password))
+
+        // The existing v1 header remains byte-for-byte intact until all v2 unlock/recovery
+        // paths can be switched together.
+        assertEquals(originalV1, prefs.getString("vault_header_json_v1", null))
+
+        val stagedRaw = prefs.getString("vault_header_json_v2_staging", null)
+        assertNotNull("Expected verified v2 staging header", stagedRaw)
+        val staged = com.example.service.VaultHeaderParserV2.parse(stagedRaw)
+            ?: error("Staged v2 header must pass strict validation")
+        assertEquals(2, staged.version)
+        assertEquals(setup.vaultId, staged.vaultId)
+        val reopenedDek = com.example.service.VaultHeaderCryptoV2.unwrapDek(staged, password.toCharArray())
+        try {
+            assertArrayEquals(setup.dek, reopenedDek)
+        } finally {
+            reopenedDek.fill(0)
+        }
+    }
+
+    @Test
     fun `legacy Argon2id parameters remain deterministic and weak values are rejected`() {
         val password = "master-password".toCharArray()
         val salt = ByteArray(16) { it.toByte() }
