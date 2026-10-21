@@ -28,9 +28,17 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.autofill.AutofillNode
+import androidx.compose.ui.autofill.AutofillType
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalAutofill
+import androidx.compose.ui.platform.LocalAutofillTree
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +53,7 @@ import com.example.R
 import com.example.ui.DocAnizerViewModel
 import com.example.ui.components.AppLogoBanner
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun AppLockScreen(
     viewModel: DocAnizerViewModel,
@@ -58,6 +67,24 @@ fun AppLockScreen(
     var enteredPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var passwordError by remember { mutableStateOf<String?>(null) }
+
+    @Suppress("DEPRECATION")
+    val autofill = LocalAutofill.current
+    @Suppress("DEPRECATION")
+    val autofillTree = LocalAutofillTree.current
+    val vaultPasswordAutofillNode = remember {
+        AutofillNode(
+            autofillTypes = listOf(AutofillType.Password),
+            onFill = { filledPassword ->
+                enteredPassword = filledPassword
+                passwordError = null
+            }
+        )
+    }
+    DisposableEffect(autofillTree, vaultPasswordAutofillNode) {
+        autofillTree += vaultPasswordAutofillNode
+        onDispose { autofillTree.children.remove(vaultPasswordAutofillNode.id) }
+    }
 
     val syncPasswordKey by viewModel.syncPasswordKey.collectAsState()
     val vaultStatus by viewModel.vaultStatus.collectAsState()
@@ -168,7 +195,14 @@ fun AppLockScreen(
                             }
                         }),
                         isError = passwordError != null,
-                        modifier = Modifier.fillMaxWidth().testTag("input_lock_password")
+                        modifier = Modifier.fillMaxWidth()
+                            .onGloballyPositioned { vaultPasswordAutofillNode.boundingBox = it.boundsInWindow() }
+                            .onFocusChanged { focusState ->
+                                @Suppress("DEPRECATION")
+                                if (focusState.isFocused) autofill?.requestAutofillForNode(vaultPasswordAutofillNode)
+                                else autofill?.cancelAutofillForNode(vaultPasswordAutofillNode)
+                            }
+                            .testTag("input_lock_password")
                     )
 
                     // TOTP Feld falls aktiviert

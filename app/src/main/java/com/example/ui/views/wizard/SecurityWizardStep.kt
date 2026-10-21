@@ -20,12 +20,20 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.autofill.AutofillNode
+import androidx.compose.ui.autofill.AutofillType
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalAutofill
+import androidx.compose.ui.platform.LocalAutofillTree
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -70,6 +78,7 @@ data class SecurityInfoContent(
  * 3. Notfall-Absicherung (BIP-39, Notfall-Kit PDF, Shamir 2-von-3, Notfall-Code, Keine) mit Info-Popups
  * 4. App-Zugriff & Biometrie absichern (Fingerabdruck / Face Unlock, Auto-Lock, Zusammenfassung)
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun SecurityWizardStep(
     viewModel: DocAnizerViewModel,
@@ -99,6 +108,24 @@ fun SecurityWizardStep(
     var passwordConfirm by remember { mutableStateOf(passwordValue) }
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmVisible by remember { mutableStateOf(false) }
+
+    @Suppress("DEPRECATION")
+    val autofill = LocalAutofill.current
+    @Suppress("DEPRECATION")
+    val autofillTree = LocalAutofillTree.current
+    val masterPasswordAutofillNode = remember {
+        AutofillNode(
+            autofillTypes = listOf(AutofillType.NewPassword),
+            onFill = { filledPassword ->
+                password = filledPassword
+                passwordConfirm = filledPassword
+            }
+        )
+    }
+    DisposableEffect(autofillTree, masterPasswordAutofillNode) {
+        autofillTree += masterPasswordAutofillNode
+        onDispose { autofillTree.children.remove(masterPasswordAutofillNode.id) }
+    }
 
     // Schlüsseldatei State
     var keyFileToken by remember { mutableStateOf(vaultSecManager.generateKeyFileToken()) }
@@ -176,8 +203,10 @@ fun SecurityWizardStep(
         } else if (selectedTier != null) {
             viewModel.setUnencryptedModeConfirmed(false)
             if (selectedFactorType == VaultFactorType.PASSKEY) {
-                onPasswordChange(if (password.isNotBlank()) password else "PASSKEY_FIDO2_SECURE_TOKEN")
-                viewModel.setSecurityMethod("PASSKEY")
+                // A passkey is not yet cryptographically bound to the vault DEK.
+                // Never substitute a fixed, public placeholder as the vault password.
+                onPasswordChange(password)
+                viewModel.setSecurityMethod("PASSWORD")
             } else if (selectedFactorType == VaultFactorType.KEYFILE) {
                 onPasswordChange(keyFileToken)
                 viewModel.setSecurityMethod("PASSWORD")
@@ -194,12 +223,7 @@ fun SecurityWizardStep(
 
     val isPasswordMatching = password.isNotBlank() && password == passwordConfirm
     val passwordStrength = remember(password) {
-        var score = 0
-        if (password.length >= 8) score++
-        if (password.length >= 12) score++
-        if (password.any { it.isDigit() }) score++
-        if (password.any { !it.isLetterOrDigit() }) score++
-        score
+        com.example.util.PasswordStrengthEstimator.score(password)
     }
 
     // Kann Substep 2 fortfahren?
@@ -207,7 +231,7 @@ fun SecurityWizardStep(
         VaultSecurityTier.UNENCRYPTED -> true
         VaultSecurityTier.ONE_FACTOR -> {
             when (selectedFactorType) {
-                VaultFactorType.PASSKEY -> true
+                VaultFactorType.PASSKEY -> false
                 VaultFactorType.KEYFILE -> keyFileToken.isNotBlank()
                 else -> isPasswordMatching
             }
@@ -505,9 +529,9 @@ fun SecurityWizardStep(
 
                             FactorOptionCard(
                                 title = "Passkey (FIDO2)",
-                                subtitle = "Passwortlose Anmeldung via Android Hardware-Keystore & Biometrie / Geräte-PIN",
+                                subtitle = "Registrierung möglich; Tresor-Verschlüsselungsbindung noch nicht fertig",
                                 icon = Icons.Default.Fingerprint,
-                                badge = "Modern (Empfohlen)",
+                                badge = "Noch nicht integriert",
                                 isSelected = selectedFactorType == VaultFactorType.PASSKEY,
                                 onClick = { selectedFactorType = VaultFactorType.PASSKEY },
                                 tag = "factor_card_passkey"
@@ -583,7 +607,7 @@ fun SecurityWizardStep(
                                 }
 
                                 Text(
-                                    text = "Dein Passkey wird direkt im Google Passwort-Manager und Hardware-Keystore deines Geräts hinterlegt. Du musst dir kein langes Passwort merken und bist optimal gegen Phishing geschützt.",
+                                    text = "Wichtig: Ein Passkey ist kein direkt nutzbarer Verschlüsselungsschlüssel. Die sichere Bindung an den Tresor-Schlüssel ist in dieser Version noch nicht implementiert. Bis sie fertig und getestet ist, wird der Tresor nicht allein durch einen Passkey geschützt.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -596,10 +620,10 @@ fun SecurityWizardStep(
                                             try {
                                                 val res = viewModel.passkeyAuthManager.registerPasskey(context, "myDocAnizer-User")
                                                 if (res.isSuccess) {
-                                                    viewModel.registerPasskey("Google Passkey (Android Keystore)")
-                                                    viewModel.setSecurityMethod("PASSKEY")
-                                                    onPasswordChange("PASSKEY_FIDO2_SECURE_TOKEN")
-                                                    passkeyRegisterStatus = "✅ Passkey erfolgreich registriert!"
+                                                    // Registration alone does not prove or derive the vault encryption key.
+                                                    // Keep the vault protected by a real user password, never a fixed placeholder.
+                                                    selectedFactorType = VaultFactorType.PASSWORD
+                                                    passkeyRegisterStatus = "Passkey registriert. Er ist noch nicht als Tresor-Verschlüsselungsfaktor eingebunden; Master-Passwort bleibt ausgewählt."
                                                 } else {
                                                     passkeyRegisterStatus = res.exceptionOrNull()?.message ?: "Registrierung abgebrochen"
                                                 }
@@ -664,7 +688,14 @@ fun SecurityWizardStep(
                                     Icon(if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = null)
                                 }
                             },
-                            modifier = Modifier.fillMaxWidth().testTag("input_wizard_master_password")
+                            modifier = Modifier.fillMaxWidth()
+                                .onGloballyPositioned { masterPasswordAutofillNode.boundingBox = it.boundsInWindow() }
+                                .onFocusChanged { focusState ->
+                                    @Suppress("DEPRECATION")
+                                    if (focusState.isFocused) autofill?.requestAutofillForNode(masterPasswordAutofillNode)
+                                    else autofill?.cancelAutofillForNode(masterPasswordAutofillNode)
+                                }
+                                .testTag("input_wizard_master_password")
                         )
 
                         OutlinedTextField(
@@ -697,7 +728,8 @@ fun SecurityWizardStep(
                                     when (passwordStrength) {
                                         0, 1 -> "Schwach"
                                         2, 3 -> "Mittel"
-                                        else -> "Sehr stark (Argon2id gehärtet)"
+                                        4 -> "Stark"
+                                        else -> "Sehr stark"
                                     },
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
@@ -709,7 +741,7 @@ fun SecurityWizardStep(
                                 )
                             }
                             LinearProgressIndicator(
-                                progress = { (passwordStrength.toFloat() / 4f).coerceIn(0.1f, 1f) },
+                                progress = { (passwordStrength.toFloat() / 5f).coerceIn(0.05f, 1f) },
                                 color = when (passwordStrength) {
                                     0, 1 -> MaterialTheme.colorScheme.error
                                     2, 3 -> MaterialTheme.colorScheme.tertiary
@@ -759,7 +791,7 @@ fun SecurityWizardStep(
                                 }
 
                                 Text(
-                                    text = "Dein Master-Passwort wird automatisch und sicher in deinem Google-Konto hinterlegt. Beim nächsten Öffnen füllt Android das Passwort bequem per Fingerabdruck oder Passkey aus.",
+                                    text = "Wenn Google Passwort-Manager als Autofill-Dienst aktiv ist, kann Android beim Antippen des Passwortfelds Vorschläge zum Generieren oder Ausfüllen anbieten. Gespeichert wird erst nach deiner Bestätigung. Der Button bleibt als manuelle Alternative.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -899,17 +931,6 @@ fun SecurityWizardStep(
                         }
                         Button(
                             onClick = {
-                                if (autoSaveToGooglePasswordManager && isPasswordMatching && selectedFactorType == VaultFactorType.PASSWORD) {
-                                    coroutineScope.launch {
-                                        try {
-                                            val credManager = runCatching { CredentialManager.create(context) }.getOrNull()
-                                            if (credManager != null) {
-                                                val req = CreatePasswordRequest("myDocAnizer-Master-Key", password)
-                                                credManager.createCredential(context, req)
-                                            }
-                                        } catch (_: Throwable) {}
-                                    }
-                                }
                                 currentSubStep = 3
                             },
                             enabled = canProceedStep2,
@@ -1265,6 +1286,7 @@ fun SecurityWizardStep(
                             Text("Zurück")
                         }
                         Button(
+                            enabled = selectedTier == VaultSecurityTier.UNENCRYPTED || selectedFactorType != VaultFactorType.PASSKEY,
                             onClick = {
                                 if (selectedTier == VaultSecurityTier.UNENCRYPTED) {
                                     viewModel.setUnencryptedModeConfirmed(true)

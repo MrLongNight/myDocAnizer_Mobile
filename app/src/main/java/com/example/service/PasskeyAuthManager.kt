@@ -32,8 +32,8 @@ class PasskeyAuthManager(private val context: Context) {
     /**
      * Erstellt eine standardkonforme WebAuthn JSON-Registrierungsanforderung (Registration JSON).
      */
-    fun createRegistrationJson(userName: String, rpId: String = "mydocanizer.local"): String {
-        val challengeBase64 = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(UUID.randomUUID().toString().toByteArray())
+    fun createRegistrationJson(userName: String, rpId: String = "mydocanizer.com"): String {
+        val challengeBase64 = createChallenge()
         val userIdBase64 = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(userName.toByteArray())
 
         val pubKeyCredParams = JSONArray().apply {
@@ -74,8 +74,8 @@ class PasskeyAuthManager(private val context: Context) {
     /**
      * Erstellt eine standardkonforme WebAuthn JSON-Authentifizierungsanforderung (Authentication JSON).
      */
-    fun createAuthenticationJson(rpId: String = "mydocanizer.local"): String {
-        val challengeBase64 = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(UUID.randomUUID().toString().toByteArray())
+    fun createAuthenticationJson(rpId: String = "mydocanizer.com"): String {
+        val challengeBase64 = createChallenge()
         val json = JSONObject().apply {
             put("challenge", challengeBase64)
             put("timeout", 60000)
@@ -85,13 +85,19 @@ class PasskeyAuthManager(private val context: Context) {
         return json.toString()
     }
 
+    private fun createChallenge(): String {
+        val challenge = ByteArray(32)
+        java.security.SecureRandom().nextBytes(challenge)
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(challenge)
+    }
+
     /**
      * Führt die Passkey-Erstellung auf dem Android-Gerät über den System-CredentialManager aus.
      */
     suspend fun registerPasskey(
         activityContext: Context,
         userName: String,
-        rpId: String = "mydocanizer.local"
+        rpId: String = "mydocanizer.com"
     ): Result<String> = withContext(Dispatchers.Main) {
         val manager = credentialManager ?: return@withContext Result.failure(Exception("Credential Manager auf diesem Gerät nicht verfügbar."))
         try {
@@ -102,7 +108,13 @@ class PasskeyAuthManager(private val context: Context) {
         } catch (e: CreateCredentialCancellationException) {
             Result.failure(Exception("Passkey-Einrichtung vom Benutzer abgebrochen."))
         } catch (e: CreateCredentialException) {
-            Result.failure(Exception("Passkey-Fehler: ${e.localizedMessage ?: e.message}", e))
+            val detail = e.localizedMessage ?: e.message.orEmpty()
+            val message = if (detail.contains("no create options available", ignoreCase = true)) {
+                "Kein Passkey-Anbieter verfügbar. Prüfe, ob Google Passwort-Manager aktiviert ist und mydocanizer.com die Android-App über Digital Asset Links (/.well-known/assetlinks.json) verknüpft."
+            } else {
+                "Passkey-Fehler: $detail"
+            }
+            Result.failure(Exception(message, e))
         } catch (e: Exception) {
             Result.failure(e)
         }

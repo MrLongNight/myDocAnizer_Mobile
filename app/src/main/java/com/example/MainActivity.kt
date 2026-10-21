@@ -56,7 +56,7 @@ open class MainActivity : FragmentActivity() {
                 else -> systemDark
             }
 
-            var showSplash by rememberSaveable { mutableStateOf(!com.example.BuildConfig.DEBUG) }
+            var showSplash by rememberSaveable { mutableStateOf(true) }
 
             MyApplicationTheme(
                 darkTheme = isDark,
