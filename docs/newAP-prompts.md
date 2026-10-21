@@ -174,8 +174,10 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 **Abhängigkeit:** S08.  
 **Prompt:** Migriere nur die in S01 konkret aufgelisteten Klartext-Secrets in den SecretStore. Pro Wert: erkennen, verschlüsselt schreiben, entschlüsselten Roundtrip verifizieren und erst danach Original entfernen. Migration muss idempotent sein und bei Fehler den ursprünglichen Wert erhalten, ohne unkontrollierte doppelte Klartextkopien zu hinterlassen. `sync_master_password` erst entfernen, wenn die in D/P/C betroffenen Verbraucher nachweislich umgestellt sind; sonst nur dokumentierte Zwischenstufe mit klarer Restabhängigkeit. **Abnahme:** erster Start, zweiter Start, Prozessabbruch und Keyfehler getestet.
 
-## S10 – Externe Navigationsextras validieren — **[WHITELIST UND POLICY-TESTS ERGÄNZT – INTEGRATIONSTEST OFFEN]**
+## S10 – Externe Navigationsextras validieren — **[ONE-SHOT-SANITISIERUNG UND INSTRUMENTATIONSTEST ERGÄNZT – TESTLAUF OFFEN]**
 **Prompt:** Prüfe die exportierte `MainActivity` sowie Widget-/Intent-Aufrufstellen. Validiere `EXTRA_START_TAB`, `EXTRA_OPEN_ACTION`, URIs und weitere externe Extras gegen feste Whitelists. Während der Vault gesperrt ist, dürfen externe Aktionen höchstens sicher zwischengespeichert und erst nach erfolgreichem Unlock verarbeitet werden. Ungültige Extras ignorieren und nicht später wiederverwenden. **Abnahme:** Tests für gültige, unbekannte, fehlerhafte und während Lock eintreffende Extras; kein Lock-Bypass.
+
+**Umsetzung direkt auf `main`:** `ExternalIntentPolicy.consume()` liest nur unterstützte Navigationswerte aus, verwirft unbekannte Extras und entfernt anschließend alle Extras, `data` und `clipData` aus dem Intent. `MainActivity` konsumiert den Payload **vor** der Lock-/Unlock-Prüfung; bei gesperrtem Zustand bleibt daher kein externer Befehl zur späteren Wiederholung an der Activity hängen. Ein Deep-Link-/URI-Schema wird derzeit nicht unterstützt und wird verworfen. `ExternalIntentPolicyInstrumentedTest` deckt gültige Werte, unbekannte Extras, ungültige Werte, falsch typisierte Boolean-Extras und das Entfernen von URI-/ClipData ab. Build- und Instrumentationstest für diesen neuen Patch stehen noch aus.
 
 ---
 
@@ -530,8 +532,8 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | S06 | PATCH ERSTELLT | direkt in main | Ja | AuthenticationBackoffManagerTest laut Statusbericht verifiziert | S07 |
 | S07 | PATCH ERSTELLT | direkt in main | Ja | Screenshot-/Recents-Gerätetest offen | S08 |
 | S08 | GETESTET | direkt in main | Ja | GitHub Actions am 21.10.2026: assembleDebug, testDebugUnitTest und connectedDebugAndroidTest erfolgreich; Emulator API 35/x86_64. Separater Test auf physischem Gerät offen. | S09 |
-| S09 | IN ARBEIT | direkt in main | Ja | SettingsRepository speichert sync_master_password über SecretStore; Legacy-Pref wird erst nach verschlüsseltem Roundtrip entfernt. Instrumentationstests ergänzt, aber CI-Ergebnis für diesen Commit noch offen. Weitere Secrets/Token aus S01 und Laufzeit-/Gerätetests noch abzugleichen. | CI prüfen; verbleibende S01-Secrets inventarisieren |
-| S10 | PATCH ERSTELLT | direkt in main | Ja | ExternalIntentPolicyTest laut Statusbericht verifiziert; Widget-Cold-Start-Test bleibt offen | D01 |
+| S09 | IN ARBEIT | direkt in main | Ja | Nutzer bestätigt erfolgreichen Build der S09-Änderungen; Instrumentationstests und vollständiger Secret-/Token-Abgleich bleiben offen. | verbleibende S01-Secrets inventarisieren und Instrumentationstest ausführen |
+| S10 | IN ARBEIT | direkt in main | Ja | One-shot-Sanitization vor Lock-Prüfung implementiert; Instrumentationstest ergänzt. Build/Test dieses neuen Commits noch offen. | S10 CI-/Instrumentationslauf, danach D01 |
 | D01 | AUDIT DOKUMENTIERT | docs/security/document-data-flow.md | Ja | Codepfad-Inventar erstellt; dynamische Geräte-/Share-/Restore-Abnahme bleibt für Folge-APs offen | D02 |
 | D02 | ADR ERSTELLT | docs/security/adr-003-sqlcipher-room-database.md | Ja | SQLCipher for Android 4.19.1 / Room 2.7.0 als technischer Vorschlag; Runtime bleibt bis D03 und DB01–DB04 blockiert | D03 |
 | DB03 | PATCH ERSTELLT | AppDatabase.kt / DatabaseDowngradeSafetyTest.kt | Ja | Destruktiven Downgrade-Fallback entfernt; Emulator-Abnahme dieses Commits steht noch aus | DB04 |
