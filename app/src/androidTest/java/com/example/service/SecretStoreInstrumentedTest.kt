@@ -90,6 +90,18 @@ class SecretStoreInstrumentedTest {
     }
 
     @Test
+    fun oversizedSecretAndStoredPayloadAreRejected() {
+        val oversizedSecret = ByteArray(64 * 1024 + 1) { 0x5a.toByte() }
+        assertFalse(store.put("oversized_test", oversizedSecret))
+        assertNull(store.get("oversized_test"))
+        oversizedSecret.fill(0)
+
+        context.getSharedPreferences("mydocanizer_secret_store", Context.MODE_PRIVATE)
+            .edit().putString("secret_v1_oversized_payload", "A".repeat(90_001)).commit()
+        assertNull(store.get("oversized_payload"))
+    }
+
+    @Test
     fun invalidNamesAreRejected() {
         assertFalse(store.put("../invalid", byteArrayOf(1, 2, 3)))
         assertNull(store.get("../invalid"))
