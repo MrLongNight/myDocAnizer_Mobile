@@ -8,6 +8,8 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,7 +24,46 @@ class SecretStoreInstrumentedTest {
         context = InstrumentationRegistry.getInstrumentation().targetContext
         context.getSharedPreferences("mydocanizer_secret_store", Context.MODE_PRIVATE)
             .edit().clear().commit()
+        context.getSharedPreferences("mydocanizer_prefs", Context.MODE_PRIVATE)
+            .edit().clear().commit()
         store = SecretStore(context)
+    }
+
+
+    @Test
+    fun legacySyncPasswordIsRemovedOnlyAfterEncryptedRoundTrip() {
+        val legacyPassword = "synthetic-legacy-password-for-test"
+        val legacyPrefs = context.getSharedPreferences("mydocanizer_prefs", Context.MODE_PRIVATE)
+        assertTrue(legacyPrefs.edit().putString("sync_master_password", legacyPassword).commit())
+
+        val repository = SettingsRepository(context)
+
+        assertEquals(legacyPassword, repository.syncPasswordKey.value)
+        assertFalse("legacy plaintext preference must be removed after verification", legacyPrefs.contains("sync_master_password"))
+        val encryptedPrefs = context.getSharedPreferences("mydocanizer_secret_store", Context.MODE_PRIVATE)
+        val payload = encryptedPrefs.getString("secret_v1_sync_master_password", null)
+        assertNotNull("encrypted secret payload must exist", payload)
+        assertFalse("stored payload must not equal plaintext", payload == legacyPassword)
+        val recovered = store.get("sync_master_password")
+        assertNotNull(recovered)
+        assertArrayEquals(legacyPassword.toByteArray(Charsets.UTF_8), recovered)
+        recovered?.fill(0)
+    }
+
+    @Test
+    fun updatingSyncPasswordUsesSecretStoreAndRemovesLegacyPreference() {
+        val legacyPrefs = context.getSharedPreferences("mydocanizer_prefs", Context.MODE_PRIVATE)
+        assertTrue(legacyPrefs.edit().putString("sync_master_password", "synthetic-old-password").commit())
+        val repository = SettingsRepository(context)
+
+        repository.setSyncPasswordKey("synthetic-new-password")
+
+        assertEquals("synthetic-new-password", repository.syncPasswordKey.value)
+        assertFalse(legacyPrefs.contains("sync_master_password"))
+        val recovered = store.get("sync_master_password")
+        assertNotNull(recovered)
+        assertArrayEquals("synthetic-new-password".toByteArray(Charsets.UTF_8), recovered)
+        recovered?.fill(0)
     }
 
     @Test
