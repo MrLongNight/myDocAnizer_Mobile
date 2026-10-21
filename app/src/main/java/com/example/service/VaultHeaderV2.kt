@@ -84,6 +84,14 @@ object VaultHeaderParserV2 {
         if (rawJson.isNullOrBlank()) return null
         return try {
             val json = JSONObject(rawJson)
+            val requiredFields = listOf("version", "algorithmId", "vaultId", "createdAt", "argon2Iterations", "argon2MemoryKb", "saltBase64", "ivBase64", "tagLengthBits", "encryptedDekBase64", "securityTier", "factorType", "autoLockMinutes", "domainSecurityTier", "domainFactorType", "biometric2FaEnabled", "recoveryMethod", "shamirShareHashes", "hasEmergencyPin")
+            if (requiredFields.any { !json.has(it) || json.isNull(it) }) return null
+            val stringFields = listOf("algorithmId", "vaultId", "saltBase64", "ivBase64", "encryptedDekBase64", "securityTier", "factorType", "domainSecurityTier", "domainFactorType", "recoveryMethod")
+            if (stringFields.any { json.opt(it) !is String }) return null
+            val numberFields = listOf("version", "createdAt", "argon2Iterations", "argon2MemoryKb", "tagLengthBits", "autoLockMinutes")
+            if (numberFields.any { json.opt(it) !is Number }) return null
+            if (json.opt("biometric2FaEnabled") !is Boolean || json.opt("hasEmergencyPin") !is Boolean) return null
+            if (json.optJSONArray("shamirShareHashes") == null) return null
 
             // 1. Versionsprüfung (Muss exakt 2 sein)
             val version = json.optInt("version", -1)

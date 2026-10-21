@@ -104,6 +104,30 @@ class VaultHeaderV2Test {
     }
 
     @Test
+    fun `v2 parser rejects missing required security metadata`() {
+        val required = listOf("securityTier", "factorType", "autoLockMinutes", "domainSecurityTier", "domainFactorType", "recoveryMethod", "biometric2FaEnabled", "shamirShareHashes", "hasEmergencyPin")
+        required.forEach { field ->
+            val json = org.json.JSONObject(createValidV2Header().toJson())
+            json.remove(field)
+            assertNull("Missing required field $field must fail closed", VaultHeaderParserV2.parse(json.toString()))
+        }
+    }
+
+    @Test
+    fun `v2 parser rejects wrong JSON types instead of coercing defaults`() {
+        val wrongTypes = listOf(
+            "securityTier" to 1, "factorType" to true, "autoLockMinutes" to "5",
+            "domainSecurityTier" to 1, "domainFactorType" to false, "recoveryMethod" to 0,
+            "biometric2FaEnabled" to "false", "shamirShareHashes" to "[]", "hasEmergencyPin" to "false"
+        )
+        wrongTypes.forEach { (field, value) ->
+            val json = org.json.JSONObject(createValidV2Header().toJson())
+            json.put(field, value)
+            assertNull("Wrong JSON type for $field must fail closed", VaultHeaderParserV2.parse(json.toString()))
+        }
+    }
+
+    @Test
     fun `test v2 parser rejects invalid salt length`() {
         // Salt with 8 bytes instead of 16
         val invalidSalt = ByteArray(8) { 0x01.toByte() }
