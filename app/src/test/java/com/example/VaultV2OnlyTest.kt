@@ -240,6 +240,39 @@ class VaultV2OnlyTest {
     }
 
     @Test
+    fun `failed vault reinitialization preserves previous security mode and header`() {
+        val context = context()
+        val manager = VaultSecurityManager.getInstance(context)
+        manager.initializeVault(
+            masterPassword = "",
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.NONE,
+            securityTier = VaultSecurityTier.UNENCRYPTED,
+            factorType = VaultFactorType.NONE
+        )
+        assertTrue(manager.isUnencryptedModeEnabled())
+
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+        val originalHeader = prefs.getString("vault_header_json_v2_active", null)
+            ?: error("Existing V2 header expected")
+
+        assertThrows(IllegalArgumentException::class.java) {
+            manager.initializeVault(
+                masterPassword = "ReplacementPassword2026!",
+                enableBiometrics = false,
+                recoveryMethod = VaultRecoveryMethod.NONE,
+                securityTier = VaultSecurityTier.ONE_FACTOR,
+                factorType = VaultFactorType.PASSWORD,
+                autoLockMinutes = -1
+            )
+        }
+
+        assertTrue("A failed replacement must not change the previous security mode", manager.isUnencryptedModeEnabled())
+        assertEquals("A failed replacement must not overwrite the previous V2 header",
+            originalHeader, prefs.getString("vault_header_json_v2_active", null))
+    }
+
+    @Test
     fun `legacy header keys are ignored and never migrated into V2`() {
         val context = context()
         val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)

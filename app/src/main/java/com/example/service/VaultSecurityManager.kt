@@ -362,12 +362,6 @@ class VaultSecurityManager private constructor(private val context: Context) {
             recoveryCode ?: generateRecoveryCode()
         } else null
 
-        if (securityTier == VaultSecurityTier.UNENCRYPTED) {
-            setUnencryptedModeEnabled(true)
-        } else {
-            setUnencryptedModeEnabled(false)
-        }
-
         // V2 is the only persisted vault format. When enabled, the keyfile participates in
         // Argon2id derivation. The unencrypted-mode sentinel is also wrapped by V2.
         val effectivePassword = masterPassword.ifBlank { "myDocAnizer-unencrypted-fallback" }
@@ -515,7 +509,10 @@ class VaultSecurityManager private constructor(private val context: Context) {
         )
 
         prefs.edit().remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY).commit()
+        // Change the mode flag only after the new V2 header is durably committed.
+        // A failed setup must not leave the previous vault advertised in another mode.
         saveVaultHeader(header)
+        setUnencryptedModeEnabled(securityTier == VaultSecurityTier.UNENCRYPTED)
         replaceActiveDek(dek)
 
         return VaultSetupResult(

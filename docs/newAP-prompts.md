@@ -505,7 +505,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | Micro-AP | Status | Patch-Datei | Lokal übernommen | Lokale Tests | Nächster Schritt |
 |---|---|---|---|---|---|
 | M00 | ABGENOMMEN | micro-ap-M00.patch | Ja | Bestanden | V01 |
-| V01 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V02 |
+| V01 | IN ARBEIT | VaultSecurityManager.kt, VaultV2OnlyTest.kt | Ja | Initialisierung ändert den Unencrypted-Modus erst nach dauerhaftem V2-Header-Commit; Regressionstest für fehlgeschlagene Neuinitialisierung ergänzt, CI offen | CI grün; anschließend V01–V04 als Gesamtbasis abgleichen |
 | V02 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V03 |
 | V03 | GETESTET (CI) | VaultHeaderV2.kt, VaultHeaderV2Test.kt, VaultV2OnlyTest.kt | Ja | Parser-, Recovery- und Faktor-Negativtests einschließlich Pflichtfeld-/Typvalidierung liefen in GitHub Actions Run `39633700992` erfolgreich; staged crypto headers bleiben parsebar. Gesamt-Abnahme V01–V04 weiterhin separat abgleichen | V04 / Gesamt-Abnahme V01–V04 |
 | V04 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V05 |
