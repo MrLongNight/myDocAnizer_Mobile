@@ -1,6 +1,7 @@
 package com.example
 
 import android.content.Intent
+import android.os.Bundle
 
 /** Validates and consumes the only external navigation commands supported by the app. */
 internal object ExternalIntentPolicy {
@@ -31,7 +32,8 @@ internal object ExternalIntentPolicy {
             intent.getBooleanExtra("EXTRA_OPEN_RECONCILIATION", false)
         }.getOrDefault(false)
 
-        intent.extras?.keySet()?.toList()?.forEach { intent.removeExtra(it) }
+        // Replace without enumerating/unparceling unknown attacker-controlled extras.
+        intent.replaceExtras(null as Bundle?)
         intent.data = null
         intent.clipData = null
 
