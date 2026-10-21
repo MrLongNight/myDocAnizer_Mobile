@@ -28,6 +28,7 @@ import java.util.UUID
 class SettingsRepository(context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences("mydocanizer_prefs", Context.MODE_PRIVATE)
+    private val secretStore = SecretStore(context)
 
     init {
         if (!prefs.getBoolean("cloud_sync_auto_mirror_safe_default_v1", false)) {
@@ -1180,12 +1181,78 @@ class SettingsRepository(context: Context) {
     }
 
     // Zero-Knowledge AES-256 Verschlüsselung & Cloud-Sync
-    private val _syncPasswordKey = MutableStateFlow(prefs.getString("sync_master_password", "") ?: "")
+    // The public flow remains a compatibility boundary for existing consumers; persistence is encrypted.
+    private val _syncPasswordKey = MutableStateFlow(loadSyncPasswordKey())
     val syncPasswordKey: StateFlow<String> = _syncPasswordKey.asStateFlow()
 
+    @Synchronized
+    private fun loadSyncPasswordKey(): String {
+        val encrypted = secretStore.get(SYNC_PASSWORD_SECRET_NAME)
+        if (encrypted != null) {
+            try {
+                val value = String(encrypted, Charsets.UTF_8)
+                // A verified encrypted value is authoritative. Remove any stale plaintext duplicate.
+                prefs.edit().remove(SYNC_PASSWORD_SECRET_NAME).commit()
+                return value
+            } finally {
+                encrypted.fill(0)
+            }
+        }
+
+        val legacy = prefs.getString(SYNC_PASSWORD_SECRET_NAME, null) ?: return ""
+        if (legacy.isEmpty()) {
+            prefs.edit().remove(SYNC_PASSWORD_SECRET_NAME).commit()
+            return ""
+        }
+
+        val candidate = legacy.toByteArray(Charsets.UTF_8)
+        return try {
+            if (!secretStore.put(SYNC_PASSWORD_SECRET_NAME, candidate)) return ""
+            val verified = secretStore.get(SYNC_PASSWORD_SECRET_NAME) ?: return ""
+            try {
+                if (!java.security.MessageDigest.isEqual(candidate, verified)) return ""
+                // Delete the legacy plaintext only after a successful encrypted roundtrip.
+                if (!prefs.edit().remove(SYNC_PASSWORD_SECRET_NAME).commit()) return ""
+                String(verified, Charsets.UTF_8)
+            } finally {
+                verified.fill(0)
+            }
+        } catch (_: Exception) {
+            ""
+        } finally {
+            candidate.fill(0)
+        }
+    }
+
+    @Synchronized
     fun setSyncPasswordKey(key: String) {
-        prefs.edit().putString("sync_master_password", key).apply()
-        _syncPasswordKey.value = key
+        if (key.isEmpty()) {
+            val encryptedRemoved = secretStore.remove(SYNC_PASSWORD_SECRET_NAME)
+            val legacyRemoved = prefs.edit().remove(SYNC_PASSWORD_SECRET_NAME).commit()
+            if (encryptedRemoved && legacyRemoved) _syncPasswordKey.value = ""
+            return
+        }
+
+        val candidate = key.toByteArray(Charsets.UTF_8)
+        try {
+            if (!secretStore.put(SYNC_PASSWORD_SECRET_NAME, candidate)) return
+            val verified = secretStore.get(SYNC_PASSWORD_SECRET_NAME) ?: return
+            try {
+                if (!java.security.MessageDigest.isEqual(candidate, verified)) return
+                if (!prefs.edit().remove(SYNC_PASSWORD_SECRET_NAME).commit()) return
+                _syncPasswordKey.value = String(verified, Charsets.UTF_8)
+            } finally {
+                verified.fill(0)
+            }
+        } catch (_: Exception) {
+            // Keep the current in-memory value and any legacy value if encryption fails.
+        } finally {
+            candidate.fill(0)
+        }
+    }
+
+    private companion object {
+        const val SYNC_PASSWORD_SECRET_NAME = "sync_master_password"
     }
 
     private val _isUnencryptedModeConfirmed = MutableStateFlow(prefs.getBoolean("unencrypted_mode_confirmed", false))
