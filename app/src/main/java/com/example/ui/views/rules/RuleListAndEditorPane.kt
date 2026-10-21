@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.model.CustomFieldEntity
 import com.example.model.DocRule
+import com.example.service.DocRuleRepository
 import com.example.service.llm.CustomFieldHarmonizer
 import com.example.service.llm.HarmonizationStatus
 import com.example.service.llm.RuleFieldAuditReport
@@ -46,6 +47,7 @@ fun DocumentRulesSettingsTab(
     var showCreateRuleDialog by remember { mutableStateOf(false) }
     var showTestingDialog by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<DocRule?>(null) }
+    var conflictingRule by remember { mutableStateOf<DocRule?>(null) }
 
     Column(
         modifier = modifier
@@ -150,8 +152,39 @@ fun DocumentRulesSettingsTab(
             viewModel = viewModel,
             onDismiss = { showCreateRuleDialog = false },
             onSave = { newRule ->
-                viewModel.addDocRule(newRule)
-                showCreateRuleDialog = false
+                val conflict = DocRuleRepository.findPotentialRuleConflict(docRules, newRule)
+                if (conflict != null) {
+                    conflictingRule = conflict
+                } else {
+                    viewModel.addDocRule(newRule)
+                    showCreateRuleDialog = false
+                }
+            }
+        )
+    }
+
+    conflictingRule?.let { conflict ->
+        AlertDialog(
+            onDismissRequest = { conflictingRule = null },
+            title = { Text("Mögliche Regelüberschneidung") },
+            text = {
+                Text(
+                    "Die neue oder geänderte Regel könnte gleichzeitig mit „${conflict.name}“ passen. " +
+                        "Ich habe sie nicht gespeichert, damit nicht unbemerkt konkurrierende Regeln entstehen. " +
+                        "Passe die Auslöser an oder prüfe die vorhandene Regel."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        conflictingRule = null
+                        showCreateRuleDialog = false
+                        editingRule = conflict
+                    }
+                ) { Text("Vorhandene Regel prüfen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { conflictingRule = null }) { Text("Auslöser anpassen") }
             }
         )
     }
@@ -163,8 +196,13 @@ fun DocumentRulesSettingsTab(
             viewModel = viewModel,
             onDismiss = { editingRule = null },
             onSave = { updated ->
-                viewModel.updateDocRule(updated)
-                editingRule = null
+                val conflict = DocRuleRepository.findPotentialRuleConflict(docRules, updated)
+                if (conflict != null) {
+                    conflictingRule = conflict
+                } else {
+                    viewModel.updateDocRule(updated)
+                    editingRule = null
+                }
             }
         )
     }
