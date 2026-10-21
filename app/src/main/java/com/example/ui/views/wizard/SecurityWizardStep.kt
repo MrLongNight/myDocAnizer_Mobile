@@ -1404,7 +1404,11 @@ fun SecurityWizardStep(
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { currentSubStep = 3 }, modifier = Modifier.weight(1f)) {
+                        OutlinedButton(
+                            onClick = { currentSubStep = 3 },
+                            enabled = !(vaultSavedSuccessfully && selectedRecovery == VaultRecoveryMethod.SHAMIR_2_OF_3),
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Text("Zurück")
                         }
                         Button(
