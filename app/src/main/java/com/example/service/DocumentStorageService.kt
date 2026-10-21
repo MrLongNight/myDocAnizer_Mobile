@@ -25,6 +25,14 @@ import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
 object DocumentStorageService {
+    // Explicit restore bounds defend against ZIP bombs and hostile backup containers.
+    private const val MAX_RESTORE_ENCRYPTED_BYTES = 2L * 1024 * 1024 * 1024
+    private const val MAX_RESTORE_TOTAL_BYTES = 2L * 1024 * 1024 * 1024
+    private const val MAX_RESTORE_DOCUMENT_BYTES = 512L * 1024 * 1024
+    private const val MAX_RESTORE_INDEX_BYTES = 32L * 1024 * 1024
+    private const val MAX_RESTORE_METADATA_BYTES = 32L * 1024 * 1024
+    private const val MAX_RESTORE_ENTRIES = 20_000
+    private const val MAX_RESTORE_ENTRY_NAME_CHARS = 4096
 
     /**
      * Ermittelt das übergeordnete Basis-Verzeichnis für alle Dokumente
@@ -1258,68 +1266,121 @@ object DocumentStorageService {
         val tempZip = File(context.cacheDir, "restore_bundle_${UUID.randomUUID()}.zip")
         val tempExtractDir = File(context.cacheDir, "temp_extract_${UUID.randomUUID()}").apply { mkdirs() }
         try {
+            if (!inputEncFile.isFile || inputEncFile.length() <= 0L ||
+                inputEncFile.length() > MAX_RESTORE_ENCRYPTED_BYTES) {
+                throw SecurityException("Backup-Datei fehlt, ist leer oder überschreitet das erlaubte Größenlimit.")
+            }
             val decrypted = decryptFile(inputEncFile, tempZip, passwordKey)
-            if (!decrypted || !tempZip.exists()) {
-                return@withContext Result.failure(Exception("Entschlüsselung fehlgeschlagen. Bitte Master-Passwort prüfen!"))
+            if (!decrypted || !tempZip.isFile || tempZip.length() > MAX_RESTORE_TOTAL_BYTES) {
+                return@withContext Result.failure(Exception("Entschlüsselung fehlgeschlagen oder Backup überschreitet das Größenlimit."))
             }
 
             var indexJsonString: String? = null
             var vaultMetadataJsonString: String? = null
+            var totalExpandedBytes = 0L
+            var entryCount = 0
+            val seenEntryNames = HashSet<String>()
 
-            // 1. Temporär entpacken mit Zip-Slip-Schutz
-            java.util.zip.ZipInputStream(tempZip.inputStream()).use { zis ->
+            // 1. Validate and stage the whole archive before mutating app data.
+            java.util.zip.ZipInputStream(tempZip.inputStream().buffered()).use { zis ->
                 var entry = zis.nextEntry
                 while (entry != null) {
+                    entryCount++
+                    if (entryCount > MAX_RESTORE_ENTRIES) {
+                        throw SecurityException("Zu viele Einträge im Backup-Archiv.")
+                    }
                     val entryName = entry.name
-                    if (entryName == "doc_index.json") {
-                        indexJsonString = zis.bufferedReader(Charsets.UTF_8).readText()
-                    } else if (entryName == "vault_metadata.json") {
-                        vaultMetadataJsonString = zis.bufferedReader(Charsets.UTF_8).readText()
-                    } else if (entryName.startsWith("documents/") && !entry.isDirectory) {
-                        val rawFileName = entryName.substringAfter("documents/")
-                        val safeFileName = File(rawFileName).name
-                        val destFile = File(tempExtractDir, safeFileName)
-                        if (!destFile.canonicalPath.startsWith(tempExtractDir.canonicalPath)) {
-                            throw SecurityException("Ungültiger Pfad im Archiv erkannt (Zip Slip Schutz).")
+                    if (entryName.length > MAX_RESTORE_ENTRY_NAME_CHARS ||
+                        entryName.any { it.isISOControl() } ||
+                        !seenEntryNames.add(entryName)) {
+                        throw SecurityException("Ungültiger oder doppelter Archiveintrag.")
+                    }
+                    if (entry.size > MAX_RESTORE_DOCUMENT_BYTES) {
+                        throw SecurityException("Archiveintrag überschreitet das Größenlimit.")
+                    }
+
+                    when {
+                        entryName == "doc_index.json" && !entry.isDirectory -> {
+                            if (indexJsonString != null) throw SecurityException("Doppelter Dokumentindex im Backup.")
+                            val bytes = readCurrentZipEntryBounded(zis, MAX_RESTORE_INDEX_BYTES)
+                            totalExpandedBytes += bytes.size
+                            if (totalExpandedBytes > MAX_RESTORE_TOTAL_BYTES) {
+                                bytes.fill(0)
+                                throw SecurityException("Backup überschreitet das Gesamtgrößenlimit.")
+                            }
+                            indexJsonString = try { String(bytes, Charsets.UTF_8) } finally { bytes.fill(0) }
                         }
-                        destFile.outputStream().use { fos ->
-                            zis.copyTo(fos)
+                        entryName == "vault_metadata.json" && !entry.isDirectory -> {
+                            if (vaultMetadataJsonString != null) throw SecurityException("Doppelte Tresor-Metadaten im Backup.")
+                            val bytes = readCurrentZipEntryBounded(zis, MAX_RESTORE_METADATA_BYTES)
+                            totalExpandedBytes += bytes.size
+                            if (totalExpandedBytes > MAX_RESTORE_TOTAL_BYTES) {
+                                bytes.fill(0)
+                                throw SecurityException("Backup überschreitet das Gesamtgrößenlimit.")
+                            }
+                            vaultMetadataJsonString = try { String(bytes, Charsets.UTF_8) } finally { bytes.fill(0) }
                         }
+                        entryName.startsWith("documents/") && !entry.isDirectory -> {
+                            if (!isSafeBackupDocumentEntryName(entryName)) {
+                                throw SecurityException("Ungültiger Dokumentpfad im Backup.")
+                            }
+                            val safeFileName = entryName.substringAfter("documents/")
+                            val destFile = File(tempExtractDir, safeFileName)
+                            if (destFile.canonicalFile.parentFile != tempExtractDir.canonicalFile) {
+                                throw SecurityException("Ungültiger Pfad im Archiv erkannt (Zip Slip Schutz).")
+                            }
+                            val copiedBytes = copyCurrentZipEntryBounded(zis, destFile, MAX_RESTORE_DOCUMENT_BYTES)
+                            totalExpandedBytes += copiedBytes
+                            if (totalExpandedBytes > MAX_RESTORE_TOTAL_BYTES) {
+                                destFile.delete()
+                                throw SecurityException("Backup überschreitet das Gesamtgrößenlimit.")
+                            }
+                        }
+                        else -> throw SecurityException("Nicht unterstützter Archiveintrag im Backup.")
                     }
                     zis.closeEntry()
                     entry = zis.nextEntry
                 }
             }
 
-            // 2. Vault-Metadaten wiederherstellen (falls vorhanden)
-            if (vaultMetadataJsonString != null) {
-                try {
-                    val metadata = jsonToVaultMetadata(JSONObject(vaultMetadataJsonString!!))
-                    if (metadata.customFields.isNotEmpty()) {
-                        database.customFieldDao().insertCustomFields(metadata.customFields)
-                    }
-                    if (metadata.customFieldValues.isNotEmpty()) {
-                        database.customFieldDao().insertOrUpdateFieldValues(metadata.customFieldValues)
-                    }
-                    if (metadata.cashTransactions.isNotEmpty()) {
-                        database.financeDao().insertCashTransactions(metadata.cashTransactions)
-                    }
-                    if (metadata.bankStatementEntries.isNotEmpty()) {
-                        database.financeDao().insertBankStatementEntries(metadata.bankStatementEntries)
-                    }
-                    if (metadata.customDashboardWidgets.isNotEmpty()) {
-                        database.customDashboardWidgetDao().insertOrUpdateWidgets(metadata.customDashboardWidgets)
-                    }
-                    if (metadata.rules.isNotEmpty()) {
-                        ruleRepository.addRules(metadata.rules)
-                    }
-                } catch (_: Exception) {}
+            // The index is mandatory and parsed before any DB writes occur.
+            val parsedIndex = indexJsonString?.let { JSONArray(it) }
+                ?: throw SecurityException("Backup enthält keinen Dokumentindex.")
+            if (parsedIndex.length() > MAX_RESTORE_ENTRIES) {
+                throw SecurityException("Zu viele Dokumente im Backup-Index.")
+            }
+            val metadataToRestore = vaultMetadataJsonString?.let {
+                try { jsonToVaultMetadata(JSONObject(it)) }
+                catch (e: Exception) { throw SecurityException("Tresor-Metadaten im Backup sind ungültig.", e) }
             }
 
-            // 3. Dokumente wiederherstellen in 2-Ebenen-Ordnerstruktur über getDocumentDirectory
+            // 2. Restore optional metadata only after archive structure and JSON validation.
+            if (metadataToRestore != null) {
+                val metadata = metadataToRestore
+                if (metadata.customFields.isNotEmpty()) {
+                    database.customFieldDao().insertCustomFields(metadata.customFields)
+                }
+                if (metadata.customFieldValues.isNotEmpty()) {
+                    database.customFieldDao().insertOrUpdateFieldValues(metadata.customFieldValues)
+                }
+                if (metadata.cashTransactions.isNotEmpty()) {
+                    database.financeDao().insertCashTransactions(metadata.cashTransactions)
+                }
+                if (metadata.bankStatementEntries.isNotEmpty()) {
+                    database.financeDao().insertBankStatementEntries(metadata.bankStatementEntries)
+                }
+                if (metadata.customDashboardWidgets.isNotEmpty()) {
+                    database.customDashboardWidgetDao().insertOrUpdateWidgets(metadata.customDashboardWidgets)
+                }
+                if (metadata.rules.isNotEmpty()) {
+                    ruleRepository.addRules(metadata.rules)
+                }
+            }
+
+            // 3. Restore staged documents in the configured two-level category structure.
             val restoredDocs = mutableListOf<DocumentEntity>()
-            if (indexJsonString != null) {
-                val array = JSONArray(indexJsonString!!)
+            run {
+                val array = parsedIndex
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
                     val id = obj.optLong("id", System.currentTimeMillis() + i)
@@ -1413,6 +1474,64 @@ object DocumentStorageService {
         } finally {
             if (tempZip.exists()) tempZip.delete()
             if (tempExtractDir.exists()) tempExtractDir.deleteRecursively()
+        }
+    }
+
+    /**
+     * Checks that a ZIP document entry is exactly one filename segment below documents/.
+     * Archive paths are never normalized or flattened into an apparently safe filename.
+     */
+    internal fun isSafeBackupDocumentEntryName(entryName: String): Boolean {
+        if (entryName.length > MAX_RESTORE_ENTRY_NAME_CHARS || entryName.any { it.isISOControl() }) return false
+        if (!entryName.startsWith("documents/") || '\\\\' in entryName) return false
+        val child = entryName.substringAfter("documents/", missingDelimiterValue = "")
+        return child.isNotBlank() && child != "." && child != ".." &&
+            '/' !in child && '\\\\' !in child
+    }
+
+    private fun readCurrentZipEntryBounded(
+        input: java.util.zip.ZipInputStream,
+        maxBytes: Long
+    ): ByteArray {
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        var total = 0L
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            if (total > maxBytes) throw SecurityException("Archiveintrag überschreitet das Größenlimit.")
+            output.write(buffer, 0, count)
+        }
+        buffer.fill(0)
+        return output.toByteArray()
+    }
+
+    private fun copyCurrentZipEntryBounded(
+        input: java.util.zip.ZipInputStream,
+        destination: File,
+        maxBytes: Long
+    ): Long {
+        if (!destination.createNewFile()) throw SecurityException("Doppelter Dateiname im Backup-Archiv.")
+        val buffer = ByteArray(64 * 1024)
+        var total = 0L
+        try {
+            FileOutputStream(destination).use { output ->
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    total += count
+                    if (total > maxBytes) throw SecurityException("Dokument im Backup überschreitet das Größenlimit.")
+                    output.write(buffer, 0, count)
+                }
+                output.fd.sync()
+            }
+            return total
+        } catch (e: Exception) {
+            destination.delete()
+            throw e
+        } finally {
+            buffer.fill(0)
         }
     }
 
