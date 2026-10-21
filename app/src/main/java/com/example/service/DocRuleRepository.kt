@@ -63,6 +63,50 @@ class DocRuleRepository(private val context: Context) {
         }
 
         /**
+         * Sucht eine andere aktivierte Regel, die mit der Kandidatenregel auf mindestens
+         * einem möglichen OCR-Text gleichzeitig matchen könnte. Konservativ wird ein
+         * Konflikt angenommen, sofern keine Pflicht-Keywords der jeweils anderen Regel
+         * den Treffer durch ein Ausschluss-Keyword sicher verhindern.
+         */
+        fun findPotentialRuleConflict(
+            existingRules: List<DocRule>,
+            candidate: DocRule
+        ): DocRule? {
+            if (!candidate.isEnabled || candidate.matchKeywords.none { it.isNotBlank() }) return null
+            return existingRules.firstOrNull { existing ->
+                existing.id != candidate.id &&
+                    existing.isEnabled &&
+                    existing.matchKeywords.any { it.isNotBlank() } &&
+                    rulesCouldMatchSameDocument(existing, candidate)
+            }
+        }
+
+        fun hasPotentialRuleConflict(rules: List<DocRule>): Boolean {
+            val enabled = rules.filter { it.isEnabled && it.matchKeywords.any(String::isNotBlank) }
+            return enabled.indices.any { i ->
+                (i + 1 until enabled.size).any { j ->
+                    rulesCouldMatchSameDocument(enabled[i], enabled[j])
+                }
+            }
+        }
+
+        private fun rulesCouldMatchSameDocument(left: DocRule, right: DocRule): Boolean {
+            val leftRequired = left.matchKeywords.filter { it.isNotBlank() }
+            val rightRequired = right.matchKeywords.filter { it.isNotBlank() }
+            if (leftRequired.isEmpty() || rightRequired.isEmpty()) return false
+
+            val leftExcludes = left.excludeKeywords.filter { it.isNotBlank() }
+            val rightExcludes = right.excludeKeywords.filter { it.isNotBlank() }
+            val leftAlwaysExcludedByRight = leftExcludes.any { excluded ->
+                rightRequired.any { required -> containsKeywordMatch(required.lowercase(), excluded.lowercase()) }
+            }
+            val rightAlwaysExcludedByLeft = rightExcludes.any { excluded ->
+                leftRequired.any { required -> containsKeywordMatch(required.lowercase(), excluded.lowercase()) }
+            }
+            return !leftAlwaysExcludedByRight && !rightAlwaysExcludedByLeft
+        }
+
+        /**
          * Liefert nur dann eine Regel, wenn genau eine aktivierte Regel alle Pflicht-
          * Keywords erfüllt und kein Ausschluss-Keyword findet. Bei Mehrdeutigkeit
          * wird null geliefert, damit der Aufrufer prüfen oder die LLM-Stufe verwenden kann.
@@ -147,25 +191,32 @@ class DocRuleRepository(private val context: Context) {
         }
     }
 
-    fun addRule(rule: DocRule) {
-        val current = _rules.value.toMutableList()
-        current.removeAll { it.id == rule.id }
-        current.add(0, rule)
-        saveRules(current)
+    /**
+     * Neue Regeln werden nur gespeichert, wenn sie keine aktivierte Regeldefinition
+     * erzeugen, die mit einer anderen Definition gleichzeitig matchen könnte.
+     * Runtime-Matching bleibt zusätzlich fail-closed.
+     */
+    fun addRule(rule: DocRule): Boolean {
+        val current = _rules.value.filterNot { it.id == rule.id }
+        if (findPotentialRuleConflict(current, rule) != null) return false
+        saveRules(listOf(rule) + current)
+        return true
     }
 
-    fun addRules(newRules: List<DocRule>) {
-        val current = _rules.value.toMutableList()
-        newRules.forEach { nr ->
-            current.removeAll { it.id == nr.id }
-            current.add(0, nr)
-        }
-        saveRules(current)
+    fun addRules(newRules: List<DocRule>): Boolean {
+        val replacedIds = newRules.map { it.id }.toSet()
+        val base = _rules.value.filterNot { it.id in replacedIds }
+        val candidates = newRules + base
+        if (hasPotentialRuleConflict(candidates)) return false
+        saveRules(candidates)
+        return true
     }
 
-    fun updateRule(rule: DocRule) {
-        val current = _rules.value.map { if (it.id == rule.id) rule else it }
-        saveRules(current)
+    fun updateRule(rule: DocRule): Boolean {
+        val current = _rules.value.filterNot { it.id == rule.id }
+        if (findPotentialRuleConflict(current, rule) != null) return false
+        saveRules(listOf(rule) + current)
+        return true
     }
 
     fun deleteRule(ruleId: String) {
@@ -173,16 +224,18 @@ class DocRuleRepository(private val context: Context) {
         saveRules(current)
     }
 
-    fun toggleRule(ruleId: String, enabled: Boolean) {
+    fun toggleRule(ruleId: String, enabled: Boolean): Boolean {
         val current = _rules.value.map {
             if (it.id == ruleId) it.copy(isEnabled = enabled) else it
         }
+        if (enabled && hasPotentialRuleConflict(current)) return false
         saveRules(current)
+        return true
     }
 
     /**
      * Schneller Regel-Check des OCR-Textes (Schritt 1 VOR dem LLM)
-     * Gibt die erste passende Regel zurück oder null
+     * Gibt nur bei genau einem passenden Treffer eine Regel zurück, sonst null
      */
     fun matchRule(ocrText: String): DocRule? =
         findUniqueMatchingRule(_rules.value, ocrText)

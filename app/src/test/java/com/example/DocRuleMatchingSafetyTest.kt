@@ -61,5 +61,31 @@ class DocRuleMatchingSafetyTest {
                 "ACME GmbH Rechnung Nr. 123"
             )
         )
+    } 
+    @Test
+    fun overlappingDefinitionsAreDetectedBeforeSaving() {
+        val broad = rule("broad", "vodafone")
+        val specific = rule("invoice", "vodafone", "rechnung")
+        assertEquals("broad", DocRuleRepository.findPotentialRuleConflict(listOf(broad), specific)?.id)
+        assertEquals(true, DocRuleRepository.hasPotentialRuleConflict(listOf(broad, specific)))
     }
+
+    @Test
+    fun exclusionThatAlwaysAppliesToOtherRulePreventsDefinitionConflict() {
+        val broad = rule("broad", "vodafone", excludes = listOf("rechnung"))
+        val invoice = rule("invoice", "vodafone", "rechnung")
+        assertNull(DocRuleRepository.findPotentialRuleConflict(listOf(broad), invoice))
+        assertEquals(false, DocRuleRepository.hasPotentialRuleConflict(listOf(broad, invoice)))
+    }
+
+    @Test
+    fun disjointRulesCanCoexist() {
+        assertEquals(
+            false,
+            DocRuleRepository.hasPotentialRuleConflict(
+                listOf(rule("vodafone", "vodafone"), rule("allianz", "allianz"))
+            )
+        )
+    }
+
 }
