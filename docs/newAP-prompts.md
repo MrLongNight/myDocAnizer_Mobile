@@ -5,9 +5,9 @@
 | Kennzahl | Aktueller Stand |
 |---|---|
 | Micro-APs insgesamt | **119** |
-| Einzelstatus dokumentiert | **37** |
-| Einzelstatus noch abzugleichen | **82** |
-| Dokumentierte Statusverteilung | 1 abgenommen · 1 getestet · 27 Patch erstellt · 1 in Arbeit · 1 blockiert · 5 nicht gestartet · 1 ADR freigegeben |
+| Einzelstatus dokumentiert | **40** |
+| Einzelstatus noch abzugleichen | **79** |
+| Dokumentierte Statusverteilung | 1 abgenommen · 2 getestet · 27 Patch erstellt · 1 in Arbeit · 1 blockiert · 5 nicht gestartet · 1 ADR freigegeben · 1 Audit dokumentiert · 1 ADR erstellt |
 | Tests | 23 Testklassen inkl. `VaultTwoFactorSecurityTest`; vorhanden heißt nicht automatisch ausgeführt oder bestanden |
 | Build/Tests | GitHub Actions führt jetzt `assembleDebug testDebugUnitTest` aus; Ergebnis der aktuellen Änderungen wird separat geprüft |
 
@@ -170,7 +170,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## S08 – SecretStore-Grundkomponente — **[KERNKOMPONENTE ERSTELLT – INSTRUMENTATIONSTEST OFFEN]**
 **Prompt:** Baue einen testbaren `SecretStore` für langlebige Geheimnisse. Verwende AES-GCM mit einem nicht exportierbaren Android-Keystore-Key, eindeutiger Nonce, Formatversion und Integritätsprüfung. Dokumentiere die Authentifizierungsbindung des Keys und API-Level-Fallbacks. Ungültiger Tag oder Keystore-Fehler darf niemals Klartextfallback auslösen. In diesem Schritt nur API und Kernkomponente samt synthetischen Tests erstellen; bestehende Prefs noch nicht migrieren. **Abnahme:** Roundtrip, falscher Tag, fehlender/invalidierter Key und Fehlerpfade getestet.
 
-## S09 – Legacy-Secrets verlustfrei migrieren — **[BLOCKIERT – S08-TESTLAUF OFFEN]**
+## S09 – Legacy-Secrets verlustfrei migrieren — **[BLOCKIERT – VERBRAUCHER-AUDIT OFFEN]**
 **Abhängigkeit:** S08.  
 **Prompt:** Migriere nur die in S01 konkret aufgelisteten Klartext-Secrets in den SecretStore. Pro Wert: erkennen, verschlüsselt schreiben, entschlüsselten Roundtrip verifizieren und erst danach Original entfernen. Migration muss idempotent sein und bei Fehler den ursprünglichen Wert erhalten, ohne unkontrollierte doppelte Klartextkopien zu hinterlassen. `sync_master_password` erst entfernen, wenn die in D/P/C betroffenen Verbraucher nachweislich umgestellt sind; sonst nur dokumentierte Zwischenstufe mit klarer Restabhängigkeit. **Abnahme:** erster Start, zweiter Start, Prozessabbruch und Keyfehler getestet.
 
@@ -529,8 +529,8 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | S05 | PATCH ERSTELLT | direkt in main | Ja | Produktionsaufrufe auf Key-Leases migriert; Testlauf offen | S06 |
 | S06 | PATCH ERSTELLT | direkt in main | Ja | AuthenticationBackoffManagerTest laut Statusbericht verifiziert | S07 |
 | S07 | PATCH ERSTELLT | direkt in main | Ja | Screenshot-/Recents-Gerätetest offen | S08 |
-| S08 | PATCH ERSTELLT | direkt in main | Ja | SecretStore-Instrumentationstest ergänzt; Gerätetest offen | S09 |
-| S09 | BLOCKIERT | – | Nein | S08-Testlauf und Verbraucher-Audit offen | S08 prüfen |
+| S08 | GETESTET | direkt in main | Ja | GitHub Actions am 21.10.2026: assembleDebug, testDebugUnitTest und connectedDebugAndroidTest erfolgreich; Emulator API 35/x86_64. Separater Test auf physischem Gerät offen. | S09 |
+| S09 | BLOCKIERT | – | Nein | S08-CI-Tests bestanden; Verbraucher-Audit offen: sync_master_password/syncPasswordKey wird noch über SettingsRepository, SyncManager, DocAnizerViewModel und mehrere Screens bereitgestellt/verwendet. Legacy-Wert nicht entfernen, bevor alle Konsumenten sicher umgestellt sind. | S09: Verbraucher-Audit abschließen, dann Migration planen |
 | S10 | PATCH ERSTELLT | direkt in main | Ja | ExternalIntentPolicyTest laut Statusbericht verifiziert; Widget-Cold-Start-Test bleibt offen | D01 |
 | D01 | AUDIT DOKUMENTIERT | docs/security/document-data-flow.md | Ja | Codepfad-Inventar erstellt; dynamische Geräte-/Share-/Restore-Abnahme bleibt für Folge-APs offen | D02 |
 | D02 | ADR ERSTELLT | docs/security/adr-003-sqlcipher-room-database.md | Ja | SQLCipher for Android 4.19.1 / Room 2.7.0 als technischer Vorschlag; Runtime bleibt bis D03 und DB01–DB04 blockiert | D03 |
