@@ -1486,7 +1486,7 @@ object DocumentStorageService {
         if (!entryName.startsWith("documents/") || '\\' in entryName) return false
         val child = entryName.substringAfter("documents/", missingDelimiterValue = "")
         return child.isNotBlank() && child != "." && child != ".." &&
-            '/' !in child && '\\\\' !in child
+            '/' !in child && '\\' !in child
     }
 
     private fun readCurrentZipEntryBounded(
