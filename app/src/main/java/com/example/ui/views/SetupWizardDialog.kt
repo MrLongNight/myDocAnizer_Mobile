@@ -416,7 +416,6 @@ fun SetupWizardDialog(
                             )
                         }
                     }
-                }
                     }
                 }
             }
