@@ -282,7 +282,6 @@ fun SetupWizardDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                if (WizardStep.fromId(currentStepId) !is WizardStep.SecurityAndBiometrics) {
                     Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -312,6 +311,7 @@ fun SetupWizardDialog(
                         }
                     }
 
+                    if (WizardStep.fromId(currentStepId) !is WizardStep.SecurityAndBiometrics) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -417,6 +417,7 @@ fun SetupWizardDialog(
                         }
                     }
                 }
+                    }
                 }
             }
         }
