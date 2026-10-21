@@ -2,15 +2,13 @@ package com.example.service
 
 import android.content.Context
 import android.util.Log
+import android.os.Build
 import com.example.model.FolderStrategy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.sync.withLock
-import dev.ffmpegkit.llama.Llama
-import dev.ffmpegkit.llama.LlamaConfig
-import dev.ffmpegkit.llama.LlamaModel
 import java.io.File
 
 /**
@@ -103,9 +101,6 @@ class LlamaCppInferenceEngine(private val context: Context) {
     @Volatile
     var lastInferenceMode: InferenceMode = InferenceMode.NOT_RUN
         private set
-
-    private var loadedModel: LlamaModel? = null
-    private var loadedModelPath: String? = null
 
     companion object {
         private const val TAG = "LlamaCppEngine"
@@ -295,8 +290,8 @@ Antworte AUSSCHLIESSLICH mit diesem exakten JSON-Schema:
         }
 
         /**
-         * GBNF (Grammar-Based Network Format) zur hardwareseitigen Erzwingung der JSON-Struktur in llama.cpp.
-         * Erlaubt beliebige dynamische Key-Value-Paare im 'globale_zusatzfelder'-Objekt sowie optionale Whitespaces und Typen.
+         * GBNF-Grammatik für die native llama.cpp-Schnittstelle. Sie wird an den Sampler übergeben,
+         * damit die JSON-Struktur während der Generierung eingeschränkt wird.
          */
         const val DMS_JSON_GBNF: String = """
 root ::= "{" ws "\"_reasoning\"" ws ":" ws string "," ws "\"absender\"" ws ":" ws opt_string "," ws "\"dokumententyp\"" ws ":" ws opt_string "," ws "\"match_keywords\"" ws ":" ws string_array "," ws "\"kategorie_vorschlag\"" ws ":" ws opt_string "," ws "\"vorgeschlagener_pfad\"" ws ":" ws opt_string "," ws "\"globale_zusatzfelder\"" ws ":" ws object "}" ws
@@ -391,7 +386,7 @@ ws ::= [ \t\n\r]*
             if (taxId.isNotBlank()) fallbackFields["Steuernummer"] = taxId
 
             return DmsExtractionResponse(
-                reasoning = "Strukturierte On-Device Erkennung: ${detectedSender ?: "Allgemeines Dokument"} ($detectedType).",
+                reasoning = "Regelbasierter Fallback (kein LLM): ${detectedSender ?: "Allgemeines Dokument"} ($detectedType) anhand von OCR-Schlüsselwörtern erkannt.",
                 absender = detectedSender,
                 dokumententyp = detectedType,
                 matchKeywords = keywords,
@@ -527,52 +522,52 @@ ws ::= [ \t\n\r]*
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext executeFallbackInference(prompt, systemPrompt)
         }
+        if (!supportsNativeInference()) {
+            lastInferenceMode = InferenceMode.RULE_FALLBACK
+            safeLogW(TAG, "Native llama.cpp wird auf dieser 32-Bit-ABI nicht gestartet; OCR-/Regel-Fallback aktiv.")
+            return@withContext executeFallbackInference(prompt, systemPrompt)
+        }
 
         try {
-            inferenceMutex.withLock {
-                val path = modelFile.absolutePath
-                var model = loadedModel
-                if (model == null || !model.isLoaded || loadedModelPath != path) {
-                    model?.let { runCatching { Llama.releaseModel(it) } }
-                    loadedModel = null
-                    loadedModelPath = null
-                    model = Llama.loadModel(
-                        modelPath = path,
-                        config = LlamaConfig(
-                            contextSize = 2048,
-                            threads = params.threads.coerceIn(1, 8),
-                            gpuLayers = 0,
-                            temperature = params.temperature,
-                            topP = params.topP
-                        )
-                    )
-                    loadedModel = model
-                    loadedModelPath = path
-                }
-
-                // The native API applies the GGUF chat template; do not hand-format a
-                // second, model-name-based template before inference.
-                val result = Llama.complete(
-                    model = model,
+            val resultJson = inferenceMutex.withLock {
+                System.loadLibrary("llama_android")
+                nativeExecuteLlamaWithGrammar(
+                    modelPath = modelFile.absolutePath,
                     prompt = prompt,
                     systemPrompt = systemPrompt,
-                    maxTokens = params.maxTokens
+                    threads = params.threads,
+                    gpuLayers = 0,
+                    temp = params.temperature,
+                    topP = params.topP,
+                    maxTokens = params.maxTokens,
+                    grammar = params.grammar ?: ""
                 )
-                lastInferenceMode = InferenceMode.LOCAL_LLM
-                AppAuditLogger.log(
-                    category = LogCategory.AI_INFERENCE,
-                    tag = TAG,
-                    message = "Echte lokale llama.cpp-Inferenz abgeschlossen",
-                    details = "Modell=${modelFile.name}; Tokens=${result.tokensGenerated}; " +
-                        "Prompt=${result.promptEvalTimeMs} ms; Generierung=${result.generateTimeMs} ms; " +
-                        "gemessene Geschwindigkeit=${result.tokensPerSecond} Tokens/s; Backend=CPU/NEON",
-                    isError = false
-                )
-                result.text
             }
+            val result = JSONObject(resultJson)
+            if (result.has("error")) {
+                throw IllegalStateException(result.optString("error", "Native inference failed"))
+            }
+            val output = result.optString("text", "")
+            if (output.isBlank()) throw IllegalStateException("Native inference returned an empty response")
+
+            lastInferenceMode = InferenceMode.LOCAL_LLM
+            val generatedTokens = result.optInt("tokensGenerated", 0)
+            val promptMs = result.optLong("promptEvalTimeMs", 0L)
+            val generationMs = result.optLong("generateTimeMs", 0L)
+            val tokensPerSecond = result.optDouble("tokensPerSecond", 0.0)
+            AppAuditLogger.log(
+                category = LogCategory.AI_INFERENCE,
+                tag = TAG,
+                message = "Echte lokale llama.cpp-Inferenz abgeschlossen",
+                details = "Modell=${modelFile.name}; Tokens=${generatedTokens}; Prompt=${promptMs} ms; " +
+                    "Generierung=${generationMs} ms; gemessene Geschwindigkeit=${tokensPerSecond} Tokens/s; " +
+                    "ABI=${Build.SUPPORTED_ABIS.firstOrNull() ?: "unbekannt"}; Backend=CPU",
+                isError = false
+            )
+            output
         } catch (e: LinkageError) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
-            safeLogW(TAG, "Native llama.cpp-Laufzeit auf dieser ABI nicht verfügbar: ${e.message}")
+            safeLogW(TAG, "Native llama.cpp-Laufzeit nicht verfügbar: ${e.message}")
             executeFallbackInference(prompt, systemPrompt)
         } catch (e: Exception) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
@@ -586,6 +581,10 @@ ws ::= [ \t\n\r]*
             executeFallbackInference(prompt, systemPrompt)
         }
     }
+
+    private fun supportsNativeInference(): Boolean =
+        Build.SUPPORTED_ABIS.any { it == "arm64-v8a" || it == "x86_64" }
+
     /**
      * Parst den rohen Modell-Output fehlertolerant in ein [DmsExtractionResponse] Objekt.
      * Filtert Markdown-Codeblöcke heraus und repariert gängige JSON-Ungenauigkeiten.
@@ -902,6 +901,18 @@ ws ::= [ \t\n\r]*
         // Default normale Antwort
         return "Ich bin dein persönlicher myDocAnizer Assistent. Womit kann ich dir behilflich sein?"
     }
+
+    private external fun nativeExecuteLlamaWithGrammar(
+        modelPath: String,
+        prompt: String,
+        systemPrompt: String,
+        threads: Int,
+        gpuLayers: Int,
+        temp: Float,
+        topP: Float,
+        maxTokens: Int,
+        grammar: String
+    ): String
 
 }
 

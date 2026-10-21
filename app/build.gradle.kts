@@ -13,6 +13,7 @@ plugins {
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
+  ndkVersion = "27.2.12479018"
 
   defaultConfig {
     applicationId = "com.aistudio.mydocanizer.app.v28"
@@ -22,6 +23,17 @@ android {
     versionName = "2.8.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    // Include 32-bit ABIs for install compatibility; they use a tiny JNI stub and
+    // the Kotlin layer deliberately selects the OCR/rule fallback there.
+    ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64") }
+
+    externalNativeBuild {
+      cmake {
+        arguments += listOf("-DANDROID_STL=c++_shared")
+        cppFlags += "-O3"
+      }
+    }
   }
 
   signingConfigs {
@@ -49,6 +61,13 @@ android {
     }
     debug { signingConfig = signingConfigs.getByName("debugConfig") }
   }
+  externalNativeBuild {
+    cmake {
+      path = file("src/main/cpp/CMakeLists.txt")
+      version = "3.22.1"
+    }
+  }
+
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
@@ -124,8 +143,6 @@ dependencies {
   // implementation(libs.firebase.appcheck.recaptcha)
   // implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
-  // Open-source llama.cpp AAR for genuine local GGUF inference on arm64-v8a (CPU/NEON).
-  implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.logging.interceptor)
