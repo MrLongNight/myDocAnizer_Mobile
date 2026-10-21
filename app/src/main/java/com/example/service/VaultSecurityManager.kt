@@ -347,6 +347,14 @@ class VaultSecurityManager private constructor(private val context: Context) {
         val dek = existingDek ?: generateRandomDek()
         val vaultId = "VAULT-" + UUID.randomUUID().toString().take(8).uppercase(Locale.ROOT)
         val createdAt = System.currentTimeMillis()
+        // Generate each recovery credential exactly once. The returned credential must be
+        // the same one whose derived key protects the DEK in the persisted header.
+        val effectiveBip39Words = if (recoveryMethod == VaultRecoveryMethod.BIP39_WORDS) {
+            bip39Words ?: generateBip39Mnemonic()
+        } else null
+        val effectiveRecoveryCode = if (recoveryMethod == VaultRecoveryMethod.RECOVERY_CODE) {
+            recoveryCode ?: generateRecoveryCode()
+        } else null
 
         if (securityTier == VaultSecurityTier.UNENCRYPTED) {
             setUnencryptedModeEnabled(true)
@@ -410,7 +418,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 // Keine Recovery-Daten
             }
             VaultRecoveryMethod.BIP39_WORDS -> {
-                val words = bip39Words ?: generateBip39Mnemonic()
+                val words = effectiveBip39Words ?: error("BIP-39 recovery words were not initialized")
                 val recoverySalt = "myDocAnizer-bip39-salt".toByteArray(Charsets.UTF_8)
                 val kekRecovery = deriveKekFromBip39(words)
                 val recoveryResult = try {
@@ -453,7 +461,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 }
             }
             VaultRecoveryMethod.RECOVERY_CODE -> {
-                val code = recoveryCode ?: generateRecoveryCode()
+                val code = effectiveRecoveryCode ?: error("Recovery code was not initialized")
                 val kekRecovery = deriveKekFromRecoveryCode(code)
                 val recoveryResult = try {
                     encryptAesGcm(dek, kekRecovery)
@@ -507,11 +515,11 @@ class VaultSecurityManager private constructor(private val context: Context) {
         return VaultSetupResult(
             vaultId = vaultId,
             dek = dek,
-            bip39Words = if (recoveryMethod == VaultRecoveryMethod.BIP39_WORDS) (bip39Words ?: generateBip39Mnemonic()) else null,
+            bip39Words = effectiveBip39Words,
             shamirShares = generatedShamirShares,
             totpSecret = totpSecret,
             keyFileToken = keyFileToken,
-            recoveryCode = if (recoveryMethod == VaultRecoveryMethod.RECOVERY_CODE) (recoveryCode ?: generateRecoveryCode()) else null
+            recoveryCode = effectiveRecoveryCode
         )
     }
 

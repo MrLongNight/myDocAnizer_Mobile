@@ -508,7 +508,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | M00 | ABGENOMMEN | micro-ap-M00.patch | Ja | Bestanden | V01 |
 | V01 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V02 |
 | V02 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V03 |
-| V03 | IN ARBEIT | VaultHeaderV2.kt, VaultHeaderV2Test.kt | Ja | Parser lehnt fehlende Pflichtfelder und falsch typisierte Sicherheitsmetadaten fail-closed ab; Negativtests ergänzt, CI-Abnahme ausstehend | CI: fehlende/falsch typisierte Sicherheitsmetadaten müssen abgewiesen werden |
+| V03 | IN ARBEIT | VaultHeaderV2.kt, VaultHeaderV2Test.kt | Ja | CI für Pflichtfelder/Typen erfolgreich; zusätzliche Tests für Dezimalzahlen, optionale Secret-Typen und Share-Elemente ergänzt; Recovery-Credential-Doppelerzeugung in V01/V09 entdeckt und behoben, neuer CI-Lauf offen | CI: Parser-Negativtests und Recovery-Konsistenz müssen bestehen |
 | V04 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V05 |
 | V05 | ADR FREIGEGEBEN | docs/security/adr-002-totp-decision.md | Ja | Optionale 2FA: Passwort + zufällige Schlüsseldatei; TOTP ist kein kryptografischer Faktor | V06 |
 | V06 | PATCH ERSTELLT | direkt in main | Ja | Unlock-Guard und Tests für Passwort+Keyfile ergänzt; CI-Lauf offen | V06A/V06B |

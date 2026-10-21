@@ -128,6 +128,22 @@ class VaultHeaderV2Test {
     }
 
     @Test
+    fun `v2 parser rejects fractional numbers and invalid optional field types`() {
+        val fractionalVersion = org.json.JSONObject(createValidV2Header().toJson()).put("version", 2.5)
+        assertNull("Fractional version must not be truncated to v2", VaultHeaderParserV2.parse(fractionalVersion.toString()))
+
+        val fractionalIterations = org.json.JSONObject(createValidV2Header().toJson()).put("argon2Iterations", 2.5)
+        assertNull("Fractional KDF iterations must be rejected", VaultHeaderParserV2.parse(fractionalIterations.toString()))
+
+        val wrongOptionalType = org.json.JSONObject(createValidV2Header().toJson()).put("totpSecret", 123456)
+        assertNull("Optional secret fields must not be coerced from numbers", VaultHeaderParserV2.parse(wrongOptionalType.toString()))
+
+        val wrongShareType = org.json.JSONObject(createValidV2Header().toJson())
+            .put("shamirShareHashes", org.json.JSONArray().put(123))
+        assertNull("Share hashes must be strings", VaultHeaderParserV2.parse(wrongShareType.toString()))
+    }
+
+    @Test
     fun `test v2 parser rejects invalid salt length`() {
         // Salt with 8 bytes instead of 16
         val invalidSalt = ByteArray(8) { 0x01.toByte() }

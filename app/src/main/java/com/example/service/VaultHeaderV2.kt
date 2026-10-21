@@ -89,9 +89,23 @@ object VaultHeaderParserV2 {
             val stringFields = listOf("algorithmId", "vaultId", "saltBase64", "ivBase64", "encryptedDekBase64", "securityTier", "factorType", "domainSecurityTier", "domainFactorType", "recoveryMethod")
             if (stringFields.any { json.opt(it) !is String }) return null
             val numberFields = listOf("version", "createdAt", "argon2Iterations", "argon2MemoryKb", "tagLengthBits", "autoLockMinutes")
-            if (numberFields.any { json.opt(it) !is Number }) return null
+            // Reject fractional/overflowing JSON numbers instead of letting optInt/optLong truncate them.
+            if (numberFields.any { field ->
+                    val value = json.opt(field)
+                    value !is Number || value.toString().toLongOrNull() == null
+                }) return null
             if (json.opt("biometric2FaEnabled") !is Boolean || json.opt("hasEmergencyPin") !is Boolean) return null
-            if (json.optJSONArray("shamirShareHashes") == null) return null
+            val optionalStringFields = listOf(
+                "encryptedDekByBiometricsBase64", "biometricDekIvBase64",
+                "encryptedDekByRecoveryBase64", "recoveryDekIvBase64", "recoverySaltBase64",
+                "emergencyPdfChecksum", "emergencyPinSaltBase64", "totpSecret",
+                "keyFileTokenHash", "recoveryCodeHash"
+            )
+            if (optionalStringFields.any { field ->
+                    json.has(field) && !json.isNull(field) && json.opt(field) !is String
+                }) return null
+            val sharesArray = json.optJSONArray("shamirShareHashes") ?: return null
+            if ((0 until sharesArray.length()).any { sharesArray.opt(it) !is String }) return null
 
             // 1. Versionsprüfung (Muss exakt 2 sein)
             val version = json.optInt("version", -1)
