@@ -100,14 +100,15 @@ open class MainActivity : FragmentActivity() {
 
     private fun handleWidgetIntent(intent: Intent?) {
         if (intent == null) return
+
+        // Consume the payload before checking lock state. A rejected command must not
+        // remain attached to the Activity and replay after recreation/unlock.
+        val request = ExternalIntentPolicy.consume(intent)
         val vault = com.example.service.VaultSecurityManager.getInstance(this)
-        // Drop, do not defer, external actions while authentication is incomplete.
         if (!viewModel.isAppUnlocked.value || (vault.vaultHeader.value != null && !vault.isUnlocked())) return
-        val tab = ExternalIntentPolicy.validTab(runCatching { intent.getStringExtra("EXTRA_START_TAB") }.getOrNull())
-        if (tab != null) viewModel.setTargetNavigationTab(tab)
-        val action = runCatching { intent.getStringExtra("EXTRA_OPEN_ACTION") }.getOrNull()
-        if (ExternalIntentPolicy.isAllowedAction(action)) viewModel.setDirectOpenCashTracker(true)
-        val reconcile = runCatching { intent.getBooleanExtra("EXTRA_OPEN_RECONCILIATION", false) }.getOrDefault(false)
-        if (reconcile) viewModel.setDirectOpenReconciliation(true)
+
+        request.tab?.let(viewModel::setTargetNavigationTab)
+        if (request.openCashExpense) viewModel.setDirectOpenCashTracker(true)
+        if (request.openReconciliation) viewModel.setDirectOpenReconciliation(true)
     }
 }
