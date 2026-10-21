@@ -1253,6 +1253,8 @@ class SettingsRepository(context: Context) {
 
     private companion object {
         const val SYNC_PASSWORD_SECRET_NAME = "sync_master_password"
+        const val WEBDAV_PASSWORD_SECRET_NAME = "cloud_sync_webdav_password"
+        const val LEGACY_WEBDAV_PASSWORD_PREF = "cloud_sync_webdav_pass"
     }
 
     private val _isUnencryptedModeConfirmed = MutableStateFlow(prefs.getBoolean("unencrypted_mode_confirmed", false))
@@ -1294,7 +1296,7 @@ class SettingsRepository(context: Context) {
             nasConnected = prefs.getBoolean("cloud_sync_nas_connected", false),
             webDavUrl = prefs.getString("cloud_sync_webdav_url", "") ?: "",
             webDavUsername = prefs.getString("cloud_sync_webdav_user", "") ?: "",
-            webDavPassword = prefs.getString("cloud_sync_webdav_pass", "") ?: "",
+            webDavPassword = loadSecretString(WEBDAV_PASSWORD_SECRET_NAME, LEGACY_WEBDAV_PASSWORD_PREF),
             syncTrigger = prefs.getString("cloud_sync_trigger", "AUTO_AFTER_SCAN") ?: "AUTO_AFTER_SCAN",
             syncWifiOnly = prefs.getBoolean("cloud_sync_wifi_only", true),
             autoMirrorToBackupDir = prefs.getBoolean("cloud_sync_auto_mirror", false),
@@ -1305,28 +1307,101 @@ class SettingsRepository(context: Context) {
     val cloudSyncConfig: StateFlow<com.example.model.CloudSyncConfig> = _cloudSyncConfig.asStateFlow()
 
     fun updateCloudSyncConfig(config: com.example.model.CloudSyncConfig) {
+        // Persist the credential first. If encryption/verification fails, keep the last
+        // working in-memory credential and never write the new password in plaintext.
+        val secretSaved = storeSecretString(
+            WEBDAV_PASSWORD_SECRET_NAME,
+            LEGACY_WEBDAV_PASSWORD_PREF,
+            config.webDavPassword
+        )
+        val effectiveConfig = if (secretSaved) config else config.copy(
+            webDavPassword = _cloudSyncConfig.value.webDavPassword
+        )
+
         prefs.edit()
-            .putString("cloud_sync_target", config.syncTarget)
-            .putBoolean("cloud_sync_enable_drive", config.enableGoogleDrive)
-            .putBoolean("cloud_sync_enable_nas", config.enableWebDavNas)
-            .putBoolean("cloud_sync_enable_local", config.enableLocalVault)
-            .putBoolean("cloud_sync_enable_manual_usb", config.enableManualUsbExport)
-            .putString("cloud_sync_drive_account", config.googleDriveAccount)
-            .putString("cloud_sync_drive_folder", config.googleDriveFolder)
-            .putBoolean("cloud_sync_drive_connected", config.googleDriveConnected)
-            .putString("cloud_sync_nas_proto", config.nasProtocol)
-            .putString("cloud_sync_nas_share", config.nasShareName)
-            .putBoolean("cloud_sync_nas_connected", config.nasConnected)
-            .putString("cloud_sync_webdav_url", config.webDavUrl)
-            .putString("cloud_sync_webdav_user", config.webDavUsername)
-            .putString("cloud_sync_webdav_pass", config.webDavPassword)
-            .putString("cloud_sync_trigger", config.syncTrigger)
-            .putBoolean("cloud_sync_wifi_only", config.syncWifiOnly)
-            .putBoolean("cloud_sync_auto_mirror", config.autoMirrorToBackupDir)
-            .putBoolean("cloud_sync_air_gapped", config.isAirGappedStrict)
-            .putBoolean("cloud_sync_usb_warning", config.usbSyncWarningOnScan)
+            .putString("cloud_sync_target", effectiveConfig.syncTarget)
+            .putBoolean("cloud_sync_enable_drive", effectiveConfig.enableGoogleDrive)
+            .putBoolean("cloud_sync_enable_nas", effectiveConfig.enableWebDavNas)
+            .putBoolean("cloud_sync_enable_local", effectiveConfig.enableLocalVault)
+            .putBoolean("cloud_sync_enable_manual_usb", effectiveConfig.enableManualUsbExport)
+            .putString("cloud_sync_drive_account", effectiveConfig.googleDriveAccount)
+            .putString("cloud_sync_drive_folder", effectiveConfig.googleDriveFolder)
+            .putBoolean("cloud_sync_drive_connected", effectiveConfig.googleDriveConnected)
+            .putString("cloud_sync_nas_proto", effectiveConfig.nasProtocol)
+            .putString("cloud_sync_nas_share", effectiveConfig.nasShareName)
+            .putBoolean("cloud_sync_nas_connected", effectiveConfig.nasConnected)
+            .putString("cloud_sync_webdav_url", effectiveConfig.webDavUrl)
+            .putString("cloud_sync_webdav_user", effectiveConfig.webDavUsername)
+            .putString("cloud_sync_trigger", effectiveConfig.syncTrigger)
+            .putBoolean("cloud_sync_wifi_only", effectiveConfig.syncWifiOnly)
+            .putBoolean("cloud_sync_auto_mirror", effectiveConfig.autoMirrorToBackupDir)
+            .putBoolean("cloud_sync_air_gapped", effectiveConfig.isAirGappedStrict)
+            .putBoolean("cloud_sync_usb_warning", effectiveConfig.usbSyncWarningOnScan)
             .apply()
-        _cloudSyncConfig.value = config
+        _cloudSyncConfig.value = effectiveConfig
+    }
+
+    @Synchronized
+    private fun loadSecretString(secretName: String, legacyPreferenceKey: String): String {
+        val encrypted = secretStore.get(secretName)
+        if (encrypted != null) {
+            try {
+                val value = String(encrypted, Charsets.UTF_8)
+                prefs.edit().remove(legacyPreferenceKey).commit()
+                return value
+            } finally {
+                encrypted.fill(0)
+            }
+        }
+
+        val legacy = prefs.getString(legacyPreferenceKey, null) ?: return ""
+        if (legacy.isEmpty()) {
+            prefs.edit().remove(legacyPreferenceKey).commit()
+            return ""
+        }
+
+        val candidate = legacy.toByteArray(Charsets.UTF_8)
+        return try {
+            if (!secretStore.put(secretName, candidate)) return ""
+            val verified = secretStore.get(secretName) ?: return ""
+            try {
+                if (!java.security.MessageDigest.isEqual(candidate, verified)) return ""
+                if (!prefs.edit().remove(legacyPreferenceKey).commit()) return ""
+                String(verified, Charsets.UTF_8)
+            } finally {
+                verified.fill(0)
+            }
+        } catch (_: Exception) {
+            ""
+        } finally {
+            candidate.fill(0)
+        }
+    }
+
+    @Synchronized
+    private fun storeSecretString(secretName: String, legacyPreferenceKey: String, value: String): Boolean {
+        if (value.isEmpty()) {
+            val removed = secretStore.remove(secretName)
+            val legacyRemoved = prefs.edit().remove(legacyPreferenceKey).commit()
+            return removed && legacyRemoved
+        }
+
+        val candidate = value.toByteArray(Charsets.UTF_8)
+        return try {
+            if (!secretStore.put(secretName, candidate)) return false
+            val verified = secretStore.get(secretName) ?: return false
+            try {
+                if (!java.security.MessageDigest.isEqual(candidate, verified)) return false
+                if (!prefs.edit().remove(legacyPreferenceKey).commit()) return false
+                true
+            } finally {
+                verified.fill(0)
+            }
+        } catch (_: Exception) {
+            false
+        } finally {
+            candidate.fill(0)
+        }
     }
 
     // Passkey & Tresor-Verschlüsselungsmodus ("PASSKEY", "PASSWORD", "BIOMETRIC")

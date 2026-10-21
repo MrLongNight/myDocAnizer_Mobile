@@ -101,6 +101,41 @@ class SecretStoreInstrumentedTest {
     }
 
     @Test
+    fun legacyWebDavPasswordIsEncryptedAndPlaintextRemoved() {
+        val legacyPrefs = context.getSharedPreferences("mydocanizer_prefs", Context.MODE_PRIVATE)
+        val legacyPassword = "synthetic-webdav-legacy-password"
+        assertTrue(legacyPrefs.edit().putString("cloud_sync_webdav_pass", legacyPassword).commit())
+
+        val repository = SettingsRepository(context)
+        assertEquals(legacyPassword, repository.cloudSyncConfig.value.webDavPassword)
+        assertFalse(legacyPrefs.contains("cloud_sync_webdav_pass"))
+        val encryptedPrefs = context.getSharedPreferences("mydocanizer_secret_store", Context.MODE_PRIVATE)
+        val payload = encryptedPrefs.getString("secret_v1_cloud_sync_webdav_password", null)
+        assertNotNull(payload)
+        assertFalse(payload == legacyPassword)
+        val recovered = store.get("cloud_sync_webdav_password")
+        assertNotNull(recovered)
+        assertArrayEquals(legacyPassword.toByteArray(Charsets.UTF_8), recovered)
+        recovered?.fill(0)
+    }
+
+    @Test
+    fun updatingWebDavPasswordUsesSecretStoreWithoutPlaintextPreference() {
+        val repository = SettingsRepository(context)
+        val legacyPrefs = context.getSharedPreferences("mydocanizer_prefs", Context.MODE_PRIVATE)
+        val updated = repository.cloudSyncConfig.value.copy(webDavPassword = "synthetic-new-webdav-password")
+
+        repository.updateCloudSyncConfig(updated)
+
+        assertEquals("synthetic-new-webdav-password", repository.cloudSyncConfig.value.webDavPassword)
+        assertFalse(legacyPrefs.contains("cloud_sync_webdav_pass"))
+        val recovered = store.get("cloud_sync_webdav_password")
+        assertNotNull(recovered)
+        assertArrayEquals("synthetic-new-webdav-password".toByteArray(Charsets.UTF_8), recovered)
+        recovered?.fill(0)
+    }
+
+    @Test
     fun encryptedSecretRoundTrips() {
         val secret = "synthetic-secret-for-test-only".toByteArray(Charsets.UTF_8)
         assertTrue(store.put("instrumentation_test", secret))
