@@ -354,9 +354,8 @@ fun SetupWizardDialog(
                             }
                         }
 
-                        if (WizardStep.fromId(currentStepId) !is WizardStep.SecurityAndBiometrics) {
-                            Button(
-                                onClick = {
+                        if (WizardStep.fromId(currentStepId) !is WizardStep.SecurityAndBiometrics) Button(
+                            onClick = {
                                 val currentStepItem = WizardStep.fromId(currentStepId)
                                 if (currentStepItem is WizardStep.SecurityAndBiometrics) {
                                     if (customPassword.isBlank() && !isUnencryptedMode) {
