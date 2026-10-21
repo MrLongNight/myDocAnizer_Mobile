@@ -96,7 +96,6 @@ fun AppLockScreen(
         onDispose { autofillTree.children.remove(vaultPasswordAutofillNode.id) }
     }
 
-    val syncPasswordKey by viewModel.syncPasswordKey.collectAsState()
     val vaultStatus by viewModel.vaultStatus.collectAsState()
     val vaultSecManager = remember { com.example.service.VaultSecurityManager.getInstance(context) }
     
@@ -281,10 +280,10 @@ fun AppLockScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = if (syncPasswordKey.isBlank()) 
-                            "Es wurde kein separates Passwort vergeben. Du kannst den Tresor direkt entsperren oder ein Passwort eingeben." 
-                        else 
-                            "Gib dein Tresor-Passwort bzw. deine PIN ein:",
+                        text = if (vaultStatus.isUnencryptedMode)
+                            "Der Tresor ist als unverschlüsselt eingerichtet. Du kannst ihn ohne Master-Passwort öffnen."
+                        else
+                            "Gib dein Master-Passwort ein oder wähle den Passwortmanager, um einen gespeicherten Eintrag abzurufen.",
                         style = MaterialTheme.typography.bodySmall
                     )
                     OutlinedTextField(
