@@ -21,24 +21,26 @@ class DatabaseDowngradeSafetyTest {
         var initialDatabase: AppDatabase? = null
         var downgradedDatabase: AppDatabase? = null
         try {
-            initialDatabase = AppDatabase.buildDatabase(context, databaseName)
-            val writable = initialDatabase.openHelper.writableDatabase
+            val initial = AppDatabase.buildDatabase(context, databaseName)
+            initialDatabase = initial
+            val writable = initial.openHelper.writableDatabase
             writable.execSQL("CREATE TABLE downgrade_sentinel (value TEXT NOT NULL)")
             writable.execSQL("INSERT INTO downgrade_sentinel(value) VALUES ('KEEP_AFTER_DOWNGRADE')")
             // Simulate a newer schema version without modifying the production database.
             writable.execSQL("PRAGMA user_version = 10")
-            initialDatabase.close()
+            initial.close()
             initialDatabase = null
 
-            downgradedDatabase = AppDatabase.buildDatabase(context, databaseName)
+            val downgraded = AppDatabase.buildDatabase(context, databaseName)
+            downgradedDatabase = downgraded
             var downgradeRejected = false
             try {
-                downgradedDatabase.openHelper.writableDatabase
+                downgraded.openHelper.writableDatabase
             } catch (_: IllegalStateException) {
                 downgradeRejected = true
             }
             assertTrue("An unsupported downgrade must fail closed", downgradeRejected)
-            runCatching { downgradedDatabase.close() }
+            runCatching { downgraded.close() }
             downgradedDatabase = null
 
             SQLiteDatabase.openDatabase(
