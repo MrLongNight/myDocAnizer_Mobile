@@ -178,7 +178,6 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 
 **Umsetzung direkt auf `main`:** `ExternalIntentPolicy.consume()` liest nur unterstützte Navigationswerte aus, verwirft unbekannte Extras und entfernt anschließend alle Extras, `data` und `clipData` aus dem Intent. `MainActivity` konsumiert den Payload **vor** der Lock-/Unlock-Prüfung; bei gesperrtem Zustand bleibt daher kein externer Befehl zur späteren Wiederholung an der Activity hängen. Ein Deep-Link-/URI-Schema wird derzeit nicht unterstützt und wird verworfen. `ExternalIntentPolicyInstrumentedTest` deckt gültige Werte, unbekannte Extras, ungültige Werte, falsch typisierte Boolean-Extras und das Entfernen von URI-/ClipData ab. Der Nutzer bestätigt erfolgreichen Build, `:app:testDebugUnitTest` und App-Start im Streaming-Emulator. Ein separater `connectedDebugAndroidTest`-Lauf sowie ein gezielter Widget-Cold-Start-/Lock-Replay-Test wurden in der Rückmeldung nicht ausdrücklich benannt und bleiben als spezifische Abnahme offen.
 ---
-
 # D – Dokumentdateien, Index, Backup und Restore
 
 ## D01 – Datenfluss-Inventar (AUDIT)
@@ -357,7 +356,6 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 **Abhängigkeit:** C02–C08, jeweils nur für ausgewählte Provider.  
 **Prompt:** Ergänze echte Worker-/Provider-Integrationstests für Upload, Resume, 401, 429/Retry-After, 5xx, Offline/Netzwechsel, falschen Hash, gesperrten Vault, fehlende Konfiguration, Abbruch und Prozessneustart. Markiere nicht verfügbare Live-OAuth-/Providerprüfungen klar als offen. **Abnahme:** Testprotokoll trennt Mock-, WorkManager-, Integration- und reale Providerprüfung.
 ---
-
 # DB – Room, FTS, Migrationen und Finanzbeträge
 
 ## DB01 – Room-v9-Baseline sichern
@@ -506,7 +504,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | V01 | GETESTET (CI) | VaultSecurityManager.kt, VaultV2OnlyTest.kt | Ja | GitHub Actions Run [39644923474](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39644923474) erfolgreich: Debug-APK-Build, Android-Instrumentierungstests und Artefaktprüfung; Regressionstest für fehlgeschlagene Neuinitialisierung enthalten. `pre-commit.ci` meldet separat einen Fehler; dessen Ursache ist nicht durch den erfolgreichen Android-Workflow abgedeckt. | V01–V04 als gemeinsame Sicherheitsbasis abgleichen; pre-commit-Befund separat klären |
 | V02 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V03 |
 | V03 | GETESTET (CI) | VaultHeaderV2.kt, VaultHeaderV2Test.kt, VaultV2OnlyTest.kt | Ja | Parser-, Recovery- und Faktor-Negativtests einschließlich Pflichtfeld-/Typvalidierung liefen in GitHub Actions Run `39633700992` erfolgreich; staged crypto headers bleiben parsebar. Gesamt-Abnahme V01–V04 weiterhin separat abgleichen | V04 / Gesamt-Abnahme V01–V04 |
-| V04 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V05 |
+| V04 | PATCH ERSTELLT – SICHERHEITSLÜCKE IM METADATEN-AAD-UMFANG OFFEN | VaultHeaderCryptoV2.kt, VaultHeaderCryptoV2Test.kt | Ja | AES-GCM authentifiziert derzeit nur Kernfelder (`version`, Algorithmus, Vault-ID, Zeitstempel, KDF-Parameter, Salt, `tagLengthBits`, Sicherheitsstufe/Faktortyp und Auto-Lock). Zusätzliche persistierte Felder wie `domainSecurityTier`, `domainFactorType`, Biometrie-/Recovery-Metadaten und Recovery-Ciphertext sind nicht vollständig durch diese AAD gebunden. Das beweist keinen direkten DEK-Diebstahl, erlaubt aber Manipulation/DoS bzw. falsche Zustandsmetadaten und verhindert die vollständige V04-Abnahme. | V04-AAD-Konzept erweitern und alle sicherheitsrelevanten Metadaten vor Nutzung authentifizieren; Roundtrip-, Manipulations- und Bestandsheader-Tests ergänzen |
 | V05 | ADR FREIGEGEBEN | docs/security/adr-002-totp-decision.md | Ja | Optionale 2FA: Passwort + zufällige Schlüsseldatei; TOTP ist kein kryptografischer Faktor | V06 |
 | V06 | GETESTET (CI) | main, Commit `d509ebb` (PR #3) | Ja | Legacy-TOTP wird nicht mehr als Vault-Faktor akzeptiert; neue Header serialisieren kein TOTP-Secret, bestehende Klartextfelder werden beim Laden entfernt. GitHub Actions Run `39633700992`: Build, Unit-, Instrumentierungs- und APK-Prüfschritte erfolgreich | V06A/V06B separat abnehmen; manuelle Geräteprüfung bleibt offen |
 | V06A | PATCH ERSTELLT | direkt in main | Ja | Wizard bietet nur Passwort+Keyfile als neue kryptografische 2FA; `.key`-Export ergänzt; Gesamt-CI grün, gezielte UI-/Geräteabnahme des Exports noch offen | V06B |
@@ -537,7 +535,6 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | D01 | AUDIT DOKUMENTIERT | docs/security/document-data-flow.md | Ja | Codepfad-Inventar erstellt; dynamische Geräte-/Share-/Restore-Abnahme bleibt für Folge-APs offen | D02 |
 | D02 | ADR ERSTELLT | docs/security/adr-003-sqlcipher-room-database.md | Ja | SQLCipher for Android 4.19.1 / Room 2.7.0 als technischer Vorschlag; Runtime bleibt bis D03 und DB01–DB04 blockiert | D03 || DB03 | PATCH ERSTELLT | AppDatabase.kt / DatabaseDowngradeSafetyTest.kt | Ja | Destruktiven Downgrade-Fallback entfernt; Emulator-Abnahme dieses Commits steht noch aus | DB04 |
 | D13 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; Restore-/Geräteabnahme separat prüfen | D14 |
-| D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | D15 |
-| D15 | NICHT GESTARTET | – | Nein | Alle dauerhaft gespeicherten Einstellungen verschlüsseln | DB/Persistenztests |
+| D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | D15 || D15 | NICHT GESTARTET | – | Nein | Alle dauerhaft gespeicherten Einstellungen verschlüsseln | DB/Persistenztests |
 | P01 | PATCH ERSTELLT | direkt in main | Ja | Bestehende Audit-/TLS-ADR dokumentiert; alle drei Verbindungstypen müssen im Code bestätigt werden | Sicherheitsmatrix vor P02 |
 | P10 | PATCH ERSTELLT | direkt in main | Ja | SHA-256-Ersatzschlüssel-Fallback entfernt; P2pSyncSecurityTest laut Statusbericht verifiziert; Aufrufer-Audit separat prüfen | Testlauf und Aufrufer-Audit prüfen |
