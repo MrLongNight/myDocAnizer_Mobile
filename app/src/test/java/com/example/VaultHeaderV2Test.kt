@@ -144,6 +144,26 @@ class VaultHeaderV2Test {
     }
 
     @Test
+    fun `v2 parser rejects inconsistent recovery and factor metadata`() {
+        val biometricWithoutSlot = org.json.JSONObject(createValidV2Header().toJson())
+            .put("biometric2FaEnabled", true)
+        assertNull("Enabled biometrics require an encrypted DEK slot", VaultHeaderParserV2.parse(biometricWithoutSlot.toString()))
+
+        val bip39WithoutRecoverySlot = org.json.JSONObject(createValidV2Header().toJson())
+            .put("recoveryMethod", "BIP39_WORDS")
+        assertNull("BIP-39 requires an encrypted recovery slot and salt", VaultHeaderParserV2.parse(bip39WithoutRecoverySlot.toString()))
+
+        val shamirWithNoShares = org.json.JSONObject(createValidV2Header().toJson())
+            .put("recoveryMethod", "SHAMIR_2_OF_3")
+        assertNull("Shamir recovery requires exactly three share hashes", VaultHeaderParserV2.parse(shamirWithNoShares.toString()))
+
+        val twoFactorWithoutHash = org.json.JSONObject(createValidV2Header().toJson())
+            .put("securityTier", "TWO_FACTOR")
+            .put("factorType", "PASSWORD_AND_KEYFILE")
+        assertNull("Two-factor headers require a key-file token hash", VaultHeaderParserV2.parse(twoFactorWithoutHash.toString()))
+    }
+
+    @Test
     fun `test v2 parser rejects invalid salt length`() {
         // Salt with 8 bytes instead of 16
         val invalidSalt = ByteArray(8) { 0x01.toByte() }

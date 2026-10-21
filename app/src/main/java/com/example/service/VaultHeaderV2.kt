@@ -179,6 +179,7 @@ object VaultHeaderParserV2 {
             val recoveryMethod = json.optString("recoveryMethod", "NONE")
             if (recoveryMethod !in setOf("NONE", "BIP39_WORDS", "EMERGENCY_PDF", "SHAMIR_2_OF_3", "RECOVERY_CODE")) return null
             if (domainSecurityTier == "TWO_FACTOR" && domainFactorType != "PASSWORD_AND_KEYFILE") return null
+            if (securityTier == "TWO_FACTOR" && optionalString("keyFileTokenHash") == null) return null
             val shares = json.optJSONArray("shamirShareHashes")
             val shareHashes = mutableListOf<String>()
             if (shares != null) {
@@ -200,6 +201,7 @@ object VaultHeaderParserV2 {
             val encryptedBiometric = optionalString("encryptedDekByBiometricsBase64")
             val biometricIv = optionalString("biometricDekIvBase64")
             if ((encryptedBiometric == null) != (biometricIv == null)) return null
+            if (json.optBoolean("biometric2FaEnabled", false) && encryptedBiometric == null) return null
             if (!extensionHasSize("encryptedDekByBiometricsBase64", 48) ||
                 !extensionHasSize("biometricDekIvBase64", 12)) return null
             val encryptedRecovery = optionalString("encryptedDekByRecoveryBase64")
@@ -208,6 +210,15 @@ object VaultHeaderParserV2 {
             if (!extensionHasSize("encryptedDekByRecoveryBase64", 48) ||
                 !extensionHasSize("recoveryDekIvBase64", 12)) return null
             if (!extensionHasSize("emergencyPinSaltBase64", 16)) return null
+            val hasEmergencyPin = json.optBoolean("hasEmergencyPin", false)
+            when (recoveryMethod) {
+                "BIP39_WORDS" -> if (encryptedRecovery == null || recoveryIv == null || optionalString("recoverySaltBase64") == null) return null
+                "RECOVERY_CODE" -> if (encryptedRecovery == null || recoveryIv == null || optionalString("recoveryCodeHash") == null) return null
+                "SHAMIR_2_OF_3" -> if (shareHashes.size != 3) return null
+                "EMERGENCY_PDF" -> if (hasEmergencyPin && (encryptedRecovery == null || recoveryIv == null || optionalString("emergencyPinSaltBase64") == null)) return null
+                "NONE" -> if (encryptedRecovery != null || recoveryIv != null) return null
+            }
+            if (hasEmergencyPin && recoveryMethod != "EMERGENCY_PDF") return null
             for (name in listOf("emergencyPdfChecksum", "keyFileTokenHash", "recoveryCodeHash")) {
                 val value = optionalString(name)
                 if (value != null && !value.matches(Regex("[a-fA-F0-9]{64}"))) return null
