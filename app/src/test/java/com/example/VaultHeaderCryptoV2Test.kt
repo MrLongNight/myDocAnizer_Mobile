@@ -134,6 +134,48 @@ class VaultHeaderCryptoV2Test {
     }
 
     @Test
+    fun `tampering with security metadata is rejected by the DEK-derived authenticator`() {
+        val header = newHeader()
+        assertEquals(1, header.metadataAuthVersion)
+        assertTrue(!header.metadataAuthBase64.isNullOrBlank())
+
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            VaultHeaderCryptoV2.unwrapDek(header.copy(domainSecurityTier = "UNENCRYPTED"), password)
+        }
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            VaultHeaderCryptoV2.unwrapDek(header.copy(emergencyPdfChecksum = "a".repeat(64)), password)
+        }
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            VaultHeaderCryptoV2.unwrapDek(header.copy(keyFileTokenHash = "b".repeat(64)), password)
+        }
+
+        val alteredMac = android.util.Base64.decode(header.metadataAuthBase64, android.util.Base64.NO_WRAP)
+        alteredMac[0] = (alteredMac[0].toInt() xor 1).toByte()
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            VaultHeaderCryptoV2.unwrapDek(
+                header.copy(
+                    metadataAuthBase64 = android.util.Base64.encodeToString(alteredMac, android.util.Base64.NO_WRAP)
+                ),
+                password
+            )
+        }
+        alteredMac.fill(0)
+    }
+
+    @Test
+    fun `legacy unsigned V2 headers require explicit migration permission`() {
+        val signed = newHeader()
+        val legacy = signed.copy(metadataAuthVersion = 0, metadataAuthBase64 = null)
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            VaultHeaderCryptoV2.unwrapDek(legacy, password)
+        }
+        assertArrayEquals(
+            dek,
+            VaultHeaderCryptoV2.unwrapDek(legacy, password, allowLegacyMetadataUpgrade = true)
+        )
+    }
+
+    @Test
     fun `unsupported weak KDF parameters are rejected before derivation`() {
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
             VaultHeaderCryptoV2.createHeader(

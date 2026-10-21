@@ -37,7 +37,10 @@ data class VaultHeaderV2(
     /** Legacy-only parse field. Never serialized or used to gate vault unlock. */
     val totpSecret: String? = null,
     val keyFileTokenHash: String? = null,
-    val recoveryCodeHash: String? = null
+    val recoveryCodeHash: String? = null,
+    /** Versioned DEK-derived authenticator for persisted security metadata. */
+    val metadataAuthVersion: Int = 0,
+    val metadataAuthBase64: String? = null
 ) {
     fun toJson(): String {
         return JSONObject().apply {
@@ -69,6 +72,10 @@ data class VaultHeaderV2(
             emergencyPinSaltBase64?.let { put("emergencyPinSaltBase64", it) }
             keyFileTokenHash?.let { put("keyFileTokenHash", it) }
             recoveryCodeHash?.let { put("recoveryCodeHash", it) }
+            if (metadataAuthVersion != 0 || metadataAuthBase64 != null) {
+                put("metadataAuthVersion", metadataAuthVersion)
+            }
+            metadataAuthBase64?.let { put("metadataAuthBase64", it) }
         }.toString()
     }
 }
@@ -99,7 +106,7 @@ object VaultHeaderParserV2 {
                 "encryptedDekByBiometricsBase64", "biometricDekIvBase64",
                 "encryptedDekByRecoveryBase64", "recoveryDekIvBase64", "recoverySaltBase64",
                 "emergencyPdfChecksum", "emergencyPinSaltBase64", "totpSecret",
-                "keyFileTokenHash", "recoveryCodeHash"
+                "keyFileTokenHash", "recoveryCodeHash", "metadataAuthBase64"
             )
             if (optionalStringFields.any { field ->
                     json.has(field) && !json.isNull(field) && json.opt(field) !is String
@@ -197,6 +204,30 @@ object VaultHeaderParserV2 {
                 return decoded.size == expected
             }
 
+            val metadataAuthVersion = if (json.has("metadataAuthVersion")) {
+                val rawVersion = json.opt("metadataAuthVersion")
+                if (rawVersion !is Number) return null
+                rawVersion.toString().toIntOrNull() ?: return null
+            } else {
+                0 // Existing V2 headers are upgraded after successful DEK recovery.
+            }
+            if (metadataAuthVersion !in 0..1) return null
+            if (json.has("metadataAuthBase64") && !json.isNull("metadataAuthBase64") &&
+                json.optString("metadataAuthBase64", "").isBlank()) return null
+            val metadataAuthBase64 = optionalString("metadataAuthBase64")
+            when (metadataAuthVersion) {
+                0 -> if (metadataAuthBase64 != null) return null
+                1 -> {
+                    if (metadataAuthBase64 == null) return null
+                    val authenticator = runCatching {
+                        Base64.decode(metadataAuthBase64, Base64.NO_WRAP)
+                    }.getOrNull() ?: return null
+                    val validLength = authenticator.size == 32
+                    authenticator.fill(0)
+                    if (!validLength) return null
+                }
+            }
+
             val encryptedBiometric = optionalString("encryptedDekByBiometricsBase64")
             val biometricIv = optionalString("biometricDekIvBase64")
             if ((encryptedBiometric == null) != (biometricIv == null)) return null
@@ -252,7 +283,9 @@ object VaultHeaderParserV2 {
                 emergencyPinSaltBase64 = optionalString("emergencyPinSaltBase64"),
                 totpSecret = optionalString("totpSecret"),
                 keyFileTokenHash = optionalString("keyFileTokenHash"),
-                recoveryCodeHash = optionalString("recoveryCodeHash")
+                recoveryCodeHash = optionalString("recoveryCodeHash"),
+                metadataAuthVersion = metadataAuthVersion,
+                metadataAuthBase64 = metadataAuthBase64
             )
         } catch (e: Exception) {
             null

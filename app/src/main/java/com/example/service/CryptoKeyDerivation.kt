@@ -19,7 +19,8 @@ internal object CryptoKeyDerivation {
         DATABASE("sqlcipher-database"),
         DOCUMENT_STREAM("document-stream"),
         SETTINGS("settings"),
-        BACKUP_CONTAINER("backup-container")
+        BACKUP_CONTAINER("backup-container"),
+        VAULT_HEADER_METADATA("vault-header-metadata")
     }
 
     /** RFC 5869 HKDF extract-and-expand with SHA-256. */

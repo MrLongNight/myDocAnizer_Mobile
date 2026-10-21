@@ -1,11 +1,15 @@
 package com.example.service
 
 import android.util.Base64
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
 import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.Cipher
+import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator
@@ -78,8 +82,13 @@ object VaultHeaderCryptoV2 {
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(kek, "AES"), GCMParameterSpec(TAG_BITS, iv))
             cipher.updateAAD(aad(header))
             val encrypted = cipher.doFinal(dek)
-            return header.copy(encryptedDekBase64 = Base64.encodeToString(encrypted, Base64.NO_WRAP))
-                .also { check(VaultHeaderParserV2.parse(it.toJson()) != null) { "Generated vault header failed validation" } }
+            val signed = authenticateMetadata(
+                header.copy(encryptedDekBase64 = Base64.encodeToString(encrypted, Base64.NO_WRAP)),
+                dek
+            )
+            return signed.also {
+                check(VaultHeaderParserV2.parse(it.toJson()) != null) { "Generated vault header failed validation" }
+            }
         } finally {
             kek.fill(0)
             salt.fill(0)
@@ -90,7 +99,8 @@ object VaultHeaderCryptoV2 {
     fun unwrapDek(
         header: VaultHeaderV2,
         password: CharArray,
-        keyFileToken: CharArray? = null
+        keyFileToken: CharArray? = null,
+        allowLegacyMetadataUpgrade: Boolean = false
     ): ByteArray {
         require(password.isNotEmpty()) { "Password cannot be empty" }
         require(VaultHeaderParserV2.parse(header.toJson()) != null) { "Invalid or unsupported vault header" }
@@ -112,6 +122,15 @@ object VaultHeaderCryptoV2 {
             if (dek.size != DEK_BYTES) {
                 dek.fill(0)
                 throw SecurityException("Invalid recovered DEK length")
+            }
+            val metadataAuthenticated = when (header.metadataAuthVersion) {
+                1 -> verifyAuthenticatedMetadata(header, dek)
+                0 -> allowLegacyMetadataUpgrade
+                else -> false
+            }
+            if (!metadataAuthenticated) {
+                dek.fill(0)
+                throw SecurityException("Vault header security metadata authentication failed")
             }
             return dek
         } catch (e: SecurityException) {
@@ -226,6 +245,122 @@ object VaultHeaderCryptoV2 {
         "factorType=${header.factorType}",
         "autoLockMinutes=${header.autoLockMinutes}"
     ).joinToString("|").toByteArray(StandardCharsets.UTF_8)
+
+    /**
+     * Adds an HMAC-SHA-256 authenticator over all persisted security-relevant header
+     * metadata. The HMAC key is HKDF-separated from every other vault-derived key.
+     */
+    fun authenticateMetadata(header: VaultHeaderV2, dek: ByteArray): VaultHeaderV2 {
+        require(dek.size == DEK_BYTES) { "DEK must be exactly 256 bits" }
+        val unsigned = header.copy(metadataAuthVersion = 1, metadataAuthBase64 = null)
+        val mac = metadataMac(unsigned, dek)
+        return try {
+            unsigned.copy(metadataAuthBase64 = Base64.encodeToString(mac, Base64.NO_WRAP))
+        } finally {
+            mac.fill(0)
+        }
+    }
+
+    /** Verifies metadata after the DEK has been recovered; this does not replace DEK-wrap AEAD. */
+    fun verifyAuthenticatedMetadata(header: VaultHeaderV2, dek: ByteArray): Boolean {
+        if (dek.size != DEK_BYTES || header.metadataAuthVersion != 1) return false
+        val supplied = try {
+            Base64.decode(header.metadataAuthBase64 ?: return false, Base64.NO_WRAP)
+        } catch (_: Exception) {
+            return false
+        }
+        if (supplied.size != 32) {
+            supplied.fill(0)
+            return false
+        }
+        val expected = try {
+            metadataMac(header, dek)
+        } catch (_: Exception) {
+            supplied.fill(0)
+            return false
+        }
+        return try {
+            MessageDigest.isEqual(supplied, expected)
+        } finally {
+            supplied.fill(0)
+            expected.fill(0)
+        }
+    }
+
+    /**
+     * Length-prefixed canonical encoding avoids JSON key ordering and delimiter ambiguity.
+     * Includes every persisted security-relevant header field except the authenticator itself
+     * and the non-serialized legacy TOTP field.
+     */
+    private fun metadataAuthPayload(header: VaultHeaderV2): ByteArray {
+        val fields = buildList<String?> {
+            add("myDocAnizer-VaultHeader-MetadataAuth-v1")
+            add(header.version.toString())
+            add(header.algorithmId)
+            add(header.vaultId)
+            add(header.createdAt.toString())
+            add(header.argon2Iterations.toString())
+            add(header.argon2MemoryKb.toString())
+            add(header.saltBase64)
+            add(header.ivBase64)
+            add(header.tagLengthBits.toString())
+            add(header.encryptedDekBase64)
+            add(header.securityTier)
+            add(header.factorType)
+            add(header.autoLockMinutes.toString())
+            add(header.domainSecurityTier)
+            add(header.domainFactorType)
+            add(header.biometric2FaEnabled.toString())
+            add(header.encryptedDekByBiometricsBase64)
+            add(header.biometricDekIvBase64)
+            add(header.recoveryMethod)
+            add(header.encryptedDekByRecoveryBase64)
+            add(header.recoveryDekIvBase64)
+            add(header.recoverySaltBase64)
+            add(header.emergencyPdfChecksum)
+            add(header.shamirShareHashes.size.toString())
+            header.shamirShareHashes.forEach { add(it) }
+            add(header.hasEmergencyPin.toString())
+            add(header.emergencyPinSaltBase64)
+            add(header.keyFileTokenHash)
+            add(header.recoveryCodeHash)
+        }
+        val output = ByteArrayOutputStream()
+        DataOutputStream(output).use { data ->
+            fields.forEach { value ->
+                if (value == null) {
+                    data.writeInt(-1)
+                } else {
+                    val bytes = value.toByteArray(StandardCharsets.UTF_8)
+                    try {
+                        data.writeInt(bytes.size)
+                        data.write(bytes)
+                    } finally {
+                        bytes.fill(0)
+                    }
+                }
+            }
+        }
+        return output.toByteArray()
+    }
+
+    private fun metadataMac(header: VaultHeaderV2, dek: ByteArray): ByteArray {
+        val key = CryptoKeyDerivation.deriveVaultSubkey(
+            dek,
+            header.vaultId,
+            CryptoKeyDerivation.Purpose.VAULT_HEADER_METADATA
+        )
+        val payload = metadataAuthPayload(header)
+        return try {
+            Mac.getInstance("HmacSHA256").run {
+                init(SecretKeySpec(key, "HmacSHA256"))
+                doFinal(payload)
+            }
+        } finally {
+            key.fill(0)
+            payload.fill(0)
+        }
+    }
 
     private fun decode(value: String, expectedSize: Int, label: String): ByteArray {
         val bytes = try { Base64.decode(value, Base64.NO_WRAP) }

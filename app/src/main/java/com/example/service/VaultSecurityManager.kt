@@ -511,7 +511,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         prefs.edit().remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY).commit()
         // Change the mode flag only after the new V2 header is durably committed.
         // A failed setup must not leave the previous vault advertised in another mode.
-        saveVaultHeader(header)
+        saveVaultHeader(header, dek)
         setUnencryptedModeEnabled(securityTier == VaultSecurityTier.UNENCRYPTED)
         replaceActiveDek(dek)
 
@@ -625,7 +625,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
                     encryptedDekByBiometricsBase64 = Base64.encodeToString(encryptedBytes, Base64.NO_WRAP),
                     biometricDekIvBase64 = Base64.encodeToString(ivBytes, Base64.NO_WRAP)
                 )
-                saveVaultHeader(updated)
+                saveVaultHeader(updated, dek)
                 true
             } ?: false
         } catch (e: Exception) {
@@ -670,6 +670,10 @@ class VaultSecurityManager private constructor(private val context: Context) {
             val decryptedDek = authenticatedCipher.doFinal(encryptedBytes)
             dek = decryptedDek
             if (decryptedDek.size != DEK_SIZE_BYTES) return false
+            val rawHeader = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null) ?: return false
+            val parsedHeader = VaultHeaderParserV2.parse(rawHeader)
+                ?.takeIf { it.vaultId == header.vaultId } ?: return false
+            if (authenticateOrUpgradeStoredHeaderMetadata(parsedHeader, decryptedDek) == null) return false
             replaceActiveDek(decryptedDek)
             true
         } catch (e: Exception) {
@@ -702,9 +706,10 @@ class VaultSecurityManager private constructor(private val context: Context) {
             val parsed = VaultHeaderParserV2.parse(prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null))
                 ?.takeIf { it.vaultId == current.vaultId && it.securityTier == "ONE_FACTOR" && it.factorType == "PASSWORD" }
                 ?: return false
+            if (authenticateOrUpgradeStoredHeaderMetadata(parsed, recoveredDek) == null) return false
             val passwordChars = newPassword.toCharArray()
             val updated = try {
-                VaultHeaderCryptoV2.createHeader(
+                val unsignedUpdated = VaultHeaderCryptoV2.createHeader(
                     vaultId = parsed.vaultId,
                     createdAt = parsed.createdAt,
                     password = passwordChars,
@@ -731,6 +736,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
                     keyFileTokenHash = parsed.keyFileTokenHash,
                     recoveryCodeHash = parsed.recoveryCodeHash
                 )
+                VaultHeaderCryptoV2.authenticateMetadata(unsignedUpdated, recoveredDek)
             } finally {
                 passwordChars.fill('\u0000')
             }
@@ -1258,7 +1264,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
     // 7. PERSISTENZ & HEADER MANAGEMENT
     // =========================================================================
 
-    private fun saveVaultHeader(header: VaultHeader) {
+    private fun saveVaultHeader(header: VaultHeader, signingDek: ByteArray? = null) {
         check(header.version == 2) { "Only V2 vault headers may be persisted" }
         val currentParsed = VaultHeaderParserV2.parse(prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null))
         val currentForVault = currentParsed?.takeIf { it.vaultId == header.vaultId }
@@ -1299,7 +1305,14 @@ class VaultSecurityManager private constructor(private val context: Context) {
             keyFileTokenHash = header.keyFileTokenHash,
             recoveryCodeHash = header.recoveryCodeHash
         )
-        val serialized = v2.toJson()
+        // New and updated headers must authenticate all security metadata with the
+        // active DEK. Initial setup supplies its not-yet-published DEK explicitly.
+        val serialized = if (signingDek != null) {
+            VaultHeaderCryptoV2.authenticateMetadata(v2, signingDek).toJson()
+        } else {
+            withUnlockedKey { dek -> VaultHeaderCryptoV2.authenticateMetadata(v2, dek).toJson() }
+                ?: throw SecurityException("Tresor muss zum Ändern der Sicherheitsmetadaten entsperrt sein.")
+        }
         check(VaultHeaderParserV2.parse(serialized) != null) { "Refusing to persist an invalid V2 vault header" }
         val editor = prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, serialized)
         if (currentForVault == null) editor.remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY)
@@ -1362,6 +1375,31 @@ class VaultSecurityManager private constructor(private val context: Context) {
         )
     }
 
+    /**
+     * Authenticate current security metadata after DEK recovery. Old unsigned V2 headers
+     * are upgraded in-place only after the wrapping/recovery factor has recovered the DEK.
+     * This migration authenticates the current legacy values; it cannot retrospectively prove
+     * that unsigned metadata was never modified before this app version.
+     */
+    private fun authenticateOrUpgradeStoredHeaderMetadata(
+        parsed: VaultHeaderV2,
+        dek: ByteArray
+    ): String? {
+        return when (parsed.metadataAuthVersion) {
+            1 -> if (VaultHeaderCryptoV2.verifyAuthenticatedMetadata(parsed, dek)) parsed.toJson() else null
+            0 -> {
+                val signed = runCatching {
+                    VaultHeaderCryptoV2.authenticateMetadata(parsed, dek)
+                }.getOrNull() ?: return null
+                val serialized = signed.toJson()
+                if (VaultHeaderParserV2.parse(serialized) == null) return null
+                if (!prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, serialized).commit()) return null
+                serialized
+            }
+            else -> null
+        }
+    }
+
     private fun openStoredV2Header(
         expectedVaultId: String,
         password: String?,
@@ -1377,11 +1415,24 @@ class VaultSecurityManager private constructor(private val context: Context) {
             val expectedTier = if (parsed.domainSecurityTier == "TWO_FACTOR") "TWO_FACTOR" else "ONE_FACTOR"
             val expectedFactor = if (expectedTier == "TWO_FACTOR") "PASSWORD_AND_KEYFILE" else "PASSWORD"
             if (parsed.securityTier != expectedTier || parsed.factorType != expectedFactor) return null
-            val dek = runCatching { VaultHeaderCryptoV2.unwrapDek(parsed, passwordChars, keyFileChars) }.getOrNull()
-                ?: return null
-            if (dek.size == DEK_SIZE_BYTES) return raw to dek
-            dek.fill(0)
-            return null
+            val dek = runCatching {
+                VaultHeaderCryptoV2.unwrapDek(
+                    parsed,
+                    passwordChars,
+                    keyFileChars,
+                    allowLegacyMetadataUpgrade = true
+                )
+            }.getOrNull() ?: return null
+            if (dek.size != DEK_SIZE_BYTES) {
+                dek.fill(0)
+                return null
+            }
+            val authenticatedJson = authenticateOrUpgradeStoredHeaderMetadata(parsed, dek)
+            if (authenticatedJson == null) {
+                dek.fill(0)
+                return null
+            }
+            return authenticatedJson to dek
         } finally {
             passwordChars.fill('\u0000')
             keyFileChars?.fill('\u0000')
@@ -1402,7 +1453,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
 
                 val passwordChars = newPassword.toCharArray()
                 try {
-                    val updatedV2 = VaultHeaderCryptoV2.createHeader(
+                    val unsignedUpdatedV2 = VaultHeaderCryptoV2.createHeader(
                         vaultId = parsed.vaultId,
                         createdAt = parsed.createdAt,
                         password = passwordChars,
@@ -1429,6 +1480,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
                             keyFileTokenHash = parsed.keyFileTokenHash,
                         recoveryCodeHash = parsed.recoveryCodeHash
                     )
+                    val updatedV2 = VaultHeaderCryptoV2.authenticateMetadata(unsignedUpdatedV2, dek)
                     val committed = prefs.edit()
                         .putString(V2_ACTIVE_HEADER_PREF_KEY, updatedV2.toJson())
                         .remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY)
@@ -1566,6 +1618,11 @@ class VaultSecurityManager private constructor(private val context: Context) {
             iv = ivBytes
             val decryptedDek = decryptAesGcm(encryptedBytes, ivBytes, derivedKek)
             dek = decryptedDek
+            if (decryptedDek.size != DEK_SIZE_BYTES) return null
+            val rawHeader = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null) ?: return null
+            val parsedHeader = VaultHeaderParserV2.parse(rawHeader)
+                ?.takeIf { it.vaultId == header.vaultId } ?: return null
+            if (authenticateOrUpgradeStoredHeaderMetadata(parsedHeader, decryptedDek) == null) return null
             replaceActiveDek(decryptedDek)
             decryptedDek.copyOf()
         } catch (e: Exception) {
