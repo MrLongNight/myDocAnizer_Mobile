@@ -49,9 +49,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetPasswordOption
+import androidx.credentials.PasswordCredential
+import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
+import kotlinx.coroutines.launch
 import com.example.R
 import com.example.ui.DocAnizerViewModel
 import com.example.ui.components.AppLogoBanner
+
+private const val MASTER_PASSWORD_CREDENTIAL_ID = "myDocAnizer-Master-Key"
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -67,6 +76,8 @@ fun AppLockScreen(
     var enteredPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var passwordError by remember { mutableStateOf<String?>(null) }
+    var isRetrievingPasswordManagerCredential by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     @Suppress("DEPRECATION")
     val autofill = LocalAutofill.current
@@ -122,13 +133,15 @@ fun AppLockScreen(
         }
     }
 
-    val isBiometricAvailable = remember {
-        viewModel.biometricAuthManager.checkBiometricAvailability() == com.example.service.BiometricAuthManager.BiometricHardwareStatus.AVAILABLE
+    val isBiometricAvailable = remember(vaultStatus.biometric2FaEnabled) {
+        vaultStatus.biometric2FaEnabled &&
+            viewModel.biometricAuthManager.checkBiometricAvailability() ==
+                com.example.service.BiometricAuthManager.BiometricHardwareStatus.AVAILABLE
     }
 
-    // Automatische Auslösung der Biometrie beim Start nur wenn Hardware verfügbar ist
-    LaunchedEffect(Unit) {
-        if (activity != null && isBiometricAvailable) {
+    // Only auto-prompt when a biometric-wrapped DEK is actually configured in the vault header.
+    LaunchedEffect(activity, isBiometricAvailable, vaultStatus.biometric2FaEnabled) {
+        if (activity != null && isBiometricAvailable && vaultStatus.biometric2FaEnabled) {
             viewModel.authenticateBiometric(
                 activity = activity,
                 onSuccess = {
@@ -380,40 +393,111 @@ fun AppLockScreen(
                     }
                 }
 
+                if (vaultStatus.biometric2FaEnabled) {
+                    Button(
+                        onClick = {
+                            errorMessage = null
+                            if (activity != null) {
+                                viewModel.authenticateBiometric(
+                                    activity = activity,
+                                    onSuccess = { errorMessage = null },
+                                    onError = { err -> errorMessage = err }
+                                )
+                            } else {
+                                errorMessage = "Biometrische Authentifizierung erfordert eine aktive Activity. Nutze den Master-Passwort-Fallback."
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("btn_unlock_biometric"),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fingerprint,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Biometrisch entsperren",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Biometrisches Entsperren ist für diesen Tresor noch nicht kryptografisch eingerichtet. Entsperre mit dem Master-Passwort und aktiviere es danach in den Sicherheitseinstellungen.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
                 Button(
                     onClick = {
+                        isRetrievingPasswordManagerCredential = true
                         errorMessage = null
-                        if (activity != null) {
-                            viewModel.authenticateBiometric(
-                                activity = activity,
-                                onSuccess = {
-                                    errorMessage = null
-                                },
-                                onError = { err ->
-                                    errorMessage = err
+                        coroutineScope.launch {
+                            try {
+                                val credentialManager = CredentialManager.create(context)
+                                val response = credentialManager.getCredential(
+                                    context = context,
+                                    request = GetCredentialRequest(
+                                        credentialOptions = listOf(
+                                            GetPasswordOption(
+                                                allowedUserIds = setOf(MASTER_PASSWORD_CREDENTIAL_ID),
+                                                isAutoSelectAllowed = false,
+                                                allowedProviders = emptySet()
+                                            )
+                                        )
+                                    )
+                                )
+                                val credential = response.credential as? PasswordCredential
+                                    ?: throw IllegalStateException("Der Passwortmanager hat keinen Passwort-Eintrag zurückgegeben.")
+                                enteredPassword = credential.password
+                                val unlocked = if (vaultStatus.isUnencryptedMode) {
+                                    vaultSecManager.unlockUnencryptedVault()
+                                } else {
+                                    vaultSecManager.unlockVault(
+                                        password = credential.password,
+                                        keyFileToken = if (vaultStatus.keyFileEnabled) enteredKeyFileToken else null,
+                                        totpCode = if (vaultStatus.totpEnabled) enteredTotpCode else null
+                                    )
                                 }
-                            )
-                        } else {
-                            errorMessage = "Biometrische Authentifizierung erfordert eine aktive Activity. Nutze das Master-Passwort."
+                                if (unlocked && viewModel.completeVaultUnlock()) {
+                                    errorMessage = null
+                                    showPasswordDialog = false
+                                } else {
+                                    showPasswordDialog = true
+                                    passwordError = if (vaultStatus.keyFileEnabled && enteredKeyFileToken.isBlank()) {
+                                        "Master-Passwort wurde geladen. Für diesen Tresor wird zusätzlich die Schlüsseldatei (.key) benötigt."
+                                    } else {
+                                        "Der gespeicherte Eintrag konnte diesen Tresor nicht entsperren. Prüfe das Master-Passwort und gegebenenfalls weitere Faktoren."
+                                    }
+                                }
+                            } catch (_: NoCredentialException) {
+                                errorMessage = "Kein passender Passwort-Eintrag gefunden. Prüfe, ob er unter „$MASTER_PASSWORD_CREDENTIAL_ID“ gespeichert wurde."
+                            } catch (e: GetCredentialException) {
+                                errorMessage = "Passwortmanager-Abruf abgebrochen oder nicht verfügbar: ${e.message ?: "keine weiteren Details"}"
+                            } catch (e: Exception) {
+                                errorMessage = "Passwortmanager konnte den Masterkey nicht bereitstellen: ${e.message ?: "unbekannter Fehler"}"
+                            } finally {
+                                isRetrievingPasswordManagerCredential = false
+                            }
                         }
                     },
+                    enabled = !isRetrievingPasswordManagerCredential,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("btn_unlock_biometric"),
+                        .height(44.dp)
+                        .testTag("btn_unlock_with_password_manager"),
                     shape = RoundedCornerShape(14.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Fingerprint,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Biometrisch entsperren",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(if (isRetrievingPasswordManagerCredential) "Passwortmanager wird geöffnet..." else "Mit Passwortmanager entsperren")
                 }
 
                 OutlinedButton(
