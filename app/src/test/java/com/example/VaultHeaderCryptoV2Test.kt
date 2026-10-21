@@ -44,6 +44,11 @@ class VaultHeaderCryptoV2Test {
         )
 
         assertArrayEquals(dek, VaultHeaderCryptoV2.unwrapDek(header, password, token))
+        assertArrayEquals(
+            "Hex key-file tokens must be case-insensitive",
+            dek,
+            VaultHeaderCryptoV2.unwrapDek(header, password, "A".repeat(64).toCharArray())
+        )
 
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
             VaultHeaderCryptoV2.unwrapDek(header, password)

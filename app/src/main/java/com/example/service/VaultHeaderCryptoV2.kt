@@ -170,7 +170,10 @@ object VaultHeaderCryptoV2 {
         return CharArray(password.size + 1 + token.size).also { combined ->
             password.copyInto(combined, destinationOffset = 0)
             combined[password.size] = ':'
-            token.copyInto(combined, destinationOffset = password.size + 1)
+            // Hex key-file tokens are case-insensitive; derive the same KEK for upper/lowercase imports.
+            for (index in token.indices) {
+                combined[password.size + 1 + index] = token[index].lowercaseChar()
+            }
         }
     }
 
