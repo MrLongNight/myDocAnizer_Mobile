@@ -268,7 +268,7 @@ class P2pSyncServer(
 
                 // 3. Web Portal Dokumenten-Liste (Zero-Knowledge / Authentifiziert)
                 path == "/api/web/documents" && method == "GET" -> {
-                    val sessionToken = headers["x-session-token"] ?: queryParams["token"] ?: ""
+                    val sessionToken = sessionTokenFromHeaders(headers)
                     if (!isWebSessionValid(sessionToken)) {
                         sendJsonResponse(output, 401, JSONObject().put("error", "Nicht autorisiert. Bitte PIN eingeben.").toString())
                     } else {
@@ -278,7 +278,7 @@ class P2pSyncServer(
 
                 // 4. Web Portal Verschlüsselter Datei-Upload (AES-256-GCM aus WebCrypto)
                 path == "/api/web/upload" && method == "POST" -> {
-                    val sessionToken = headers["x-session-token"] ?: queryParams["token"] ?: ""
+                    val sessionToken = sessionTokenFromHeaders(headers)
                     if (!isWebSessionValid(sessionToken)) {
                         sendJsonResponse(output, 401, JSONObject().put("error", "Nicht autorisiert. Bitte PIN eingeben.").toString())
                     } else {
@@ -291,7 +291,7 @@ class P2pSyncServer(
 
                 // 5. Web Portal Datei-Download
                 path == "/api/web/download" && method == "GET" -> {
-                    val sessionToken = headers["x-session-token"] ?: queryParams["token"] ?: ""
+                    val sessionToken = sessionTokenFromHeaders(headers)
                     if (!isWebSessionValid(sessionToken)) {
                         sendJsonResponse(output, 401, JSONObject().put("error", "Nicht autorisiert.").toString())
                     } else {
@@ -797,7 +797,6 @@ class P2pSyncServer(
             append("Content-Length: $fileLength\r\n")
             append("Content-Disposition: inline; filename=\"${doc.fileName}\"\r\n")
             append("X-File-Checksum: $checksum\r\n")
-            append("Access-Control-Allow-Origin: *\r\n")
             append("Connection: close\r\n\r\n")
         }
 
@@ -917,9 +916,6 @@ class P2pSyncServer(
         val header = "HTTP/1.1 $statusCode $statusText\r\n" +
                 "Content-Type: application/json; charset=UTF-8\r\n" +
                 "Content-Length: ${bytes.size}\r\n" +
-                "Access-Control-Allow-Origin: *\r\n" +
-                "Access-Control-Allow-Headers: *\r\n" +
-                "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
                 "Connection: close\r\n\r\n"
         output.write(header.toByteArray(Charsets.UTF_8))
         output.write(bytes)
@@ -1364,3 +1360,11 @@ class P2pSyncServer(
         }
     }
 }
+
+/**
+ * Web-session bearer tokens are accepted only from the dedicated HTTP header.
+ * Query strings are intentionally not an authentication channel because URLs may
+ * be retained in browser history, logs, or referrer data.
+ */
+internal fun sessionTokenFromHeaders(headers: Map<String, String>): String =
+    headers["x-session-token"] ?: ""
