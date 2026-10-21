@@ -84,7 +84,7 @@ class VaultV1CompatibilityTest {
     }
 
     @Test
-    fun `successful password only v1 unlock stages verified v2 without changing canonical v1 header`() {
+    fun `successful password only v1 unlock promotes verified v2 without changing canonical v1 header`() {
         val context = context()
         val manager = VaultSecurityManager.getInstance(context)
         val password = "StageV2FixturePassword2026!"
@@ -104,13 +104,94 @@ class VaultV1CompatibilityTest {
         // paths can be switched together.
         assertEquals(originalV1, prefs.getString("vault_header_json_v1", null))
 
-        val stagedRaw = prefs.getString("vault_header_json_v2_staging", null)
-        assertNotNull("Expected verified v2 staging header", stagedRaw)
-        val staged = com.example.service.VaultHeaderParserV2.parse(stagedRaw)
-            ?: error("Staged v2 header must pass strict validation")
+        val activeRaw = prefs.getString("vault_header_json_v2_active", null)
+        assertNotNull("Expected verified active v2 header", activeRaw)
+        assertNull("Verified staging header should be atomically promoted", prefs.getString("vault_header_json_v2_staging", null))
+        val staged = com.example.service.VaultHeaderParserV2.parse(activeRaw)
+            ?: error("Active v2 header must pass strict validation")
         assertEquals(2, staged.version)
         assertEquals(setup.vaultId, staged.vaultId)
         val reopenedDek = com.example.service.VaultHeaderCryptoV2.unwrapDek(staged, password.toCharArray())
+        try {
+            assertArrayEquals(setup.dek, reopenedDek)
+        } finally {
+            reopenedDek.fill(0)
+        }
+    }
+
+    @Test
+    fun `active v2 header can unlock and change password when legacy v1 header is absent`() {
+        val context = context()
+        val manager = VaultSecurityManager.getInstance(context)
+        val oldPassword = "RuntimeV2FixturePassword2026!"
+        val newPassword = "RuntimeV2ChangedPassword2026!"
+        val setup = manager.initializeVault(
+            masterPassword = oldPassword,
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.NONE
+        )
+        manager.lockVault()
+        assertTrue(manager.unlockWithPassword(oldPassword))
+
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+        assertNotNull("Expected active v2 header",
+            prefs.getString("vault_header_json_v2_active", null))
+        assertTrue(prefs.edit().remove("vault_header_json_v1").commit())
+
+        resetVaultManagerSingleton()
+        val reloaded = VaultSecurityManager.getInstance(context)
+        assertEquals(2, reloaded.vaultHeader.value?.version)
+        assertTrue("A valid v2 header must independently unlock the existing vault",
+            reloaded.unlockWithPassword(oldPassword))
+        assertArrayEquals(setup.dek, reloaded.getActiveDek())
+        assertTrue("Password rotation must keep a v2-only vault usable",
+            reloaded.changeMasterPassword(oldPassword, newPassword))
+        reloaded.lockVault()
+        resetVaultManagerSingleton()
+
+        val afterRotation = VaultSecurityManager.getInstance(context)
+        assertTrue(afterRotation.unlockWithPassword(newPassword))
+        assertArrayEquals(setup.dek, afterRotation.getActiveDek())
+        afterRotation.setAutoLockMinutes(12)
+        assertEquals(12, afterRotation.vaultHeader.value?.autoLockMinutes)
+        afterRotation.lockVault()
+        assertFalse("The previous password must no longer unlock v2",
+            afterRotation.unlockWithPassword(oldPassword))
+    }
+
+    @Test
+    fun `corrupt active v2 header falls back to valid v1 and is repaired`() {
+        val context = context()
+        val manager = VaultSecurityManager.getInstance(context)
+        val password = "FallbackV2FixturePassword2026!"
+        val setup = manager.initializeVault(
+            masterPassword = password,
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.NONE
+        )
+        manager.lockVault()
+        assertTrue(manager.unlockWithPassword(password))
+
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+        val originalV1 = prefs.getString("vault_header_json_v1", null)
+            ?: error("Expected v1 rollback header")
+        val activeJson = JSONObject(prefs.getString("vault_header_json_v2_active", null)!!)
+        val encryptedDek = Base64.decode(activeJson.getString("encryptedDekBase64"), Base64.NO_WRAP)
+        encryptedDek[0] = (encryptedDek[0].toInt() xor 1).toByte()
+        activeJson.put("encryptedDekBase64", Base64.encodeToString(encryptedDek, Base64.NO_WRAP))
+        assertTrue(prefs.edit().putString("vault_header_json_v2_active", activeJson.toString()).commit())
+
+        resetVaultManagerSingleton()
+        val reloaded = VaultSecurityManager.getInstance(context)
+        assertTrue("Valid legacy header must remain a rollback path",
+            reloaded.unlockWithPassword(password))
+        assertArrayEquals(setup.dek, reloaded.getActiveDek())
+        assertEquals("Legacy v1 record must remain unchanged", originalV1,
+            prefs.getString("vault_header_json_v1", null))
+        val repaired = com.example.service.VaultHeaderParserV2.parse(
+            prefs.getString("vault_header_json_v2_active", null))
+        assertNotNull("A verified v2 header should be regenerated", repaired)
+        val reopenedDek = com.example.service.VaultHeaderCryptoV2.unwrapDek(repaired!!, password.toCharArray())
         try {
             assertArrayEquals(setup.dek, reopenedDek)
         } finally {

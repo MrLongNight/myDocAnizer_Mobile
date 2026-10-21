@@ -195,6 +195,10 @@ class VaultSecurityManager private constructor(private val context: Context) {
         const val GCM_IV_SIZE_BYTES = 12
         const val GCM_TAG_SIZE_BITS = 128
         const val MAX_QR_PAYLOAD_BYTES = 2000
+        private const val V1_HEADER_PREF_KEY = "vault_header_json_v1"
+        private const val V2_ACTIVE_HEADER_PREF_KEY = "vault_header_json_v2_active"
+        private const val V2_STAGING_HEADER_PREF_KEY = "vault_header_json_v2_staging"
+        private const val V2_AUTO_LOCK_OVERRIDE_PREF_KEY = "vault_v2_auto_lock_minutes_override"
 
         @Volatile
         private var INSTANCE: VaultSecurityManager? = null
@@ -207,11 +211,16 @@ class VaultSecurityManager private constructor(private val context: Context) {
     }
 
     init {
-        // Falls kein Vault existiert, aber ein Master-Passwort in Legacy-Prefs vorliegt, initialisieren
-        if (_vaultHeader.value == null) {
+        // Never initialize a replacement vault over persisted-but-unreadable vault material.
+        if (_vaultHeader.value == null && !hasAnyPersistedVaultHeader()) {
             checkAndMigrateLegacyPassword()
         }
     }
+
+    private fun hasAnyPersistedVaultHeader(): Boolean =
+        prefs.contains(V1_HEADER_PREF_KEY) ||
+            prefs.contains(V2_ACTIVE_HEADER_PREF_KEY) ||
+            prefs.contains(V2_STAGING_HEADER_PREF_KEY)
 
     fun isUnencryptedModeEnabled(): Boolean {
         return prefs.getBoolean("unencrypted_mode_enabled", false)
@@ -568,6 +577,32 @@ class VaultSecurityManager private constructor(private val context: Context) {
             else -> return false
         }
         
+        if (header.version >= 2) {
+            val opened = openStoredV2Header(header.vaultId, password, keyFileToken) ?: return false
+            val dek = opened.second
+            return try {
+                promoteStoredV2Header(opened.first)
+                replaceActiveDek(dek)
+                true
+            } finally {
+                dek.fill(0)
+            }
+        }
+
+        if (canUseV2PasswordHeader(header)) {
+            val opened = openStoredV2Header(header.vaultId, password, keyFileToken)
+            if (opened != null) {
+                val dek = opened.second
+                return try {
+                    promoteStoredV2Header(opened.first)
+                    replaceActiveDek(dek)
+                    true
+                } finally {
+                    dek.fill(0)
+                }
+            }
+        }
+
         var kek: ByteArray? = null
         return try {
             val salt = Base64.decode(header.argon2SaltBase64, Base64.NO_WRAP)
@@ -625,6 +660,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /** Called only with the Cipher returned by a successful CryptoObject authentication callback. */
     fun completeBiometricEnrollment(authenticatedCipher: Cipher): Boolean {
         val header = _vaultHeader.value ?: return false
+        if (header.version >= 2) return false
         var encrypted: ByteArray? = null
         var iv: ByteArray? = null
         return try {
@@ -698,6 +734,11 @@ class VaultSecurityManager private constructor(private val context: Context) {
      */
     fun changeMasterPassword(oldPassword: String, newPassword: String): Boolean {
         val header = _vaultHeader.value ?: return false
+        if (header.version >= 2) {
+            // V2-only vaults have no legacy fallback, so authenticate and rotate V2 in-place.
+            if (!unlockWithPassword(oldPassword)) return false
+            return changeV2Password(newPassword)
+        }
         if (!isUnlocked() && !unlockWithPassword(oldPassword)) return false
         return try {
             withUnlockedKey { dek ->
@@ -715,6 +756,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
                     passwordDekIvBase64 = Base64.encodeToString(encryptedResult.second, Base64.NO_WRAP)
                 )
                 saveVaultHeader(updatedHeader)
+                stageVerifiedV2HeaderIfEligible(updatedHeader, newPassword, dek)
                 true
             } ?: false
         } catch (e: Exception) {
@@ -727,6 +769,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
      */
     fun resetPasswordWithRecoveredDek(newPassword: String, recoveredDek: ByteArray): Boolean {
         val header = _vaultHeader.value ?: return false
+        if (header.version >= 2) return false
         return try {
             val newSalt = ByteArray(16)
             secureRandom.nextBytes(newSalt)
@@ -757,6 +800,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
      */
     fun setBiometricsEnabled(enabled: Boolean): Boolean {
         val header = _vaultHeader.value ?: return false
+        if (header.version >= 2) return !enabled && !header.biometric2FaEnabled
         if (enabled) {
             // Enabling requires a user-authenticated Cipher and must use the explicit enrollment flow.
             return false
@@ -1285,104 +1329,141 @@ class VaultSecurityManager private constructor(private val context: Context) {
         header.recoveryCodeHash?.let { json.put("recoveryCodeHash", it) }
         json.put("autoLockMinutes", header.autoLockMinutes)
 
-        prefs.edit().putString("vault_header_json_v1", json.toString()).apply()
+        check(header.version == 1) { "V2 headers must be persisted by a v2-aware operation" }
+        val committed = prefs.edit()
+            .putString(V1_HEADER_PREF_KEY, json.toString())
+            // V1 writes are authoritative until dual-write migrations are explicit. Remove V2
+            // shadows in the same transaction so a stale password/DEK wrapper cannot survive.
+            .remove(V2_ACTIVE_HEADER_PREF_KEY)
+            .remove(V2_STAGING_HEADER_PREF_KEY)
+            .remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY)
+            .commit()
+        check(committed) { "Unable to persist vault header" }
         _vaultHeader.value = header
         _vaultStatus.value = computeStatus(header)
     }
 
     private fun loadVaultHeader(): VaultHeader? {
-        val raw = prefs.getString("vault_header_json_v1", null) ?: return null
-        return try {
-            val json = JSONObject(raw)
-            val hashes = mutableListOf<String>()
-            val arr = json.optJSONArray("shamirHashes")
-            if (arr != null) {
-                for (i in 0 until arr.length()) hashes.add(arr.getString(i))
-            }
-            VaultHeader(
-                version = json.optInt("version", 1),
-                vaultId = json.getString("vaultId"),
-                createdAt = json.getLong("createdAt"),
-                argon2SaltBase64 = json.getString("argon2Salt"),
-                argon2Iterations = json.optInt("argon2Iterations", 2),
-                argon2MemoryKb = json.optInt("argon2MemoryKb", 16384),
-                encryptedDekByPasswordBase64 = json.getString("encDekPassword"),
-                passwordDekIvBase64 = json.getString("ivPassword"),
-                biometric2FaEnabled = json.optBoolean("biometric2Fa", false),
-                encryptedDekByBiometricsBase64 = json.optString("encDekBio").ifBlank { null },
-                biometricDekIvBase64 = json.optString("ivBio").ifBlank { null },
-                recoveryMethod = try {
-                    VaultRecoveryMethod.valueOf(json.optString("recoveryMethod", VaultRecoveryMethod.NONE.name))
-                } catch (e: Exception) {
-                    VaultRecoveryMethod.NONE
-                },
-                encryptedDekByRecoveryBase64 = json.optString("encDekRecovery").ifBlank { null },
-                recoveryDekIvBase64 = json.optString("ivRecovery").ifBlank { null },
-                recoverySaltBase64 = json.optString("saltRecovery").ifBlank { null },
-                emergencyPdfChecksum = json.optString("pdfChecksum").ifBlank { null },
-                shamirShareHashes = hashes,
-                hasEmergencyPin = json.optBoolean("hasEmergencyPin", false),
-                emergencyPinSaltBase64 = json.optString("emergencyPinSalt").ifBlank { null },
-                securityTier = try {
-                    VaultSecurityTier.valueOf(json.optString("securityTier", VaultSecurityTier.ONE_FACTOR.name))
-                } catch (e: Exception) {
-                    VaultSecurityTier.ONE_FACTOR
-                },
-                factorType = try {
-                    VaultFactorType.valueOf(json.optString("factorType", VaultFactorType.PASSWORD.name))
-                } catch (e: Exception) {
-                    VaultFactorType.PASSWORD
-                },
-                totpSecret = json.optString("totpSecret").ifBlank { null },
-                keyFileTokenHash = json.optString("keyFileTokenHash").ifBlank { null },
-                recoveryCodeHash = json.optString("recoveryCodeHash").ifBlank { null },
-                autoLockMinutes = json.optInt("autoLockMinutes", 5)
-            )
-        } catch (e: Exception) {
-            null
+        val rawV1 = prefs.getString(V1_HEADER_PREF_KEY, null)
+        val legacy = if (!rawV1.isNullOrBlank()) parseLegacyVaultHeader(rawV1) else null
+        if (legacy != null) return legacy
+
+        // V2 is a runtime source only for the narrow password-only format. If V1 is missing or
+        // unreadable, a validated V2 header must still allow the existing vault to be unlocked.
+        val rawV2 = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null)
+            ?: prefs.getString(V2_STAGING_HEADER_PREF_KEY, null)
+        val v2 = VaultHeaderParserV2.parse(rawV2) ?: return null
+        if (v2.securityTier != "ONE_FACTOR" || v2.factorType != "PASSWORD") return null
+
+        return VaultHeader(
+            version = 2,
+            vaultId = v2.vaultId,
+            createdAt = v2.createdAt,
+            argon2SaltBase64 = v2.saltBase64,
+            argon2Iterations = v2.argon2Iterations,
+            argon2MemoryKb = v2.argon2MemoryKb,
+            encryptedDekByPasswordBase64 = v2.encryptedDekBase64,
+            passwordDekIvBase64 = v2.ivBase64,
+            recoveryMethod = VaultRecoveryMethod.NONE,
+            securityTier = VaultSecurityTier.ONE_FACTOR,
+            factorType = VaultFactorType.PASSWORD,
+            autoLockMinutes = prefs.getInt(V2_AUTO_LOCK_OVERRIDE_PREF_KEY, v2.autoLockMinutes).coerceIn(0, 1440)
+        )
+    }
+
+    private fun parseLegacyVaultHeader(raw: String): VaultHeader? = try {
+        val json = JSONObject(raw)
+        val hashes = mutableListOf<String>()
+        val arr = json.optJSONArray("shamirHashes")
+        if (arr != null) {
+            for (i in 0 until arr.length()) hashes.add(arr.getString(i))
         }
+        VaultHeader(
+            version = json.optInt("version", 1),
+            vaultId = json.getString("vaultId"),
+            createdAt = json.getLong("createdAt"),
+            argon2SaltBase64 = json.getString("argon2Salt"),
+            argon2Iterations = json.optInt("argon2Iterations", 2),
+            argon2MemoryKb = json.optInt("argon2MemoryKb", 16384),
+            encryptedDekByPasswordBase64 = json.getString("encDekPassword"),
+            passwordDekIvBase64 = json.getString("ivPassword"),
+            biometric2FaEnabled = json.optBoolean("biometric2Fa", false),
+            encryptedDekByBiometricsBase64 = json.optString("encDekBio").ifBlank { null },
+            biometricDekIvBase64 = json.optString("ivBio").ifBlank { null },
+            recoveryMethod = try {
+                VaultRecoveryMethod.valueOf(json.optString("recoveryMethod", VaultRecoveryMethod.NONE.name))
+            } catch (e: Exception) {
+                VaultRecoveryMethod.NONE
+            },
+            encryptedDekByRecoveryBase64 = json.optString("encDekRecovery").ifBlank { null },
+            recoveryDekIvBase64 = json.optString("ivRecovery").ifBlank { null },
+            recoverySaltBase64 = json.optString("saltRecovery").ifBlank { null },
+            emergencyPdfChecksum = json.optString("pdfChecksum").ifBlank { null },
+            shamirShareHashes = hashes,
+            hasEmergencyPin = json.optBoolean("hasEmergencyPin", false),
+            emergencyPinSaltBase64 = json.optString("emergencyPinSalt").ifBlank { null },
+            securityTier = try {
+                VaultSecurityTier.valueOf(json.optString("securityTier", VaultSecurityTier.ONE_FACTOR.name))
+            } catch (e: Exception) {
+                VaultSecurityTier.ONE_FACTOR
+            },
+            factorType = try {
+                VaultFactorType.valueOf(json.optString("factorType", VaultFactorType.PASSWORD.name))
+            } catch (e: Exception) {
+                VaultFactorType.PASSWORD
+            },
+            totpSecret = json.optString("totpSecret").ifBlank { null },
+            keyFileTokenHash = json.optString("keyFileTokenHash").ifBlank { null },
+            recoveryCodeHash = json.optString("recoveryCodeHash").ifBlank { null },
+            autoLockMinutes = json.optInt("autoLockMinutes", 5)
+        )
+    } catch (e: Exception) {
+        null
     }
 
     /**
-     * Safely prepares a verified v2 shadow header for simple password-only v1 vaults.
-     *
-     * This deliberately does NOT switch the canonical header: v1 recovery/biometric/keyfile
-     * metadata and their unlock paths must remain available until the complete migration is ready.
-     * The v1 bytes are never modified by this preparatory step.
+     * Creates and activates a verified v2 runtime header only for simple password-only v1 vaults.
+     * The legacy v1 record remains byte-for-byte intact as a rollback source.
      */
     private fun stageVerifiedV2HeaderIfEligible(
         legacy: VaultHeader,
         password: String?,
         dek: ByteArray
     ) {
-        if (password.isNullOrEmpty()) return
-        if (legacy.version != 1 ||
-            legacy.securityTier != VaultSecurityTier.ONE_FACTOR ||
-            legacy.factorType != VaultFactorType.PASSWORD ||
-            legacy.recoveryMethod != VaultRecoveryMethod.NONE ||
-            legacy.biometric2FaEnabled ||
-            !legacy.totpSecret.isNullOrBlank() ||
-            !legacy.keyFileTokenHash.isNullOrBlank() ||
-            legacy.hasEmergencyPin ||
-            legacy.encryptedDekByRecoveryBase64 != null ||
-            legacy.shamirShareHashes.isNotEmpty()
-        ) return
+        if (legacy.version != 1 || password.isNullOrEmpty() || !canUseV2PasswordHeader(legacy)) return
 
-        val stagingKey = "vault_header_json_v2_staging"
-        val existing = prefs.getString(stagingKey, null)
-        if (!existing.isNullOrBlank()) {
-            val parsed = VaultHeaderParserV2.parse(existing)
-            if (parsed != null) {
-                val verified = runCatching {
-                    VaultHeaderCryptoV2.unwrapDek(parsed, password.toCharArray()).useBytes { candidate ->
-                        MessageDigest.isEqual(candidate, dek)
-                    }
-                }.getOrDefault(false)
-                if (verified) return
+        fun matches(raw: String?): Boolean {
+            val parsed = VaultHeaderParserV2.parse(raw) ?: return false
+            if (parsed.vaultId != legacy.vaultId) return false
+            val passwordChars = password.toCharArray()
+            return try {
+                VaultHeaderCryptoV2.unwrapDek(parsed, passwordChars).useBytes { candidate ->
+                    MessageDigest.isEqual(candidate, dek)
+                }
+            } catch (_: Exception) {
+                false
+            } finally {
+                passwordChars.fill('\u0000')
             }
-            // Invalid/unverifiable staging data is safe to replace; canonical v1 remains intact.
-            prefs.edit().remove(stagingKey).commit()
         }
+
+        val active = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null)
+        if (matches(active)) {
+            prefs.edit().remove(V2_STAGING_HEADER_PREF_KEY).commit()
+            return
+        }
+        val staging = prefs.getString(V2_STAGING_HEADER_PREF_KEY, null)
+        if (matches(staging)) {
+            // A previously verified staging value may have survived a process death before promotion.
+            prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, staging)
+                .remove(V2_STAGING_HEADER_PREF_KEY).commit()
+            return
+        }
+
+        // If existing v2 data cannot be tied to the unlocked v1 DEK, discard it and rebuild from
+        // the verified legacy key. Never replace the canonical v1 value in this operation.
+        prefs.edit().remove(V2_ACTIVE_HEADER_PREF_KEY)
+            .remove(V2_STAGING_HEADER_PREF_KEY).commit()
 
         val passwordChars = password.toCharArray()
         try {
@@ -1398,11 +1479,11 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 memoryKb = maxOf(19456, legacy.argon2MemoryKb)
             )
             val raw = staged.toJson()
-            if (!prefs.edit().putString(stagingKey, raw).commit()) return
+            if (!prefs.edit().putString(V2_STAGING_HEADER_PREF_KEY, raw).commit()) return
 
-            val readBack = prefs.getString(stagingKey, null) ?: return
+            val readBack = prefs.getString(V2_STAGING_HEADER_PREF_KEY, null) ?: return
             val parsed = VaultHeaderParserV2.parse(readBack) ?: run {
-                prefs.edit().remove(stagingKey).commit()
+                prefs.edit().remove(V2_STAGING_HEADER_PREF_KEY).commit()
                 return
             }
             val verified = runCatching {
@@ -1411,13 +1492,128 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 }
             }.getOrDefault(false)
             if (!verified) {
-                prefs.edit().remove(stagingKey).commit()
+                prefs.edit().remove(V2_STAGING_HEADER_PREF_KEY).commit()
+                return
             }
+
+            // Promotion is a single SharedPreferences transaction. If it fails, the checked staging
+            // value remains available for a later unlock attempt; V1 continues to work regardless.
+            prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, readBack)
+                .remove(V2_STAGING_HEADER_PREF_KEY).commit()
         } catch (_: Exception) {
-            // Migration preparation is best-effort and must never break a valid v1 unlock.
-            prefs.edit().remove(stagingKey).commit()
+            // V2 is an optional migration path; it must never break a valid v1 unlock.
+            prefs.edit().remove(V2_STAGING_HEADER_PREF_KEY).commit()
         } finally {
             passwordChars.fill('\u0000')
+        }
+    }
+
+    private fun canUseV2PasswordHeader(header: VaultHeader): Boolean =
+        header.version in 1..2 &&
+            header.securityTier == VaultSecurityTier.ONE_FACTOR &&
+            header.factorType == VaultFactorType.PASSWORD &&
+            header.recoveryMethod == VaultRecoveryMethod.NONE &&
+            !header.biometric2FaEnabled &&
+            header.totpSecret.isNullOrBlank() &&
+            header.keyFileTokenHash.isNullOrBlank() &&
+            !header.hasEmergencyPin &&
+            header.encryptedDekByRecoveryBase64 == null &&
+            header.recoveryDekIvBase64 == null &&
+            header.recoverySaltBase64 == null &&
+            header.emergencyPdfChecksum.isNullOrBlank() &&
+            header.emergencyPinSaltBase64.isNullOrBlank() &&
+            header.recoveryCodeHash.isNullOrBlank() &&
+            header.shamirShareHashes.isEmpty()
+
+    private fun openStoredV2Header(
+        expectedVaultId: String,
+        password: String?,
+        keyFileToken: String?
+    ): Pair<String, ByteArray>? {
+        if (password.isNullOrBlank() || keyFileToken != null) return null
+        val passwordChars = password.toCharArray()
+        try {
+            val candidates = listOfNotNull(
+                prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null),
+                prefs.getString(V2_STAGING_HEADER_PREF_KEY, null)
+            ).distinct()
+            for (raw in candidates) {
+                val parsed = VaultHeaderParserV2.parse(raw) ?: continue
+                if (parsed.vaultId != expectedVaultId ||
+                    parsed.securityTier != "ONE_FACTOR" ||
+                    parsed.factorType != "PASSWORD") continue
+                val dek = runCatching {
+                    VaultHeaderCryptoV2.unwrapDek(parsed, passwordChars)
+                }.getOrNull() ?: continue
+                if (dek.size == DEK_SIZE_BYTES) return raw to dek
+                dek.fill(0)
+            }
+            return null
+        } finally {
+            passwordChars.fill('\u0000')
+        }
+    }
+
+    private fun promoteStoredV2Header(raw: String) {
+        if (prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null) == raw) {
+            prefs.edit().remove(V2_STAGING_HEADER_PREF_KEY).commit()
+            return
+        }
+        prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, raw)
+            .remove(V2_STAGING_HEADER_PREF_KEY).commit()
+    }
+
+    private fun changeV2Password(newPassword: String): Boolean {
+        val currentHeader = _vaultHeader.value ?: return false
+        if (currentHeader.version != 2) return false
+        return try {
+            withUnlockedKey { dek ->
+                val rawCurrent = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null)
+                    ?: prefs.getString(V2_STAGING_HEADER_PREF_KEY, null)
+                    ?: return@withUnlockedKey false
+                val parsed = VaultHeaderParserV2.parse(rawCurrent) ?: return@withUnlockedKey false
+                if (parsed.vaultId != currentHeader.vaultId ||
+                    parsed.securityTier != "ONE_FACTOR" ||
+                    parsed.factorType != "PASSWORD") return@withUnlockedKey false
+
+                val passwordChars = newPassword.toCharArray()
+                try {
+                    val updatedV2 = VaultHeaderCryptoV2.createHeader(
+                        vaultId = parsed.vaultId,
+                        createdAt = parsed.createdAt,
+                        password = passwordChars,
+                        dek = dek,
+                        securityTier = "ONE_FACTOR",
+                        factorType = "PASSWORD",
+                        autoLockMinutes = currentHeader.autoLockMinutes,
+                        iterations = parsed.argon2Iterations,
+                        memoryKb = parsed.argon2MemoryKb
+                    )
+                    val committed = prefs.edit()
+                        .putString(V2_ACTIVE_HEADER_PREF_KEY, updatedV2.toJson())
+                        .remove(V2_STAGING_HEADER_PREF_KEY)
+                        .remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY)
+                        .commit()
+                    if (!committed) return@withUnlockedKey false
+
+                    val updatedProjection = currentHeader.copy(
+                        version = 2,
+                        argon2SaltBase64 = updatedV2.saltBase64,
+                        argon2Iterations = updatedV2.argon2Iterations,
+                        argon2MemoryKb = updatedV2.argon2MemoryKb,
+                        encryptedDekByPasswordBase64 = updatedV2.encryptedDekBase64,
+                        passwordDekIvBase64 = updatedV2.ivBase64,
+                        autoLockMinutes = updatedV2.autoLockMinutes
+                    )
+                    _vaultHeader.value = updatedProjection
+                    _vaultStatus.value = computeStatus(updatedProjection)
+                    true
+                } finally {
+                    passwordChars.fill('\u0000')
+                }
+            } ?: false
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -1568,6 +1764,15 @@ class VaultSecurityManager private constructor(private val context: Context) {
     fun setAutoLockMinutes(minutes: Int) {
         require(minutes in 0..1440) { "Auto-lock must be between 0 and 1440 minutes" }
         val currentHeader = _vaultHeader.value ?: return
+        if (currentHeader.version >= 2) {
+            // autoLockMinutes is included in the existing v2 AAD; keep it as a separate local
+            // policy override instead of mutating authenticated header metadata without a password.
+            if (!prefs.edit().putInt(V2_AUTO_LOCK_OVERRIDE_PREF_KEY, minutes).commit()) return
+            val updated = currentHeader.copy(autoLockMinutes = minutes)
+            _vaultHeader.value = updated
+            _vaultStatus.value = computeStatus(updated)
+            return
+        }
         saveVaultHeader(currentHeader.copy(autoLockMinutes = minutes))
     }
 

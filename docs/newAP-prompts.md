@@ -7,7 +7,7 @@
 | Micro-APs insgesamt | **119** |
 | Einzelstatus dokumentiert | **37** |
 | Einzelstatus noch abzugleichen | **82** |
-| Dokumentierte Statusverteilung | 1 abgenommen · 1 getestet · 27 Patch erstellt · 2 blockiert · 5 nicht gestartet · 1 ADR freigegeben |
+| Dokumentierte Statusverteilung | 1 abgenommen · 1 getestet · 27 Patch erstellt · 1 in Arbeit · 1 blockiert · 5 nicht gestartet · 1 ADR freigegeben |
 | Tests | 23 Testklassen inkl. `VaultTwoFactorSecurityTest`; vorhanden heißt nicht automatisch ausgeführt oder bestanden |
 | Build/Tests | GitHub Actions führt jetzt `assembleDebug testDebugUnitTest` aus; Ergebnis der aktuellen Änderungen wird separat geprüft |
 
@@ -517,7 +517,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | V12 | PATCH ERSTELLT | direkt in main | Ja | PDF-Regressionstest ergänzt; explizites Notfalldokument und Geräterestore abzunehmen | V12B/V13 |
 | V12B | NICHT GESTARTET | – | Nein | Unauffällige Druckvariante erstellen | V12 |
 | V13 | PATCH ERSTELLT | direkt in main | Ja | CryptoObject-Instrumented-Test ergänzt; Gerätetest offen | V14 |
-| V14 | BLOCKIERT | – | Nein | v2 nicht in Runtime integriert | V14-Laufzeitintegration |
+| V14 | IN ARBEIT | VaultSecurityManager.kt | Ja | Begrenzter V2-Runtimepfad für Passwort-only-Vaults; V1 bleibt als Rückfall erhalten | Recovery-/Biometrie-/2FA-Abdeckung, vollständiger Rollback und spätere V1-Ablösung |
 | V15 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; weitere AP-Abnahme separat prüfen | S01 |
 | V16 | NICHT GESTARTET | – | Nein | Passkey muss echte Wiederherstellung ermöglichen | V09/V10 |
 | V17 | NICHT GESTARTET | – | Nein | Sicherheitsfragen nur zusätzlicher, begrenzt starker Faktor | V10/V16 |
