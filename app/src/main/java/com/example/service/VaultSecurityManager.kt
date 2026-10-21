@@ -601,7 +601,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /** Called only with the Cipher returned by a successful CryptoObject authentication callback. */
     fun completeBiometricEnrollment(authenticatedCipher: Cipher): Boolean {
         val header = _vaultHeader.value ?: return false
-        if (header.version >= 2) return false
+        if (header.version != 2 || !isUnlocked()) return false
         var encrypted: ByteArray? = null
         var iv: ByteArray? = null
         return try {
@@ -1561,16 +1561,13 @@ class VaultSecurityManager private constructor(private val context: Context) {
     fun setAutoLockMinutes(minutes: Int) {
         require(minutes in 0..1440) { "Auto-lock must be between 0 and 1440 minutes" }
         val currentHeader = _vaultHeader.value ?: return
-        if (currentHeader.version >= 2) {
-            // autoLockMinutes is included in the existing v2 AAD; keep it as a separate local
-            // policy override instead of mutating authenticated header metadata without a password.
-            if (!prefs.edit().putInt(V2_AUTO_LOCK_OVERRIDE_PREF_KEY, minutes).commit()) return
-            val updated = currentHeader.copy(autoLockMinutes = minutes)
-            _vaultHeader.value = updated
-            _vaultStatus.value = computeStatus(updated)
-            return
-        }
-        saveVaultHeader(currentHeader.copy(autoLockMinutes = minutes))
+        if (currentHeader.version != 2) return
+        // autoLockMinutes is authenticated by the V2 header AAD. Store the effective policy
+        // separately so changing the timeout does not invalidate the DEK-wrapping tag.
+        if (!prefs.edit().putInt(V2_AUTO_LOCK_OVERRIDE_PREF_KEY, minutes).commit()) return
+        val updated = currentHeader.copy(autoLockMinutes = minutes)
+        _vaultHeader.value = updated
+        _vaultStatus.value = computeStatus(updated)
     }
 
     fun getAutoLockMinutes(): Int {
