@@ -1396,14 +1396,15 @@ class VaultSecurityManager private constructor(private val context: Context) {
     }
 
     /**
-     * Authenticate current security metadata after DEK recovery. Old unsigned V2 headers
-     * are upgraded in-place only after the wrapping/recovery factor has recovered the DEK.
-     * This migration authenticates the current legacy values; it cannot retrospectively prove
-     * that unsigned metadata was never modified before this app version.
-     */
-    /**
-     * Recovery wrappers can decrypt a DEK independently of the password wrapper, so every
-     * recovery path must also authenticate the persisted security metadata before accepting it.
+     * Authenticate current security metadata after DEK recovery.
+     *
+     * A legacy V2 wrapper (metadataAuthVersion=0) used AES-GCM AAD without the
+     * version marker. Signing its JSON alone would produce a version-1 header whose
+     * wrapper still uses the old AAD, causing the next password unlock to fail.
+     * Therefore an unsigned header is rejected here: only the password unlock path,
+     * which still has the password/key file, can safely re-wrap the DEK and commit
+     * the new authenticated header. Recovery/biometric paths must fail closed until
+     * that password-backed migration has completed.
      */
     private fun authenticateRecoveredDek(dek: ByteArray, expectedVaultId: String): Boolean {
         if (dek.size != DEK_SIZE_BYTES) return false
@@ -1419,16 +1420,67 @@ class VaultSecurityManager private constructor(private val context: Context) {
     ): String? {
         return when (parsed.metadataAuthVersion) {
             1 -> if (VaultHeaderCryptoV2.verifyAuthenticatedMetadata(parsed, dek)) parsed.toJson() else null
-            0 -> {
-                val signed = runCatching {
-                    VaultHeaderCryptoV2.authenticateMetadata(parsed, dek)
-                }.getOrNull() ?: return null
-                val serialized = signed.toJson()
-                if (VaultHeaderParserV2.parse(serialized) == null) return null
-                if (!prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, serialized).commit()) return null
-                serialized
-            }
+            // A missing authenticator cannot be treated as a legacy header on recovery or
+            // biometric-only unlock: an attacker could strip the version and MAC from a newer
+            // header and cause untrusted metadata to be accepted. Only openStoredV2Header,
+            // after successfully opening the old password wrapper, may perform the migration.
+            0 -> null
             else -> null
+        }
+    }
+
+    /**
+     * Migrates an unsigned V2 header only while the password (and key file, if any)
+     * is available. createHeader generates a fresh salt/nonce and binds metadataAuthVersion=1
+     * into the new AES-GCM AAD; copied recovery/biometric metadata then receives a fresh
+     * DEK-derived authenticator before the entire header is committed atomically.
+     */
+    private fun rewrapLegacyV2Header(
+        legacy: VaultHeaderV2,
+        dek: ByteArray,
+        password: CharArray,
+        keyFileToken: CharArray?
+    ): String? {
+        if (legacy.metadataAuthVersion != 0 || dek.size != DEK_SIZE_BYTES) return null
+        return try {
+            val rewrapped = VaultHeaderCryptoV2.createHeader(
+                vaultId = legacy.vaultId,
+                createdAt = legacy.createdAt,
+                password = password,
+                dek = dek,
+                securityTier = legacy.securityTier,
+                factorType = legacy.factorType,
+                keyFileToken = keyFileToken,
+                autoLockMinutes = legacy.autoLockMinutes,
+                iterations = legacy.argon2Iterations,
+                memoryKb = legacy.argon2MemoryKb
+            ).copy(
+                domainSecurityTier = legacy.domainSecurityTier,
+                domainFactorType = legacy.domainFactorType,
+                biometric2FaEnabled = legacy.biometric2FaEnabled,
+                encryptedDekByBiometricsBase64 = legacy.encryptedDekByBiometricsBase64,
+                biometricDekIvBase64 = legacy.biometricDekIvBase64,
+                recoveryMethod = legacy.recoveryMethod,
+                encryptedDekByRecoveryBase64 = legacy.encryptedDekByRecoveryBase64,
+                recoveryDekIvBase64 = legacy.recoveryDekIvBase64,
+                recoverySaltBase64 = legacy.recoverySaltBase64,
+                emergencyPdfChecksum = legacy.emergencyPdfChecksum,
+                shamirShareHashes = legacy.shamirShareHashes,
+                hasEmergencyPin = legacy.hasEmergencyPin,
+                emergencyPinSaltBase64 = legacy.emergencyPinSaltBase64,
+                keyFileTokenHash = legacy.keyFileTokenHash,
+                recoveryCodeHash = legacy.recoveryCodeHash
+            )
+            val authenticated = VaultHeaderCryptoV2.authenticateMetadata(rewrapped, dek)
+            val serialized = authenticated.toJson()
+            if (VaultHeaderParserV2.parse(serialized) == null) return null
+            if (!prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, serialized).commit()) return null
+            val reloaded = loadVaultHeader() ?: return null
+            _vaultHeader.value = reloaded
+            _vaultStatus.value = computeStatus(reloaded)
+            serialized
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -1459,7 +1511,14 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 dek.fill(0)
                 return null
             }
-            val authenticatedJson = authenticateOrUpgradeStoredHeaderMetadata(parsed, dek)
+            // A version-0 wrapper was encrypted without the metadataAuthVersion AAD marker.
+            // The successful password/key-file unlock is the point where we can safely
+            // migrate it to a signed version-1 wrapper without losing future unlock access.
+            val authenticatedJson = if (parsed.metadataAuthVersion == 0) {
+                rewrapLegacyV2Header(parsed, dek, passwordChars, keyFileChars)
+            } else {
+                authenticateOrUpgradeStoredHeaderMetadata(parsed, dek)
+            }
             if (authenticatedJson == null) {
                 dek.fill(0)
                 return null

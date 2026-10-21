@@ -2,12 +2,17 @@ package com.example
 
 import android.app.Application
 import android.content.Context
+import android.util.Base64
 import androidx.test.core.app.ApplicationProvider
 import com.example.service.VaultFactorType
+import com.example.service.VaultHeaderCryptoV2
 import com.example.service.VaultHeaderParserV2
+import com.example.service.VaultHeaderV2
 import com.example.service.VaultRecoveryMethod
 import com.example.service.VaultSecurityManager
 import com.example.service.VaultSecurityTier
+import org.bouncycastle.crypto.generators.Argon2BytesGenerator
+import org.bouncycastle.crypto.params.Argon2Parameters
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -15,6 +20,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], manifest = Config.NONE)
@@ -110,6 +119,98 @@ class VaultV2OnlyTest {
         val reloaded = VaultSecurityManager.getInstance(context)
         assertNull("Persisted two-factor header without verifier must not load", reloaded.vaultHeader.value)
         assertFalse(reloaded.unlockVault(password = password, keyFileToken = token))
+    }
+
+    @Test
+    fun `legacy unsigned V2 password unlock rewraps and remains unlockable after restart`() {
+        val context = context()
+        val password = "LegacyUnsignedV2Password2026!"
+        val manager = VaultSecurityManager.getInstance(context)
+        val setup = manager.initializeVault(password, false, VaultRecoveryMethod.NONE)
+        val expectedDek = setup.dek.copyOf()
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+
+        try {
+            val signed = VaultHeaderParserV2.parse(
+                prefs.getString("vault_header_json_v2_active", null)
+            ) ?: error("Initialized V2 header expected")
+            val legacy = createLegacyUnsignedHeader(signed, password, expectedDek)
+            assertEquals(0, legacy.metadataAuthVersion)
+            assertTrue(prefs.edit().putString("vault_header_json_v2_active", legacy.toJson()).commit())
+
+            resetSingleton()
+            val firstReload = VaultSecurityManager.getInstance(context)
+            assertTrue("Correct password should migrate a genuine unsigned V2 wrapper",
+                firstReload.unlockVault(password = password))
+
+            val migrated = VaultHeaderParserV2.parse(
+                prefs.getString("vault_header_json_v2_active", null)
+            ) ?: error("Migrated V2 header expected")
+            assertEquals("Migration must install authenticated metadata", 1, migrated.metadataAuthVersion)
+            assertFalse("Migration must replace the old-AAD DEK wrapper",
+                legacy.encryptedDekBase64 == migrated.encryptedDekBase64)
+            val unwrapped = VaultHeaderCryptoV2.unwrapDek(migrated, password.toCharArray())
+            try {
+                assertArrayEquals(expectedDek, unwrapped)
+            } finally {
+                unwrapped.fill(0)
+            }
+
+            firstReload.lockVault()
+            resetSingleton()
+            val secondReload = VaultSecurityManager.getInstance(context)
+            assertTrue("The upgraded header must also unlock after a process restart",
+                secondReload.unlockVault(password = password))
+            secondReload.lockVault()
+        } finally {
+            expectedDek.fill(0)
+            setup.dek.fill(0)
+        }
+    }
+
+    @Test
+    fun `legacy recovery fails closed until password unlock rewraps its header`() {
+        val context = context()
+        val password = "LegacyRecoveryV2Password2026!"
+        val manager = VaultSecurityManager.getInstance(context)
+        val setup = manager.initializeVault(password, false, VaultRecoveryMethod.BIP39_WORDS)
+        val expectedDek = setup.dek.copyOf()
+        val words = setup.bip39Words ?: error("Generated BIP-39 phrase expected")
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+
+        try {
+            val signed = VaultHeaderParserV2.parse(
+                prefs.getString("vault_header_json_v2_active", null)
+            ) ?: error("Initialized V2 header expected")
+            val legacy = createLegacyUnsignedHeader(signed, password, expectedDek)
+            assertTrue(prefs.edit().putString("vault_header_json_v2_active", legacy.toJson()).commit())
+
+            resetSingleton()
+            val reloaded = VaultSecurityManager.getInstance(context)
+            val recovered = reloaded.recoverDekWithBip39(words)
+            assertNull(
+                "Unsigned metadata must not be accepted or signed through recovery; migrate using the password first",
+                recovered
+            )
+            recovered?.fill(0)
+
+            val afterRecovery = VaultHeaderParserV2.parse(
+                prefs.getString("vault_header_json_v2_active", null)
+            ) ?: error("Legacy V2 header should remain valid")
+            assertEquals("Recovery alone must not falsely mark the old-AAD wrapper as upgraded",
+                0, afterRecovery.metadataAuthVersion)
+
+            assertTrue("Password unlock performs the actual wrapper rewrap",
+                reloaded.unlockVault(password = password))
+            val upgraded = VaultHeaderParserV2.parse(
+                prefs.getString("vault_header_json_v2_active", null)
+            ) ?: error("Migrated V2 header expected")
+            assertEquals(1, upgraded.metadataAuthVersion)
+            reloaded.lockVault()
+        } finally {
+            expectedDek.fill(0)
+            setup.dek.fill(0)
+        }
     }
 
     @Test
@@ -364,6 +465,77 @@ class VaultV2OnlyTest {
         assertEquals(legacyMarker, prefs.getString("vault_header_json", null))
         assertEquals(legacyMarker, prefs.getString("vault_header_json_v1", null))
         assertNull("Startup must not create or promote a V2 header", prefs.getString("vault_header_json_v2_active", null))
+    }
+
+    /**
+     * Creates a synthetic pre-metadata-HMAC V2 header for migration regression tests.
+     * The legacy GCM AAD deliberately omits metadataAuthVersion=1.
+     */
+    private fun createLegacyUnsignedHeader(
+        authenticatedHeader: VaultHeaderV2,
+        password: String,
+        dek: ByteArray
+    ): VaultHeaderV2 {
+        val random = SecureRandom()
+        val salt = ByteArray(16).also(random::nextBytes)
+        val iv = ByteArray(12).also(random::nextBytes)
+        val legacyBase = authenticatedHeader.copy(
+            saltBase64 = Base64.encodeToString(salt, Base64.NO_WRAP),
+            ivBase64 = Base64.encodeToString(iv, Base64.NO_WRAP),
+            encryptedDekBase64 = "",
+            metadataAuthVersion = 0,
+            metadataAuthBase64 = null
+        )
+        val passwordBytes = password.toByteArray(Charsets.UTF_8)
+        val kek = ByteArray(32)
+        var ciphertext: ByteArray? = null
+        try {
+            val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
+                .withVersion(Argon2Parameters.ARGON2_VERSION_13)
+                .withIterations(legacyBase.argon2Iterations)
+                .withMemoryAsKB(legacyBase.argon2MemoryKb)
+                .withParallelism(1)
+                .withSalt(salt)
+                .build()
+            Argon2BytesGenerator().apply { init(params) }
+                .generateBytes(passwordBytes, kek, 0, kek.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(
+                Cipher.ENCRYPT_MODE,
+                SecretKeySpec(kek, "AES"),
+                GCMParameterSpec(legacyBase.tagLengthBits, iv)
+            )
+            val aad = listOf(
+                "myDocAnizer-VaultHeader-v2",
+                "version=${legacyBase.version}",
+                "algorithmId=${legacyBase.algorithmId}",
+                "vaultId=${legacyBase.vaultId}",
+                "createdAt=${legacyBase.createdAt}",
+                "argon2Iterations=${legacyBase.argon2Iterations}",
+                "argon2MemoryKb=${legacyBase.argon2MemoryKb}",
+                "saltBase64=${legacyBase.saltBase64}",
+                "tagLengthBits=${legacyBase.tagLengthBits}",
+                "securityTier=${legacyBase.securityTier}",
+                "factorType=${legacyBase.factorType}",
+                "autoLockMinutes=${legacyBase.autoLockMinutes}"
+            ).joinToString("|").toByteArray(Charsets.UTF_8)
+            try {
+                cipher.updateAAD(aad)
+                val encrypted = cipher.doFinal(dek)
+                ciphertext = encrypted
+                return legacyBase.copy(
+                    encryptedDekBase64 = Base64.encodeToString(encrypted, Base64.NO_WRAP)
+                )
+            } finally {
+                aad.fill(0)
+            }
+        } finally {
+            passwordBytes.fill(0)
+            kek.fill(0)
+            salt.fill(0)
+            iv.fill(0)
+            ciphertext?.fill(0)
+        }
     }
 
     @Test
