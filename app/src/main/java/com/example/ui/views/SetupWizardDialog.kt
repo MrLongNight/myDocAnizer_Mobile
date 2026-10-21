@@ -315,8 +315,7 @@ fun SetupWizardDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (WizardStep.fromId(currentStepId) !is WizardStep.SecurityAndBiometrics) {
-                        if (isLastStep && !isManualReconfig) {
+                        if (WizardStep.fromId(currentStepId) !is WizardStep.SecurityAndBiometrics && isLastStep && !isManualReconfig) {
                             OutlinedButton(
                                 onClick = {
                                     if (customPassword.isBlank() && !isUnencryptedMode) {
@@ -351,7 +350,7 @@ fun SetupWizardDialog(
                             }
                         }
 
-                        Button(
+                        if (WizardStep.fromId(currentStepId) !is WizardStep.SecurityAndBiometrics) Button(
                             onClick = {
                                 val currentStepItem = WizardStep.fromId(currentStepId)
                                 if (currentStepItem is WizardStep.SecurityAndBiometrics) {
@@ -414,7 +413,6 @@ fun SetupWizardDialog(
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )
-                        }
                         }
                     }
                 }
