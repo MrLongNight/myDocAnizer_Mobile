@@ -576,8 +576,14 @@ class VaultSecurityManager private constructor(private val context: Context) {
             val ciphertext = Base64.decode(header.encryptedDekByPasswordBase64, Base64.NO_WRAP)
             val iv = Base64.decode(header.passwordDekIvBase64, Base64.NO_WRAP)
             val dek = decryptAesGcm(ciphertext, iv, derivedKek)
-            replaceActiveDek(dek)
-            dek.fill(0)
+            try {
+                replaceActiveDek(dek)
+                // Stage v2 only after a successful v1 unlock. The canonical v1 header remains
+                // untouched until a later migration step can atomically switch all recovery paths.
+                stageVerifiedV2HeaderIfEligible(header, password, dek)
+            } finally {
+                dek.fill(0)
+            }
             true
         } catch (e: Exception) {
             false
@@ -1334,6 +1340,92 @@ class VaultSecurityManager private constructor(private val context: Context) {
             )
         } catch (e: Exception) {
             null
+        }
+    }
+
+    /**
+     * Safely prepares a verified v2 shadow header for simple password-only v1 vaults.
+     *
+     * This deliberately does NOT switch the canonical header: v1 recovery/biometric/keyfile
+     * metadata and their unlock paths must remain available until the complete migration is ready.
+     * The v1 bytes are never modified by this preparatory step.
+     */
+    private fun stageVerifiedV2HeaderIfEligible(
+        legacy: VaultHeader,
+        password: String?,
+        dek: ByteArray
+    ) {
+        if (password.isNullOrEmpty()) return
+        if (legacy.version != 1 ||
+            legacy.securityTier != VaultSecurityTier.ONE_FACTOR ||
+            legacy.factorType != VaultFactorType.PASSWORD ||
+            legacy.recoveryMethod != VaultRecoveryMethod.NONE ||
+            legacy.biometric2FaEnabled ||
+            !legacy.totpSecret.isNullOrBlank() ||
+            !legacy.keyFileTokenHash.isNullOrBlank() ||
+            legacy.hasEmergencyPin ||
+            legacy.encryptedDekByRecoveryBase64 != null ||
+            legacy.shamirShareHashes.isNotEmpty()
+        ) return
+
+        val stagingKey = "vault_header_json_v2_staging"
+        val existing = prefs.getString(stagingKey, null)
+        if (!existing.isNullOrBlank()) {
+            val parsed = VaultHeaderParserV2.parse(existing)
+            if (parsed != null) {
+                val verified = runCatching {
+                    VaultHeaderCryptoV2.unwrapDek(parsed, password.toCharArray()).useBytes { candidate ->
+                        MessageDigest.isEqual(candidate, dek)
+                    }
+                }.getOrDefault(false)
+                if (verified) return
+            }
+            // Invalid/unverifiable staging data is safe to replace; canonical v1 remains intact.
+            prefs.edit().remove(stagingKey).commit()
+        }
+
+        val passwordChars = password.toCharArray()
+        try {
+            val staged = VaultHeaderCryptoV2.createHeader(
+                vaultId = legacy.vaultId,
+                createdAt = legacy.createdAt,
+                password = passwordChars,
+                dek = dek,
+                securityTier = "ONE_FACTOR",
+                factorType = "PASSWORD",
+                autoLockMinutes = legacy.autoLockMinutes,
+                iterations = maxOf(2, legacy.argon2Iterations),
+                memoryKb = maxOf(19456, legacy.argon2MemoryKb)
+            )
+            val raw = staged.toJson()
+            if (!prefs.edit().putString(stagingKey, raw).commit()) return
+
+            val readBack = prefs.getString(stagingKey, null) ?: return
+            val parsed = VaultHeaderParserV2.parse(readBack) ?: run {
+                prefs.edit().remove(stagingKey).commit()
+                return
+            }
+            val verified = runCatching {
+                VaultHeaderCryptoV2.unwrapDek(parsed, passwordChars).useBytes { candidate ->
+                    MessageDigest.isEqual(candidate, dek)
+                }
+            }.getOrDefault(false)
+            if (!verified) {
+                prefs.edit().remove(stagingKey).commit()
+            }
+        } catch (_: Exception) {
+            // Migration preparation is best-effort and must never break a valid v1 unlock.
+            prefs.edit().remove(stagingKey).commit()
+        } finally {
+            passwordChars.fill('\u0000')
+        }
+    }
+
+    private inline fun <T> ByteArray.useBytes(block: (ByteArray) -> T): T {
+        return try {
+            block(this)
+        } finally {
+            fill(0)
         }
     }
 
