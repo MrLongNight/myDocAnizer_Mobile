@@ -494,9 +494,9 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 
 ---
 
-## Einzelstatus – 37 erfasste von 119 Micro-APs
+## Einzelstatus – 40 erfasste von 119 Micro-APs
 
-**Hinweis zur Vollständigkeit:** Die Tabelle bildet 37 protokollierte Einzelstände ab. Weitere 82 im Dokument definierte Micro-APs haben hier noch keinen expliziten Status. Das ist eine Dokumentationslücke, keine Aussage darüber, ob sie bereits umgesetzt wurden.
+**Hinweis zur Vollständigkeit:** Die Tabelle bildet 40 protokollierte Einzelstände ab. Weitere 79 im Dokument definierte Micro-APs haben hier noch keinen expliziten Status. Das ist eine Dokumentationslücke, keine Aussage darüber, ob sie bereits umgesetzt wurden.
 
 
 
@@ -532,7 +532,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | S06 | PATCH ERSTELLT | direkt in main | Ja | AuthenticationBackoffManagerTest laut Statusbericht verifiziert | S07 |
 | S07 | PATCH ERSTELLT | direkt in main | Ja | Screenshot-/Recents-Gerätetest offen | S08 |
 | S08 | GETESTET | direkt in main | Ja | GitHub Actions am 21.10.2026: assembleDebug, testDebugUnitTest und connectedDebugAndroidTest erfolgreich; Emulator API 35/x86_64. Separater Test auf physischem Gerät offen. | S09 |
-| S09 | IN ARBEIT | direkt in main | Ja | Nutzer bestätigt erfolgreichen Build der S09-Änderungen; Instrumentationstests und vollständiger Secret-/Token-Abgleich bleiben offen. | verbleibende S01-Secrets inventarisieren und Instrumentationstest ausführen |
+| S09 | IN ARBEIT | direkt in main | Ja | Nutzer bestätigt erfolgreichen Build und Unit-Testlauf. Die Instrumentationstests zur SecretStore-Migration wurden in der Rückmeldung nicht explizit genannt; Secret-/Token-Abgleich und Migration-Fehlerpfade bleiben offen. | S09-Instrumentation und verbleibende S01-Secrets abgleichen |
 | S10 | GETESTET (Nutzerbestätigung) | direkt in main | Ja | Nutzer bestätigt erfolgreichen Build, `:app:testDebugUnitTest` und App-Start im Streaming-Emulator. Separater `connectedDebugAndroidTest`-Lauf und gezielter Widget-Cold-Start-/Lock-Replay-Test sind nicht ausdrücklich ausgewiesen. | S09-Secret-Inventar abschließen, anschließend D01/D02-Abhängigkeiten prüfen |
 | D01 | AUDIT DOKUMENTIERT | docs/security/document-data-flow.md | Ja | Codepfad-Inventar erstellt; dynamische Geräte-/Share-/Restore-Abnahme bleibt für Folge-APs offen | D02 |
 | D02 | ADR ERSTELLT | docs/security/adr-003-sqlcipher-room-database.md | Ja | SQLCipher for Android 4.19.1 / Room 2.7.0 als technischer Vorschlag; Runtime bleibt bis D03 und DB01–DB04 blockiert | D03 |
