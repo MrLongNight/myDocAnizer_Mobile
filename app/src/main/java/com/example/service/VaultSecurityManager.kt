@@ -104,7 +104,7 @@ enum class VaultFactorType {
  * Persistenter Tresor-Header für Zero-Knowledge Sicherheit.
  */
 data class VaultHeader(
-    val version: Int = 1,
+    val version: Int = 2,
     val vaultId: String,
     val createdAt: Long,
     val argon2SaltBase64: String,
@@ -195,9 +195,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         const val GCM_IV_SIZE_BYTES = 12
         const val GCM_TAG_SIZE_BITS = 128
         const val MAX_QR_PAYLOAD_BYTES = 2000
-        private const val V1_HEADER_PREF_KEY = "vault_header_json_v1"
         private const val V2_ACTIVE_HEADER_PREF_KEY = "vault_header_json_v2_active"
-        private const val V2_STAGING_HEADER_PREF_KEY = "vault_header_json_v2_staging"
         private const val V2_AUTO_LOCK_OVERRIDE_PREF_KEY = "vault_v2_auto_lock_minutes_override"
 
         @Volatile
@@ -211,16 +209,8 @@ class VaultSecurityManager private constructor(private val context: Context) {
     }
 
     init {
-        // Never initialize a replacement vault over persisted-but-unreadable vault material.
-        if (_vaultHeader.value == null && !hasAnyPersistedVaultHeader()) {
-            checkAndMigrateLegacyPassword()
-        }
+        // Startup never migrates data or creates a replacement vault. Initialization is explicit.
     }
-
-    private fun hasAnyPersistedVaultHeader(): Boolean =
-        prefs.contains(V1_HEADER_PREF_KEY) ||
-            prefs.contains(V2_ACTIVE_HEADER_PREF_KEY) ||
-            prefs.contains(V2_STAGING_HEADER_PREF_KEY)
 
     fun isUnencryptedModeEnabled(): Boolean {
         return prefs.getBoolean("unencrypted_mode_enabled", false)
@@ -364,29 +354,30 @@ class VaultSecurityManager private constructor(private val context: Context) {
             setUnencryptedModeEnabled(false)
         }
 
-        // 1. Passwort- oder Keyfile-Schutz via Argon2id
-        val salt = ByteArray(16)
-        secureRandom.nextBytes(salt)
-        
-        // Kombiniere Faktoren für 2-Faktor-Verschlüsselung (Bessere Sicherheit durch echte Entropie-Addition)
-        val combinedSecret = when {
-            masterPassword.isNotBlank() && !keyFileToken.isNullOrBlank() -> {
-                // Bei Passwort + Keyfile kombinieren wir beide für die Schlüsselableitung
-                "$masterPassword:$keyFileToken"
-            }
-            masterPassword.isNotBlank() -> masterPassword
-            !keyFileToken.isNullOrBlank() -> keyFileToken
-            else -> "myDocAnizer-unencrypted-fallback"
-        }
-        
-        val kekPassword = deriveKekArgon2id(combinedSecret, salt)
-        val encryptedPasswordResult = try {
-            encryptAesGcm(dek, kekPassword)
+        // V2 is the only persisted vault format. When enabled, the keyfile participates in
+        // Argon2id derivation. The unencrypted-mode sentinel is also wrapped by V2.
+        val effectivePassword = masterPassword.ifBlank { "myDocAnizer-unencrypted-fallback" }
+        val v2SecurityTier = if (securityTier == VaultSecurityTier.TWO_FACTOR) "TWO_FACTOR" else "ONE_FACTOR"
+        val v2FactorType = if (securityTier == VaultSecurityTier.TWO_FACTOR) "PASSWORD_AND_KEYFILE" else "PASSWORD"
+        val passwordChars = effectivePassword.toCharArray()
+        val keyFileChars = if (v2FactorType == "PASSWORD_AND_KEYFILE") keyFileToken?.toCharArray() else null
+        val v2Header = try {
+            VaultHeaderCryptoV2.createHeader(
+                vaultId = vaultId,
+                createdAt = createdAt,
+                password = passwordChars,
+                dek = dek,
+                securityTier = v2SecurityTier,
+                factorType = v2FactorType,
+                keyFileToken = keyFileChars,
+                autoLockMinutes = autoLockMinutes,
+                iterations = 2,
+                memoryKb = 19456
+            )
         } finally {
-            kekPassword.fill(0)
+            passwordChars.fill('\u0000')
+            keyFileChars?.fill('\u0000')
         }
-        val encryptedDekPassword = encryptedPasswordResult.first
-        val ivPassword = encryptedPasswordResult.second
 
         // 2. Biometrischer 2. Faktor via KeyStore
         var encryptedDekBioBase64: String? = null
@@ -482,14 +473,14 @@ class VaultSecurityManager private constructor(private val context: Context) {
         } else null
 
         val header = VaultHeader(
-            version = 1,
+            version = 2,
             vaultId = vaultId,
             createdAt = createdAt,
-            argon2SaltBase64 = Base64.encodeToString(salt, Base64.NO_WRAP),
-            argon2Iterations = 2,
-            argon2MemoryKb = 19456,
-            encryptedDekByPasswordBase64 = Base64.encodeToString(encryptedDekPassword, Base64.NO_WRAP),
-            passwordDekIvBase64 = Base64.encodeToString(ivPassword, Base64.NO_WRAP),
+            argon2SaltBase64 = v2Header.saltBase64,
+            argon2Iterations = v2Header.argon2Iterations,
+            argon2MemoryKb = v2Header.argon2MemoryKb,
+            encryptedDekByPasswordBase64 = v2Header.encryptedDekBase64,
+            passwordDekIvBase64 = v2Header.ivBase64,
             biometric2FaEnabled = enableBiometrics && encryptedDekBioBase64 != null,
             encryptedDekByBiometricsBase64 = encryptedDekBioBase64,
             biometricDekIvBase64 = ivBioBase64,
@@ -509,6 +500,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             autoLockMinutes = autoLockMinutes
         )
 
+        prefs.edit().remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY).commit()
         saveVaultHeader(header)
         replaceActiveDek(dek)
 
@@ -548,11 +540,11 @@ class VaultSecurityManager private constructor(private val context: Context) {
         totpCode: String? = null
     ): Boolean {
         val header = _vaultHeader.value ?: return false
-        
-        // A newly configured cryptographic two-factor vault must require both factors
-        // before any key derivation. Legacy TOTP vaults retain their compatibility gate below.
-        if (header.securityTier == VaultSecurityTier.TWO_FACTOR && header.factorType == VaultFactorType.PASSWORD_AND_KEYFILE) {
-            if (password.isNullOrBlank() || keyFileToken?.matches(Regex("[A-Fa-f0-9]{64}")) != true) return false
+        if (header.version != 2 || password.isNullOrBlank()) return false
+
+        if (header.securityTier == VaultSecurityTier.TWO_FACTOR &&
+            header.factorType == VaultFactorType.PASSWORD_AND_KEYFILE) {
+            if (keyFileToken?.matches(Regex("[A-Fa-f0-9]{64}")) != true) return false
             val expectedHash = header.keyFileTokenHash ?: return false
             val tokenBytes = keyFileToken.toByteArray(Charsets.UTF_8)
             val actualHash = try { calculateSha256(tokenBytes) } finally { tokenBytes.fill(0) }
@@ -562,68 +554,17 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 )) return false
         }
 
-        // Legacy TOTP remains an additional compatibility gate for existing headers only.
         if (!header.totpSecret.isNullOrBlank()) {
-            if (totpCode == null || !verifyTotpCode(header.totpSecret, totpCode)) {
-                return false
-            }
-        }
-        
-        // 2. Faktor-Kombination für die KEK-Ableitung
-        val combinedSecret = when {
-            !password.isNullOrBlank() && !keyFileToken.isNullOrBlank() -> "$password:$keyFileToken"
-            !password.isNullOrBlank() -> password
-            !keyFileToken.isNullOrBlank() -> keyFileToken
-            else -> return false
-        }
-        
-        if (header.version >= 2) {
-            val opened = openStoredV2Header(header.vaultId, password, keyFileToken) ?: return false
-            val dek = opened.second
-            return try {
-                promoteStoredV2Header(opened.first)
-                replaceActiveDek(dek)
-                true
-            } finally {
-                dek.fill(0)
-            }
+            if (totpCode == null || !verifyTotpCode(header.totpSecret, totpCode)) return false
         }
 
-        if (canUseV2PasswordHeader(header)) {
-            val opened = openStoredV2Header(header.vaultId, password, keyFileToken)
-            if (opened != null) {
-                val dek = opened.second
-                return try {
-                    promoteStoredV2Header(opened.first)
-                    replaceActiveDek(dek)
-                    true
-                } finally {
-                    dek.fill(0)
-                }
-            }
-        }
-
-        var kek: ByteArray? = null
+        val opened = openStoredV2Header(header.vaultId, password, keyFileToken) ?: return false
+        val dek = opened.second
         return try {
-            val salt = Base64.decode(header.argon2SaltBase64, Base64.NO_WRAP)
-            val derivedKek = deriveKekArgon2id(combinedSecret, salt, header.argon2Iterations, header.argon2MemoryKb)
-            kek = derivedKek
-            val ciphertext = Base64.decode(header.encryptedDekByPasswordBase64, Base64.NO_WRAP)
-            val iv = Base64.decode(header.passwordDekIvBase64, Base64.NO_WRAP)
-            val dek = decryptAesGcm(ciphertext, iv, derivedKek)
-            try {
-                replaceActiveDek(dek)
-                // Stage v2 only after a successful v1 unlock. The canonical v1 header remains
-                // untouched until a later migration step can atomically switch all recovery paths.
-                stageVerifiedV2HeaderIfEligible(header, password, dek)
-            } finally {
-                dek.fill(0)
-            }
+            replaceActiveDek(dek)
             true
-        } catch (e: Exception) {
-            false
         } finally {
-            kek?.fill(0)
+            dek.fill(0)
         }
     }
 
@@ -733,64 +674,75 @@ class VaultSecurityManager private constructor(private val context: Context) {
      * Ändert das Master-Passwort und verschlüsselt den bestehenden DEK neu (Zero-Knowledge Re-Encryption).
      */
     fun changeMasterPassword(oldPassword: String, newPassword: String): Boolean {
+        if (newPassword.isBlank()) return false
         val header = _vaultHeader.value ?: return false
-        if (header.version >= 2) {
-            // V2-only vaults have no legacy fallback, so authenticate and rotate V2 in-place.
-            if (!unlockWithPassword(oldPassword)) return false
-            return changeV2Password(newPassword)
-        }
-        if (!isUnlocked() && !unlockWithPassword(oldPassword)) return false
-        return try {
-            withUnlockedKey { dek ->
-                val newSalt = ByteArray(16)
-                secureRandom.nextBytes(newSalt)
-                val newKek = deriveKekArgon2id(newPassword, newSalt, header.argon2Iterations, header.argon2MemoryKb)
-                val encryptedResult = try {
-                    encryptAesGcm(dek, newKek)
-                } finally {
-                    newKek.fill(0)
-                }
-                val updatedHeader = header.copy(
-                    argon2SaltBase64 = Base64.encodeToString(newSalt, Base64.NO_WRAP),
-                    encryptedDekByPasswordBase64 = Base64.encodeToString(encryptedResult.first, Base64.NO_WRAP),
-                    passwordDekIvBase64 = Base64.encodeToString(encryptedResult.second, Base64.NO_WRAP)
-                )
-                saveVaultHeader(updatedHeader)
-                stageVerifiedV2HeaderIfEligible(updatedHeader, newPassword, dek)
-                true
-            } ?: false
-        } catch (e: Exception) {
-            false
-        }
+        if (header.version != 2) return false
+        if (!unlockWithPassword(oldPassword)) return false
+        return changeV2Password(newPassword)
     }
 
     /**
      * Setzt ein neues Master-Passwort nach erfolgreicher Rekonstruktion des DEK über eine Notfallmethode.
      */
     fun resetPasswordWithRecoveredDek(newPassword: String, recoveredDek: ByteArray): Boolean {
-        val header = _vaultHeader.value ?: return false
-        if (header.version >= 2) return false
+        val current = _vaultHeader.value ?: return false
+        if (current.version != 2 || current.securityTier == VaultSecurityTier.TWO_FACTOR ||
+            newPassword.isBlank() || recoveredDek.size != DEK_SIZE_BYTES) return false
         return try {
-            val newSalt = ByteArray(16)
-            secureRandom.nextBytes(newSalt)
-            val newKek = deriveKekArgon2id(newPassword, newSalt, header.argon2Iterations, header.argon2MemoryKb)
-            val newEncryptedResult = try {
-                encryptAesGcm(recoveredDek, newKek)
+            val parsed = VaultHeaderParserV2.parse(prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null))
+                ?.takeIf { it.vaultId == current.vaultId && it.securityTier == "ONE_FACTOR" && it.factorType == "PASSWORD" }
+                ?: return false
+            val passwordChars = newPassword.toCharArray()
+            val updated = try {
+                VaultHeaderCryptoV2.createHeader(
+                    vaultId = parsed.vaultId,
+                    createdAt = parsed.createdAt,
+                    password = passwordChars,
+                    dek = recoveredDek,
+                    securityTier = "ONE_FACTOR",
+                    factorType = "PASSWORD",
+                    autoLockMinutes = current.autoLockMinutes,
+                    iterations = parsed.argon2Iterations,
+                    memoryKb = parsed.argon2MemoryKb
+                ).copy(
+                    domainSecurityTier = parsed.domainSecurityTier,
+                    domainFactorType = parsed.domainFactorType,
+                    biometric2FaEnabled = parsed.biometric2FaEnabled,
+                    encryptedDekByBiometricsBase64 = parsed.encryptedDekByBiometricsBase64,
+                    biometricDekIvBase64 = parsed.biometricDekIvBase64,
+                    recoveryMethod = parsed.recoveryMethod,
+                    encryptedDekByRecoveryBase64 = parsed.encryptedDekByRecoveryBase64,
+                    recoveryDekIvBase64 = parsed.recoveryDekIvBase64,
+                    recoverySaltBase64 = parsed.recoverySaltBase64,
+                    emergencyPdfChecksum = parsed.emergencyPdfChecksum,
+                    shamirShareHashes = parsed.shamirShareHashes,
+                    hasEmergencyPin = parsed.hasEmergencyPin,
+                    emergencyPinSaltBase64 = parsed.emergencyPinSaltBase64,
+                    totpSecret = parsed.totpSecret,
+                    keyFileTokenHash = parsed.keyFileTokenHash,
+                    recoveryCodeHash = parsed.recoveryCodeHash
+                )
             } finally {
-                newKek.fill(0)
+                passwordChars.fill('\u0000')
             }
-            val newEncryptedDek = newEncryptedResult.first
-            val newIv = newEncryptedResult.second
-
-            val updatedHeader = header.copy(
-                argon2SaltBase64 = Base64.encodeToString(newSalt, Base64.NO_WRAP),
-                encryptedDekByPasswordBase64 = Base64.encodeToString(newEncryptedDek, Base64.NO_WRAP),
-                passwordDekIvBase64 = Base64.encodeToString(newIv, Base64.NO_WRAP)
+            val committed = prefs.edit()
+                .putString(V2_ACTIVE_HEADER_PREF_KEY, updated.toJson())
+                .remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY)
+                .commit()
+            if (!committed) return false
+            val projection = current.copy(
+                argon2SaltBase64 = updated.saltBase64,
+                argon2Iterations = updated.argon2Iterations,
+                argon2MemoryKb = updated.argon2MemoryKb,
+                encryptedDekByPasswordBase64 = updated.encryptedDekBase64,
+                passwordDekIvBase64 = updated.ivBase64,
+                autoLockMinutes = updated.autoLockMinutes
             )
-            saveVaultHeader(updatedHeader)
+            _vaultHeader.value = projection
+            _vaultStatus.value = computeStatus(projection)
             replaceActiveDek(recoveredDek)
             true
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -800,7 +752,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
      */
     fun setBiometricsEnabled(enabled: Boolean): Boolean {
         val header = _vaultHeader.value ?: return false
-        if (header.version >= 2) return !enabled && !header.biometric2FaEnabled
+        if (header.version != 2) return false
         if (enabled) {
             // Enabling requires a user-authenticated Cipher and must use the explicit enrollment flow.
             return false
@@ -1298,63 +1250,63 @@ class VaultSecurityManager private constructor(private val context: Context) {
     // =========================================================================
 
     private fun saveVaultHeader(header: VaultHeader) {
-        val json = JSONObject()
-        json.put("version", header.version)
-        json.put("vaultId", header.vaultId)
-        json.put("createdAt", header.createdAt)
-        json.put("argon2Salt", header.argon2SaltBase64)
-        json.put("argon2Iterations", header.argon2Iterations)
-        json.put("argon2MemoryKb", header.argon2MemoryKb)
-        json.put("encDekPassword", header.encryptedDekByPasswordBase64)
-        json.put("ivPassword", header.passwordDekIvBase64)
-        json.put("biometric2Fa", header.biometric2FaEnabled)
-        header.encryptedDekByBiometricsBase64?.let { json.put("encDekBio", it) }
-        header.biometricDekIvBase64?.let { json.put("ivBio", it) }
-        json.put("recoveryMethod", header.recoveryMethod.name)
-        header.encryptedDekByRecoveryBase64?.let { json.put("encDekRecovery", it) }
-        header.recoveryDekIvBase64?.let { json.put("ivRecovery", it) }
-        header.recoverySaltBase64?.let { json.put("saltRecovery", it) }
-        header.emergencyPdfChecksum?.let { json.put("pdfChecksum", it) }
-        if (header.shamirShareHashes.isNotEmpty()) {
-            val arr = JSONArray()
-            header.shamirShareHashes.forEach { arr.put(it) }
-            json.put("shamirHashes", arr)
-        }
-        json.put("hasEmergencyPin", header.hasEmergencyPin)
-        header.emergencyPinSaltBase64?.let { json.put("emergencyPinSalt", it) }
-        json.put("securityTier", header.securityTier.name)
-        json.put("factorType", header.factorType.name)
-        header.totpSecret?.let { json.put("totpSecret", it) }
-        header.keyFileTokenHash?.let { json.put("keyFileTokenHash", it) }
-        header.recoveryCodeHash?.let { json.put("recoveryCodeHash", it) }
-        json.put("autoLockMinutes", header.autoLockMinutes)
-
-        check(header.version == 1) { "V2 headers must be persisted by a v2-aware operation" }
-        val committed = prefs.edit()
-            .putString(V1_HEADER_PREF_KEY, json.toString())
-            // V1 writes are authoritative until dual-write migrations are explicit. Remove V2
-            // shadows in the same transaction so a stale password/DEK wrapper cannot survive.
-            .remove(V2_ACTIVE_HEADER_PREF_KEY)
-            .remove(V2_STAGING_HEADER_PREF_KEY)
-            .remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY)
-            .commit()
-        check(committed) { "Unable to persist vault header" }
+        check(header.version == 2) { "Only V2 vault headers may be persisted" }
+        val currentParsed = VaultHeaderParserV2.parse(prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null))
+        val currentForVault = currentParsed?.takeIf { it.vaultId == header.vaultId }
+        val coreTier = currentForVault?.securityTier
+            ?: if (header.securityTier == VaultSecurityTier.TWO_FACTOR) "TWO_FACTOR" else "ONE_FACTOR"
+        val coreFactor = currentForVault?.factorType
+            ?: if (coreTier == "TWO_FACTOR") "PASSWORD_AND_KEYFILE" else "PASSWORD"
+        // autoLockMinutes is bound in V2 AAD; preserve it when only updating feature metadata.
+        val authenticatedAutoLock = currentForVault?.autoLockMinutes ?: header.autoLockMinutes
+        val v2 = VaultHeaderV2(
+            version = 2,
+            algorithmId = "AES-256-GCM-Argon2id",
+            vaultId = header.vaultId,
+            createdAt = header.createdAt,
+            argon2Iterations = header.argon2Iterations,
+            argon2MemoryKb = header.argon2MemoryKb,
+            saltBase64 = header.argon2SaltBase64,
+            ivBase64 = header.passwordDekIvBase64,
+            tagLengthBits = 128,
+            encryptedDekBase64 = header.encryptedDekByPasswordBase64,
+            securityTier = coreTier,
+            factorType = coreFactor,
+            autoLockMinutes = authenticatedAutoLock,
+            domainSecurityTier = header.securityTier.name,
+            domainFactorType = header.factorType.name,
+            biometric2FaEnabled = header.biometric2FaEnabled,
+            encryptedDekByBiometricsBase64 = header.encryptedDekByBiometricsBase64,
+            biometricDekIvBase64 = header.biometricDekIvBase64,
+            recoveryMethod = header.recoveryMethod.name,
+            encryptedDekByRecoveryBase64 = header.encryptedDekByRecoveryBase64,
+            recoveryDekIvBase64 = header.recoveryDekIvBase64,
+            recoverySaltBase64 = header.recoverySaltBase64,
+            emergencyPdfChecksum = header.emergencyPdfChecksum,
+            shamirShareHashes = header.shamirShareHashes,
+            hasEmergencyPin = header.hasEmergencyPin,
+            emergencyPinSaltBase64 = header.emergencyPinSaltBase64,
+            totpSecret = header.totpSecret,
+            keyFileTokenHash = header.keyFileTokenHash,
+            recoveryCodeHash = header.recoveryCodeHash
+        )
+        val serialized = v2.toJson()
+        check(VaultHeaderParserV2.parse(serialized) != null) { "Refusing to persist an invalid V2 vault header" }
+        val editor = prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, serialized)
+        if (currentForVault == null) editor.remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY)
+        check(editor.commit()) { "Unable to persist V2 vault header" }
         _vaultHeader.value = header
         _vaultStatus.value = computeStatus(header)
     }
 
     private fun loadVaultHeader(): VaultHeader? {
-        val rawV1 = prefs.getString(V1_HEADER_PREF_KEY, null)
-        val legacy = if (!rawV1.isNullOrBlank()) parseLegacyVaultHeader(rawV1) else null
-        if (legacy != null) return legacy
-
-        // V2 is a runtime source only for the narrow password-only format. If V1 is missing or
-        // unreadable, a validated V2 header must still allow the existing vault to be unlocked.
-        val rawV2 = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null)
-            ?: prefs.getString(V2_STAGING_HEADER_PREF_KEY, null)
-        val v2 = VaultHeaderParserV2.parse(rawV2) ?: return null
-        if (v2.securityTier != "ONE_FACTOR" || v2.factorType != "PASSWORD") return null
-
+        val v2 = VaultHeaderParserV2.parse(prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null)) ?: return null
+        val domainTier = runCatching { VaultSecurityTier.valueOf(v2.domainSecurityTier) }
+            .getOrDefault(if (v2.securityTier == "TWO_FACTOR") VaultSecurityTier.TWO_FACTOR else VaultSecurityTier.ONE_FACTOR)
+        val domainFactor = runCatching { VaultFactorType.valueOf(v2.domainFactorType) }
+            .getOrDefault(if (v2.factorType == "PASSWORD_AND_KEYFILE") VaultFactorType.PASSWORD_AND_KEYFILE else VaultFactorType.PASSWORD)
+        val recovery = runCatching { VaultRecoveryMethod.valueOf(v2.recoveryMethod) }
+            .getOrDefault(VaultRecoveryMethod.NONE)
         return VaultHeader(
             version = 2,
             vaultId = v2.vaultId,
@@ -1364,203 +1316,50 @@ class VaultSecurityManager private constructor(private val context: Context) {
             argon2MemoryKb = v2.argon2MemoryKb,
             encryptedDekByPasswordBase64 = v2.encryptedDekBase64,
             passwordDekIvBase64 = v2.ivBase64,
-            recoveryMethod = VaultRecoveryMethod.NONE,
-            securityTier = VaultSecurityTier.ONE_FACTOR,
-            factorType = VaultFactorType.PASSWORD,
+            biometric2FaEnabled = v2.biometric2FaEnabled,
+            encryptedDekByBiometricsBase64 = v2.encryptedDekByBiometricsBase64,
+            biometricDekIvBase64 = v2.biometricDekIvBase64,
+            recoveryMethod = recovery,
+            encryptedDekByRecoveryBase64 = v2.encryptedDekByRecoveryBase64,
+            recoveryDekIvBase64 = v2.recoveryDekIvBase64,
+            recoverySaltBase64 = v2.recoverySaltBase64,
+            emergencyPdfChecksum = v2.emergencyPdfChecksum,
+            shamirShareHashes = v2.shamirShareHashes,
+            hasEmergencyPin = v2.hasEmergencyPin,
+            emergencyPinSaltBase64 = v2.emergencyPinSaltBase64,
+            securityTier = domainTier,
+            factorType = domainFactor,
+            totpSecret = v2.totpSecret,
+            keyFileTokenHash = v2.keyFileTokenHash,
+            recoveryCodeHash = v2.recoveryCodeHash,
             autoLockMinutes = prefs.getInt(V2_AUTO_LOCK_OVERRIDE_PREF_KEY, v2.autoLockMinutes).coerceIn(0, 1440)
         )
     }
-
-    private fun parseLegacyVaultHeader(raw: String): VaultHeader? = try {
-        val json = JSONObject(raw)
-        val hashes = mutableListOf<String>()
-        val arr = json.optJSONArray("shamirHashes")
-        if (arr != null) {
-            for (i in 0 until arr.length()) hashes.add(arr.getString(i))
-        }
-        VaultHeader(
-            version = json.optInt("version", 1),
-            vaultId = json.getString("vaultId"),
-            createdAt = json.getLong("createdAt"),
-            argon2SaltBase64 = json.getString("argon2Salt"),
-            argon2Iterations = json.optInt("argon2Iterations", 2),
-            argon2MemoryKb = json.optInt("argon2MemoryKb", 16384),
-            encryptedDekByPasswordBase64 = json.getString("encDekPassword"),
-            passwordDekIvBase64 = json.getString("ivPassword"),
-            biometric2FaEnabled = json.optBoolean("biometric2Fa", false),
-            encryptedDekByBiometricsBase64 = json.optString("encDekBio").ifBlank { null },
-            biometricDekIvBase64 = json.optString("ivBio").ifBlank { null },
-            recoveryMethod = try {
-                VaultRecoveryMethod.valueOf(json.optString("recoveryMethod", VaultRecoveryMethod.NONE.name))
-            } catch (e: Exception) {
-                VaultRecoveryMethod.NONE
-            },
-            encryptedDekByRecoveryBase64 = json.optString("encDekRecovery").ifBlank { null },
-            recoveryDekIvBase64 = json.optString("ivRecovery").ifBlank { null },
-            recoverySaltBase64 = json.optString("saltRecovery").ifBlank { null },
-            emergencyPdfChecksum = json.optString("pdfChecksum").ifBlank { null },
-            shamirShareHashes = hashes,
-            hasEmergencyPin = json.optBoolean("hasEmergencyPin", false),
-            emergencyPinSaltBase64 = json.optString("emergencyPinSalt").ifBlank { null },
-            securityTier = try {
-                VaultSecurityTier.valueOf(json.optString("securityTier", VaultSecurityTier.ONE_FACTOR.name))
-            } catch (e: Exception) {
-                VaultSecurityTier.ONE_FACTOR
-            },
-            factorType = try {
-                VaultFactorType.valueOf(json.optString("factorType", VaultFactorType.PASSWORD.name))
-            } catch (e: Exception) {
-                VaultFactorType.PASSWORD
-            },
-            totpSecret = json.optString("totpSecret").ifBlank { null },
-            keyFileTokenHash = json.optString("keyFileTokenHash").ifBlank { null },
-            recoveryCodeHash = json.optString("recoveryCodeHash").ifBlank { null },
-            autoLockMinutes = json.optInt("autoLockMinutes", 5)
-        )
-    } catch (e: Exception) {
-        null
-    }
-
-    /**
-     * Creates and activates a verified v2 runtime header only for simple password-only v1 vaults.
-     * The legacy v1 record remains byte-for-byte intact as a rollback source.
-     */
-    private fun stageVerifiedV2HeaderIfEligible(
-        legacy: VaultHeader,
-        password: String?,
-        dek: ByteArray
-    ) {
-        if (legacy.version != 1 || password.isNullOrEmpty() || !canUseV2PasswordHeader(legacy)) return
-
-        fun matches(raw: String?): Boolean {
-            val parsed = VaultHeaderParserV2.parse(raw) ?: return false
-            if (parsed.vaultId != legacy.vaultId) return false
-            val passwordChars = password.toCharArray()
-            return try {
-                VaultHeaderCryptoV2.unwrapDek(parsed, passwordChars).useBytes { candidate ->
-                    MessageDigest.isEqual(candidate, dek)
-                }
-            } catch (_: Exception) {
-                false
-            } finally {
-                passwordChars.fill('\u0000')
-            }
-        }
-
-        val active = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null)
-        if (matches(active)) {
-            prefs.edit().remove(V2_STAGING_HEADER_PREF_KEY).commit()
-            return
-        }
-        val staging = prefs.getString(V2_STAGING_HEADER_PREF_KEY, null)
-        if (matches(staging)) {
-            // A previously verified staging value may have survived a process death before promotion.
-            prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, staging)
-                .remove(V2_STAGING_HEADER_PREF_KEY).commit()
-            return
-        }
-
-        // If existing v2 data cannot be tied to the unlocked v1 DEK, discard it and rebuild from
-        // the verified legacy key. Never replace the canonical v1 value in this operation.
-        prefs.edit().remove(V2_ACTIVE_HEADER_PREF_KEY)
-            .remove(V2_STAGING_HEADER_PREF_KEY).commit()
-
-        val passwordChars = password.toCharArray()
-        try {
-            val staged = VaultHeaderCryptoV2.createHeader(
-                vaultId = legacy.vaultId,
-                createdAt = legacy.createdAt,
-                password = passwordChars,
-                dek = dek,
-                securityTier = "ONE_FACTOR",
-                factorType = "PASSWORD",
-                autoLockMinutes = legacy.autoLockMinutes,
-                iterations = maxOf(2, legacy.argon2Iterations),
-                memoryKb = maxOf(19456, legacy.argon2MemoryKb)
-            )
-            val raw = staged.toJson()
-            if (!prefs.edit().putString(V2_STAGING_HEADER_PREF_KEY, raw).commit()) return
-
-            val readBack = prefs.getString(V2_STAGING_HEADER_PREF_KEY, null) ?: return
-            val parsed = VaultHeaderParserV2.parse(readBack) ?: run {
-                prefs.edit().remove(V2_STAGING_HEADER_PREF_KEY).commit()
-                return
-            }
-            val verified = runCatching {
-                VaultHeaderCryptoV2.unwrapDek(parsed, passwordChars).useBytes { candidate ->
-                    MessageDigest.isEqual(candidate, dek)
-                }
-            }.getOrDefault(false)
-            if (!verified) {
-                prefs.edit().remove(V2_STAGING_HEADER_PREF_KEY).commit()
-                return
-            }
-
-            // Promotion is a single SharedPreferences transaction. If it fails, the checked staging
-            // value remains available for a later unlock attempt; V1 continues to work regardless.
-            prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, readBack)
-                .remove(V2_STAGING_HEADER_PREF_KEY).commit()
-        } catch (_: Exception) {
-            // V2 is an optional migration path; it must never break a valid v1 unlock.
-            prefs.edit().remove(V2_STAGING_HEADER_PREF_KEY).commit()
-        } finally {
-            passwordChars.fill('\u0000')
-        }
-    }
-
-    private fun canUseV2PasswordHeader(header: VaultHeader): Boolean =
-        header.version in 1..2 &&
-            header.securityTier == VaultSecurityTier.ONE_FACTOR &&
-            header.factorType == VaultFactorType.PASSWORD &&
-            header.recoveryMethod == VaultRecoveryMethod.NONE &&
-            !header.biometric2FaEnabled &&
-            header.totpSecret.isNullOrBlank() &&
-            header.keyFileTokenHash.isNullOrBlank() &&
-            !header.hasEmergencyPin &&
-            header.encryptedDekByRecoveryBase64 == null &&
-            header.recoveryDekIvBase64 == null &&
-            header.recoverySaltBase64 == null &&
-            header.emergencyPdfChecksum.isNullOrBlank() &&
-            header.emergencyPinSaltBase64.isNullOrBlank() &&
-            header.recoveryCodeHash.isNullOrBlank() &&
-            header.shamirShareHashes.isEmpty()
 
     private fun openStoredV2Header(
         expectedVaultId: String,
         password: String?,
         keyFileToken: String?
     ): Pair<String, ByteArray>? {
-        if (password.isNullOrBlank() || keyFileToken != null) return null
+        if (password.isNullOrBlank()) return null
         val passwordChars = password.toCharArray()
+        val keyFileChars = keyFileToken?.toCharArray()
         try {
-            val candidates = listOfNotNull(
-                prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null),
-                prefs.getString(V2_STAGING_HEADER_PREF_KEY, null)
-            ).distinct()
-            for (raw in candidates) {
-                val parsed = VaultHeaderParserV2.parse(raw) ?: continue
-                if (parsed.vaultId != expectedVaultId ||
-                    parsed.securityTier != "ONE_FACTOR" ||
-                    parsed.factorType != "PASSWORD") continue
-                val dek = runCatching {
-                    VaultHeaderCryptoV2.unwrapDek(parsed, passwordChars)
-                }.getOrNull() ?: continue
-                if (dek.size == DEK_SIZE_BYTES) return raw to dek
-                dek.fill(0)
-            }
+            val raw = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null) ?: return null
+            val parsed = VaultHeaderParserV2.parse(raw) ?: return null
+            if (parsed.vaultId != expectedVaultId) return null
+            val expectedTier = if (parsed.domainSecurityTier == "TWO_FACTOR") "TWO_FACTOR" else "ONE_FACTOR"
+            val expectedFactor = if (expectedTier == "TWO_FACTOR") "PASSWORD_AND_KEYFILE" else "PASSWORD"
+            if (parsed.securityTier != expectedTier || parsed.factorType != expectedFactor) return null
+            val dek = runCatching { VaultHeaderCryptoV2.unwrapDek(parsed, passwordChars, keyFileChars) }.getOrNull()
+                ?: return null
+            if (dek.size == DEK_SIZE_BYTES) return raw to dek
+            dek.fill(0)
             return null
         } finally {
             passwordChars.fill('\u0000')
+            keyFileChars?.fill('\u0000')
         }
-    }
-
-    private fun promoteStoredV2Header(raw: String) {
-        if (prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null) == raw) {
-            prefs.edit().remove(V2_STAGING_HEADER_PREF_KEY).commit()
-            return
-        }
-        prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, raw)
-            .remove(V2_STAGING_HEADER_PREF_KEY).commit()
     }
 
     private fun changeV2Password(newPassword: String): Boolean {
@@ -1569,7 +1368,6 @@ class VaultSecurityManager private constructor(private val context: Context) {
         return try {
             withUnlockedKey { dek ->
                 val rawCurrent = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null)
-                    ?: prefs.getString(V2_STAGING_HEADER_PREF_KEY, null)
                     ?: return@withUnlockedKey false
                 val parsed = VaultHeaderParserV2.parse(rawCurrent) ?: return@withUnlockedKey false
                 if (parsed.vaultId != currentHeader.vaultId ||
@@ -1583,15 +1381,31 @@ class VaultSecurityManager private constructor(private val context: Context) {
                         createdAt = parsed.createdAt,
                         password = passwordChars,
                         dek = dek,
-                        securityTier = "ONE_FACTOR",
-                        factorType = "PASSWORD",
+                        securityTier = parsed.securityTier,
+                        factorType = parsed.factorType,
                         autoLockMinutes = currentHeader.autoLockMinutes,
                         iterations = parsed.argon2Iterations,
                         memoryKb = parsed.argon2MemoryKb
+                    ).copy(
+                        domainSecurityTier = parsed.domainSecurityTier,
+                        domainFactorType = parsed.domainFactorType,
+                        biometric2FaEnabled = parsed.biometric2FaEnabled,
+                        encryptedDekByBiometricsBase64 = parsed.encryptedDekByBiometricsBase64,
+                        biometricDekIvBase64 = parsed.biometricDekIvBase64,
+                        recoveryMethod = parsed.recoveryMethod,
+                        encryptedDekByRecoveryBase64 = parsed.encryptedDekByRecoveryBase64,
+                        recoveryDekIvBase64 = parsed.recoveryDekIvBase64,
+                        recoverySaltBase64 = parsed.recoverySaltBase64,
+                        emergencyPdfChecksum = parsed.emergencyPdfChecksum,
+                        shamirShareHashes = parsed.shamirShareHashes,
+                        hasEmergencyPin = parsed.hasEmergencyPin,
+                        emergencyPinSaltBase64 = parsed.emergencyPinSaltBase64,
+                        totpSecret = parsed.totpSecret,
+                        keyFileTokenHash = parsed.keyFileTokenHash,
+                        recoveryCodeHash = parsed.recoveryCodeHash
                     )
                     val committed = prefs.edit()
                         .putString(V2_ACTIVE_HEADER_PREF_KEY, updatedV2.toJson())
-                        .remove(V2_STAGING_HEADER_PREF_KEY)
                         .remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY)
                         .commit()
                     if (!committed) return@withUnlockedKey false
@@ -1622,20 +1436,6 @@ class VaultSecurityManager private constructor(private val context: Context) {
             block(this)
         } finally {
             fill(0)
-        }
-    }
-
-    private fun checkAndMigrateLegacyPassword() {
-        val legacyPrefs = context.getSharedPreferences("mydocanizer_prefs", Context.MODE_PRIVATE)
-        val legacyPass = legacyPrefs.getString("sync_master_password", null)
-        val legacyBio = legacyPrefs.getBoolean("biometric_auth_enabled", false)
-
-        if (!legacyPass.isNullOrBlank()) {
-            initializeVault(
-                masterPassword = legacyPass,
-                enableBiometrics = legacyBio,
-                recoveryMethod = VaultRecoveryMethod.EMERGENCY_PDF
-            )
         }
     }
 

@@ -71,16 +71,16 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 
 # V – Tresor, Schlüsselableitung und Recovery
 
-## V01 – Vault-Krypto-Inventar und v1-Fixtures (AUDIT/TEST) — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
-**Prompt:** Inventarisiere ausschließlich die aktuelle Vault-Krypto: `VaultHeader`, v1-Serialisierung, Salt/KDF-Parameter, KEK/DEK-Verpackung, Unlock-/Biometriepfade, Recovery, `activeDek` und alle Aufrufer. Lege – ohne produktive Logik zu ändern – synthetische Test-Fixtures für mindestens einen gültigen v1-Header, falsches Passwort und manipulierte Daten an. Dokumentiere das genaue Altformat, damit Kompatibilität später testbar ist. Gib keine echten Schlüssel aus. **Abnahme:** Tests/Fixtures reproduzieren das bestehende Format; keine Formatmigration und kein Entfernen von Altcode in diesem Schritt.
+## V01 – V2-only Vault-Krypto-Inventar und Negativtests
+**Prompt:** Inventarisiere ausschließlich den V2-Header, die V2-Argon2id-/AEAD-Ableitung, Unlock-/Recovery-Pfade, Biometrie, Keyfile/2FA, TOTP, `activeDek` und alle Aufrufer. Keine V1-Fixtures, V1-Deserialisierung, V1-Rückfalllogik oder Migration. Lege synthetische V2-Tests für falsches Passwort, ungültige Header und manipulierte verschlüsselte DEK-Daten an. **Abnahme:** nur V2 wird gelesen und geschrieben; ungültige/alte Formate scheitern geschlossen.
 
 ## V02 – Geprüfte Argon2id-Implementierung — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Abhängigkeit:** V01.  
-**Prompt:** Ersetze ausschließlich die bisherige Argon2id-Engine durch eine gepflegte, versionsfixierte Bibliotheksimplementierung (z. B. geprüfte Bouncy-Castle-API, nach Kompatibilitätsprüfung). Behalte zunächst die exakt benötigte v1-Ableitung als klar getrennten Legacypfad, sofern sie für Entsperrung alter Vaults erforderlich ist. Für neue Parameter gilt mindestens `m=19 MiB`, `t=2`, `p=1`; Einheiten und API-Semantik verifizieren. Begrenze/validiere Parameter vor der speicherintensiven Ableitung und schütze vor parallelen RAM-Spitzen. Füge bekannte Referenzvektor-Tests hinzu. **Nicht tun:** Headerformat oder Migration ändern. **Abnahme:** Legacy-Fixture bleibt lesbar; korrekte Referenzvektoren; ungültige/überzogene Parameter werden früh abgelehnt.
+**Prompt:** Verwende ausschließlich die versionsfixierte Argon2id-Implementierung im V2-Pfad. Für V2 gelten mindestens `m=19 MiB`, `t=2`, `p=1`; Einheiten und API-Semantik verifizieren. Begrenze/validiere Parameter vor der speicherintensiven Ableitung und schütze vor parallelen RAM-Spitzen. Füge bekannte Referenzvektoren und Negativtests hinzu. Entferne Alt-Ableitungspfade, die nur dem alten Header dienten. **Abnahme:** korrekte Referenzvektoren; ungültige/überzogene Parameter werden früh abgelehnt; kein V1-KDF-Pfad bleibt in der Tresorlogik.
 
 ## V03 – VaultHeader v2: Datenmodell und Parser — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Abhängigkeit:** V01, V02.  
-**Prompt:** Entwirf und implementiere nur die typisierte v2-Headerstruktur samt strengem Parser/Validator. Speichere explizit Formatversion, KDF-/Algorithmus-ID, Parameter, Salt, IV/Nonce- und Taglängen sowie Vault-ID mit klar definierten Obergrenzen. Unbekannte Versionen, abgeschnittene Daten, unmögliche Längen und ungültige Parameter müssen abgewiesen werden. Bestehende v1-Daten weiter nur lesend unterstützen. Noch keine automatische v1→v2-Migration und keine Änderung an Biometrie oder TOTP. **Abnahme:** Roundtrip-Tests für v2, Negativtests für manipulierte/ungültige Header und Regressionstest für v1.
+**Prompt:** V2 ist das einzige unterstützte persistierte Vault-Format. Der typisierte Header samt strengem Parser/Validator muss Formatversion, KDF-/Algorithmus-ID, Parameter, Salt, IV/Nonce- und Taglängen, Vault-ID sowie Recovery-/Biometrie-/Faktor-Metadaten validieren. Unbekannte Versionen, abgeschnittene Daten, unmögliche Längen und ungültige Parameter müssen abgewiesen werden. Der Parser darf keine V1-Daten lesen oder rückwärtskompatible Defaults dafür einsetzen. **Abnahme:** V2-Roundtrips und Negativtests; keine V1-Referenztests oder V1-Lesepfade.
 
 ## V04 – Header-Authentifizierung und AAD — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
 **Abhängigkeit:** V03.  
@@ -123,9 +123,9 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## V13 – Biometrie und Keystore getrennt absichern
 **Abhängigkeit:** V04 und optionaler Faktorpfad V05–V06B.  
 **Prompt:** Prüfe und sichere den Biometrie-/Keystore-Pfad: Biometrie ist eine lokale Freigabemethode, nicht automatisch ein portabler Wiederherstellungsschlüssel. Der DEK darf nur über den dokumentierten Gatekeeper freigegeben werden; aktivierte Zwei-Faktor-Regeln dürfen nicht durch Biometrie, Service/API-Aufruf oder UI-Callback umgangen werden. Gerätewechsel und Keystore-Invalidierung müssen einen getesteten Recovery-Pfad verwenden. **Abnahme:** Instrumentationstests für Biometrie, Ablehnung, Key-Invalidierung, Neustart und optional aktivierte 2FA.
-## V14 – Atomare v1→v2-Headermigration — **[BLOCKIERT – V2-LAUFZEITINTEGRATION FEHLT]**
-**Abhängigkeit:** V02–V04 und vorhandenes v1-Fixture aus V01.  
-**Prompt:** Implementiere ausschließlich die Header-Migration. Lies v1 mit der alten, kompatiblen Ableitung, prüfe erfolgreichen Unlock, verpacke denselben DEK in v2 und schreibe v2 zunächst atomar in eine temporäre Datei/Transaktion. Lies den neuen Header erneut ein und prüfe ihn kryptografisch, bevor das Original ersetzt wird. Bei jedem Fehler bleibt v1 unverändert; keine automatische Neuinitialisierung und kein Datenverlust. Lege erzwungene Fehlerpfade im Test fest. **Abnahme:** Erfolgs- und Rollback-Test mit v1-Fixture, Idempotenz und Nachweis, dass falsches Passwort den Originalheader nicht ändert.
+## V14 – V2-only Laufzeit und vollständige Entfernung von V1
+**Abhängigkeit:** V02–V04 und V07–V13.
+**Prompt:** V2 ist das einzige Persistenz- und Laufzeitformat. Ersteinrichtung, Entsperren, Passwortwechsel, Biometrie, Keyfile/2FA, TOTP und Recovery müssen V2 verwenden. Entferne vollständig V1-Header, -Serialisierung, -Parser, -KDF-/Unlockpfade, Rückfalllogik, V1-Fixtures/-Tests und jede Staging-/Promotionslogik für eine Migration. Keine V1-Migration durchführen, vorbereiten oder als Fallback beibehalten. Alte V1-Daten werden nicht übernommen und dürfen vom Code nicht als Tresor erkannt werden. Beschädigte V2-Header müssen geschlossen fehlschlagen und dürfen nicht stillschweigend überschrieben oder als entsperrt behandelt werden. **Abnahme:** keine V1-Codepfade; V2-Funktionstests und vollständiger Build/Testlauf bestehen.
 
 ## V15 – Backup-Regeln für Vault-Secrets
 **Prompt:** Prüfe Manifest-Backupregeln, Auto Backup, Device Transfer und alle Android-Backup-/Exportpfade. Schlüssel, Einstellungen im Klartext, TOTP-Secrets, Recovery-Secrets, Access-/Refresh-Tokens und Klartextdokumente dürfen nicht unbeabsichtigt in Systembackups gelangen. Nutzerinitiierte verschlüsselte Backupcontainer bleiben unterstützt. **Abnahme:** XML-/Manifest- und Backup-Regressionsprüfungen belegen, dass nur freigegebene verschlüsselte Artefakte aufgenommen werden.
@@ -517,7 +517,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | V12 | PATCH ERSTELLT | direkt in main | Ja | PDF-Regressionstest ergänzt; explizites Notfalldokument und Geräterestore abzunehmen | V12B/V13 |
 | V12B | NICHT GESTARTET | – | Nein | Unauffällige Druckvariante erstellen | V12 |
 | V13 | PATCH ERSTELLT | direkt in main | Ja | CryptoObject-Instrumented-Test ergänzt; Gerätetest offen | V14 |
-| V14 | IN ARBEIT | VaultSecurityManager.kt | Ja | Begrenzter V2-Runtimepfad für Passwort-only-Vaults; V1 bleibt als Rückfall erhalten | Recovery-/Biometrie-/2FA-Abdeckung, vollständiger Rollback und spätere V1-Ablösung |
+| V14 | IN ARBEIT | VaultSecurityManager.kt, VaultHeaderV2.kt | Ja | V2-only Laufzeit; keine V1-Migration oder Rückfalllogik | CI-Build/Testlauf und Repository-Suche nach V1-Restpfaden |
 | V15 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; weitere AP-Abnahme separat prüfen | S01 |
 | V16 | NICHT GESTARTET | – | Nein | Passkey muss echte Wiederherstellung ermöglichen | V09/V10 |
 | V17 | NICHT GESTARTET | – | Nein | Sicherheitsfragen nur zusätzlicher, begrenzt starker Faktor | V10/V16 |

@@ -20,7 +20,23 @@ data class VaultHeaderV2(
     val encryptedDekBase64: String,
     val securityTier: String = "ONE_FACTOR",
     val factorType: String = "PASSWORD",
-    val autoLockMinutes: Int = 5
+    val autoLockMinutes: Int = 5,
+    val domainSecurityTier: String = securityTier,
+    val domainFactorType: String = factorType,
+    val biometric2FaEnabled: Boolean = false,
+    val encryptedDekByBiometricsBase64: String? = null,
+    val biometricDekIvBase64: String? = null,
+    val recoveryMethod: String = "NONE",
+    val encryptedDekByRecoveryBase64: String? = null,
+    val recoveryDekIvBase64: String? = null,
+    val recoverySaltBase64: String? = null,
+    val emergencyPdfChecksum: String? = null,
+    val shamirShareHashes: List<String> = emptyList(),
+    val hasEmergencyPin: Boolean = false,
+    val emergencyPinSaltBase64: String? = null,
+    val totpSecret: String? = null,
+    val keyFileTokenHash: String? = null,
+    val recoveryCodeHash: String? = null
 ) {
     fun toJson(): String {
         return JSONObject().apply {
@@ -37,6 +53,22 @@ data class VaultHeaderV2(
             put("securityTier", securityTier)
             put("factorType", factorType)
             put("autoLockMinutes", autoLockMinutes)
+            put("domainSecurityTier", domainSecurityTier)
+            put("domainFactorType", domainFactorType)
+            put("biometric2FaEnabled", biometric2FaEnabled)
+            encryptedDekByBiometricsBase64?.let { put("encryptedDekByBiometricsBase64", it) }
+            biometricDekIvBase64?.let { put("biometricDekIvBase64", it) }
+            put("recoveryMethod", recoveryMethod)
+            encryptedDekByRecoveryBase64?.let { put("encryptedDekByRecoveryBase64", it) }
+            recoveryDekIvBase64?.let { put("recoveryDekIvBase64", it) }
+            recoverySaltBase64?.let { put("recoverySaltBase64", it) }
+            emergencyPdfChecksum?.let { put("emergencyPdfChecksum", it) }
+            put("shamirShareHashes", org.json.JSONArray().apply { shamirShareHashes.forEach { put(it) } })
+            put("hasEmergencyPin", hasEmergencyPin)
+            emergencyPinSaltBase64?.let { put("emergencyPinSaltBase64", it) }
+            totpSecret?.let { put("totpSecret", it) }
+            keyFileTokenHash?.let { put("keyFileTokenHash", it) }
+            recoveryCodeHash?.let { put("recoveryCodeHash", it) }
         }.toString()
     }
 }
@@ -118,6 +150,47 @@ object VaultHeaderParserV2 {
             val autoLockMinutes = json.optInt("autoLockMinutes", 5)
             if (autoLockMinutes < 0 || autoLockMinutes > 1440) return null
 
+            val domainSecurityTier = json.optString("domainSecurityTier", securityTier)
+            if (domainSecurityTier !in setOf("UNENCRYPTED", "ONE_FACTOR", "TWO_FACTOR")) return null
+            val domainFactorType = json.optString("domainFactorType", factorType)
+            if (domainFactorType !in setOf("NONE", "PASSWORD", "KEYFILE", "PASSWORD_AND_KEYFILE", "PASSWORD_AND_TOTP", "PASSKEY")) return null
+            val recoveryMethod = json.optString("recoveryMethod", "NONE")
+            if (recoveryMethod !in setOf("NONE", "BIP39_WORDS", "EMERGENCY_PDF", "SHAMIR_2_OF_3", "RECOVERY_CODE")) return null
+            if (domainSecurityTier == "TWO_FACTOR" && domainFactorType != "PASSWORD_AND_KEYFILE") return null
+            val shares = json.optJSONArray("shamirShareHashes")
+            val shareHashes = mutableListOf<String>()
+            if (shares != null) {
+                if (shares.length() > 3) return null
+                for (index in 0 until shares.length()) {
+                    val hash = shares.optString(index, "")
+                    if (!hash.matches(Regex("[a-fA-F0-9]{64}"))) return null
+                    shareHashes.add(hash)
+                }
+            }
+            fun optionalString(name: String): String? =
+                json.optString(name, "").takeIf { it.isNotBlank() && it != "null" }
+            fun extensionHasSize(name: String, expected: Int): Boolean {
+                val value = optionalString(name) ?: return true
+                val decoded = runCatching { Base64.decode(value, Base64.NO_WRAP) }.getOrNull() ?: return false
+                return decoded.size == expected
+            }
+
+            val encryptedBiometric = optionalString("encryptedDekByBiometricsBase64")
+            val biometricIv = optionalString("biometricDekIvBase64")
+            if ((encryptedBiometric == null) != (biometricIv == null)) return null
+            if (!extensionHasSize("encryptedDekByBiometricsBase64", 48) ||
+                !extensionHasSize("biometricDekIvBase64", 12)) return null
+            val encryptedRecovery = optionalString("encryptedDekByRecoveryBase64")
+            val recoveryIv = optionalString("recoveryDekIvBase64")
+            if ((encryptedRecovery == null) != (recoveryIv == null)) return null
+            if (!extensionHasSize("encryptedDekByRecoveryBase64", 48) ||
+                !extensionHasSize("recoveryDekIvBase64", 12)) return null
+            if (!extensionHasSize("emergencyPinSaltBase64", 16)) return null
+            for (name in listOf("emergencyPdfChecksum", "keyFileTokenHash", "recoveryCodeHash")) {
+                val value = optionalString(name)
+                if (value != null && !value.matches(Regex("[a-fA-F0-9]{64}"))) return null
+            }
+
             VaultHeaderV2(
                 version = version,
                 algorithmId = algorithmId,
@@ -131,7 +204,23 @@ object VaultHeaderParserV2 {
                 encryptedDekBase64 = encryptedDekBase64,
                 securityTier = securityTier,
                 factorType = factorType,
-                autoLockMinutes = autoLockMinutes
+                autoLockMinutes = autoLockMinutes,
+                domainSecurityTier = domainSecurityTier,
+                domainFactorType = domainFactorType,
+                biometric2FaEnabled = json.optBoolean("biometric2FaEnabled", encryptedBiometric != null),
+                encryptedDekByBiometricsBase64 = encryptedBiometric,
+                biometricDekIvBase64 = biometricIv,
+                recoveryMethod = recoveryMethod,
+                encryptedDekByRecoveryBase64 = encryptedRecovery,
+                recoveryDekIvBase64 = recoveryIv,
+                recoverySaltBase64 = optionalString("recoverySaltBase64"),
+                emergencyPdfChecksum = optionalString("emergencyPdfChecksum"),
+                shamirShareHashes = shareHashes,
+                hasEmergencyPin = json.optBoolean("hasEmergencyPin", false),
+                emergencyPinSaltBase64 = optionalString("emergencyPinSaltBase64"),
+                totpSecret = optionalString("totpSecret"),
+                keyFileTokenHash = optionalString("keyFileTokenHash"),
+                recoveryCodeHash = optionalString("recoveryCodeHash")
             )
         } catch (e: Exception) {
             null
