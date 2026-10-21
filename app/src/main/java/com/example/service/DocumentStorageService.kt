@@ -862,8 +862,8 @@ object DocumentStorageService {
             put("id", doc.id)
             put("title", doc.title)
             put("sender", doc.sender)
-            put("fileName", doc.fileName)
-            put("filePath", doc.filePath)
+            // Portable backups must not retain a source-device absolute path.
+            put("fileName", File(doc.fileName).name)
             put("mainCategory", doc.mainCategory)
             put("subCategory", doc.subCategory)
             put("mainCategoryId", doc.mainCategoryId)
@@ -1201,8 +1201,8 @@ object DocumentStorageService {
                         customDashboardWidgets = db.customDashboardWidgetDao().getAllWidgetsList(),
                         rules = ruleRepo.rules.value
                     )
-                } catch (_: Exception) {
-                    null
+                } catch (e: Exception) {
+                    throw IllegalStateException("Tresor-Metadaten konnten nicht vollständig für das Backup gelesen werden.", e)
                 }
             } else {
                 null
@@ -1231,14 +1231,18 @@ object DocumentStorageService {
                 // 3. Dokument-PDFs archivieren (mit eindeutigen Präfixen zur Vermeidung von ZipException Kollisionen)
                 for (doc in docs) {
                     val file = File(doc.filePath)
-                    if (file.exists()) {
-                        val safeName = File(doc.fileName).name
-                        val uniqueArchiveName = "${doc.id}_$safeName"
-                        val entry = ZipEntry("documents/$uniqueArchiveName")
-                        zos.putNextEntry(entry)
-                        file.inputStream().use { it.copyTo(zos) }
-                        zos.closeEntry()
+                    if (!file.isFile) {
+                        throw IOException("Backup abgebrochen: Dokumentdatei fehlt für Dokument-ID ${doc.id}.")
                     }
+                    val safeName = File(doc.fileName).name
+                    if (!isSafeBackupFileName(safeName)) {
+                        throw SecurityException("Backup abgebrochen: Ungültiger Dokumentdateiname für Dokument-ID ${doc.id}.")
+                    }
+                    val uniqueArchiveName = "${doc.id}_$safeName"
+                    val entry = ZipEntry("documents/$uniqueArchiveName")
+                    zos.putNextEntry(entry)
+                    file.inputStream().use { it.copyTo(zos) }
+                    zos.closeEntry()
                 }
             }
 
@@ -1543,6 +1547,36 @@ object DocumentStorageService {
             throw SecurityException("Backup enthält nicht referenzierte Dokumentdateien.")
         }
         return seenArchiveFiles
+    }
+
+    /**
+     * Bounded copy for a user-selected encrypted backup URI. Do not trust provider
+     * metadata or Content-Length; apply the byte budget while streaming the content.
+     */
+    internal fun copyBackupInputBounded(
+        input: java.io.InputStream,
+        output: java.io.OutputStream,
+        maxBytes: Long = MAX_RESTORE_ENCRYPTED_BYTES
+    ): Long {
+        require(maxBytes > 0L) { "Invalid backup input size limit." }
+        val buffer = ByteArray(64 * 1024)
+        var total = 0L
+        try {
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                if (count == 0) continue
+                if (total > maxBytes - count) {
+                    throw SecurityException("Backup-Datei überschreitet das erlaubte Größenlimit.")
+                }
+                output.write(buffer, 0, count)
+                total += count
+            }
+            output.flush()
+            return total
+        } finally {
+            buffer.fill(0)
+        }
     }
 
     private fun readCurrentZipEntryBounded(

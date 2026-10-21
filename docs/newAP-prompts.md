@@ -5,9 +5,9 @@
 | Kennzahl | Aktueller Stand |
 |---|---|
 | Micro-APs insgesamt | **119** |
-| Einzelstatus dokumentiert | **43** |
-| Einzelstatus noch abzugleichen | **76** |
-| Dokumentierte Statusverteilung | 1 abgenommen · 7 getestet · 27 Patch erstellt · 5 nicht gestartet · 1 ADR freigegeben · 1 Audit dokumentiert · 1 ADR erstellt |
+| Einzelstatus dokumentiert | **44** |
+| Einzelstatus noch abzugleichen | **75** |
+| Dokumentierte Statusverteilung | 1 abgenommen · 7 getestet · 28 Patch erstellt · 5 nicht gestartet · 1 ADR freigegeben · 1 Audit dokumentiert · 1 ADR erstellt |
 | Tests | 23 Testklassen inkl. `VaultTwoFactorSecurityTest`; vorhanden heißt nicht automatisch ausgeführt oder bestanden |
 | Build/Tests | GitHub Actions Run `39633700992` auf Commit `d509ebb` erfolgreich: `assembleDebug`, `testDebugUnitTest`, `connectedDebugAndroidTest`, APK-Metadatenprüfung und Artefakt-Upload |
 
@@ -213,7 +213,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## D10 – Vollständig verschlüsselter Backupcontainer für alle Nutzdaten
 **Abhängigkeit:** D03/D04 und SQLCipher-Aufbau aus DB12.  
 **Prompt:** Implementiere versionierten streamenden AEAD-Backupcontainer mit verschlüsselter Datenbank, allen wiederherzustellenden App-Einstellungen, Dokumenten, OCR-/Suchdaten und nötigen nicht gerätegebundenen Recovery-Metadaten. Manifest, Dateinamen und sensible Metadaten innerhalb des Containers verschlüsseln. Keine Klartext-ZIP-/JSON-/Indexzwischenablage. Android-Keystore- und Google-OAuth-Zugangsdaten bleiben gerätegebunden bzw. werden beim Restore neu autorisiert; nicht in den Backupcontainer aufnehmen. **Abnahme:** kompletter Restore in frischer Installation, große Dateien ohne OOM, Integritätsfehler, falscher Schlüssel, abgeschnittener Container und unbekannte Version.
-## D11 – Restore: Archive und Pfade validieren — **[PATCH ERSTELLT – CI OFFEN; INDEX-PREFLIGHT ERGÄNZT]**
+## D11 – Restore: Archive und Pfade validieren — **[PATCH ERSTELLT – CI OFFEN; INDEX-PREFLIGHT UND IMPORTLIMIT ERGÄNZT]**
 **Abhängigkeit:** D10.  
 **Prompt:** Implementiere ausschließlich die Vorabvalidierung beim Restore. Normalisiere Pfade und erzwinge, dass jeder Eintrag kanonisch im Zielverzeichnis verbleibt. Lehne absolute Pfade, `..`, Separatorvarianten, kodierte Traversalversuche, doppelte IDs, übergroße Einträge, zu viele Einträge und unzulässige Kompressionsverhältnisse ab. Daten nicht vor Abschluss der Validierung in die produktive Datenbank übernehmen. **Abnahme:** Zip-Slip-/Zip-Bomb-/Traversal- und Größenbegrenzungstests.
 
@@ -535,7 +535,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | D01 | AUDIT DOKUMENTIERT | docs/security/document-data-flow.md | Ja | Codepfad-Inventar erstellt; dynamische Geräte-/Share-/Restore-Abnahme bleibt für Folge-APs offen | D02 |
 | D02 | ADR ERSTELLT | docs/security/adr-003-sqlcipher-room-database.md | Ja | SQLCipher for Android 4.19.1 / Room 2.7.0 als technischer Vorschlag; Runtime bleibt bis D03 und DB01–DB04 blockiert | D03 || DB03 | PATCH ERSTELLT | AppDatabase.kt / DatabaseDowngradeSafetyTest.kt | Ja | Destruktiven Downgrade-Fallback entfernt; Emulator-Abnahme dieses Commits steht noch aus | DB04 |
 | D13 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; Restore-/Geräteabnahme separat prüfen | D14 |
-| D11 | PATCH ERSTELLT | DocumentStorageService.kt / BackupRestoreArchiveValidationTest.kt | Ja | Größenlimits, Duplikat-/Unexpected-Entry-Prüfung, Pflichtindex und Pfadsegmentprüfung plus Index-Vorprüfung: alle IDs/Dateinamen müssen valide und eindeutig sein, jede referenzierte Datei muss im Archiv liegen, keine nicht referenzierten Dateien; ein im JSON gespeicherter alter Dateipfad wird nicht als Restore-Ziel übernommen. CI offen; atomare DB-/Datei-Wiederherstellung bleibt D12 | D12 |
+| D11 | PATCH ERSTELLT | DocumentStorageService.kt / BackupRestoreArchiveValidationTest.kt | Ja | Größenlimits, Duplikat-/Unexpected-Entry-Prüfung, Pflichtindex, Pfadsegmentprüfung, Index-Vorprüfung und Größenlimit schon beim Import aus einer Content-URI; keine Restore-Fallbacks auf im Backup gespeicherte Gerätepfade. Backup-Erstellung bricht bei fehlenden Dokumenten oder nicht lesbaren Vault-Metadaten ab statt ein unvollständiges Archiv zu markieren. CI offen; atomare DB-/Datei-Wiederherstellung bleibt D12 | D12 |
 | D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | D15 || D15 | NICHT GESTARTET | – | Nein | Alle dauerhaft gespeicherten Einstellungen verschlüsseln | DB/Persistenztests |
 | P01 | PATCH ERSTELLT | direkt in main | Ja | Bestehende Audit-/TLS-ADR dokumentiert; alle drei Verbindungstypen müssen im Code bestätigt werden | Sicherheitsmatrix vor P02 |
 | P10 | PATCH ERSTELLT | direkt in main | Ja | SHA-256-Ersatzschlüssel-Fallback entfernt; P2pSyncSecurityTest laut Statusbericht verifiziert; Aufrufer-Audit separat prüfen | Testlauf und Aufrufer-Audit prüfen |

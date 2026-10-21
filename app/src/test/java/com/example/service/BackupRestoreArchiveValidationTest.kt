@@ -77,4 +77,31 @@ class BackupRestoreArchiveValidationTest {
         }
     }
 
+    @Test
+    fun `user selected backup stream is bounded and copied completely`() {
+        val payload = ByteArray(128 * 1024) { (it % 251).toByte() }
+        val out = java.io.ByteArrayOutputStream()
+        val count = DocumentStorageService.copyBackupInputBounded(
+            java.io.ByteArrayInputStream(payload),
+            out,
+            maxBytes = payload.size.toLong()
+        )
+        org.junit.Assert.assertEquals(payload.size.toLong(), count)
+        org.junit.Assert.assertArrayEquals(payload, out.toByteArray())
+    }
+
+    @Test
+    fun `user selected backup stream aborts when limit is exceeded`() {
+        val payload = ByteArray(1024) { 1 }
+        val out = java.io.ByteArrayOutputStream()
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            DocumentStorageService.copyBackupInputBounded(
+                java.io.ByteArrayInputStream(payload),
+                out,
+                maxBytes = 100
+            )
+        }
+        org.junit.Assert.assertTrue(out.size() <= 100)
+    }
+
 }

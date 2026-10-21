@@ -876,24 +876,25 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         onComplete: (Int, String?) -> Unit
     ) {
         viewModelScope.launch {
+            var tempEncFile: File? = null
             try {
                 val context = getApplication<Application>()
                 val password = passwordOverride?.ifBlank { null } ?: syncPasswordKey.value
-                val tempEncFile = java.io.File(context.cacheDir, "restore_temp_${UUID.randomUUID()}.enc")
-                
+                val restoreInputFile = File(context.cacheDir, "restore_temp_${UUID.randomUUID()}.enc")
+                tempEncFile = restoreInputFile
+
                 context.contentResolver.openInputStream(sourceUri)?.use { input ->
-                    tempEncFile.outputStream().use { output ->
-                        input.copyTo(output)
+                    java.io.FileOutputStream(restoreInputFile).use { output ->
+                        DocumentStorageService.copyBackupInputBounded(input, output)
+                        output.fd.sync()
                     }
                 } ?: throw Exception("Konnte Backup-Datei nicht lesen")
 
-                val result = com.example.service.DocumentStorageService.restoreEncryptedBackupArchive(
+                val result = DocumentStorageService.restoreEncryptedBackupArchive(
                     context = context,
-                    inputEncFile = tempEncFile,
+                    inputEncFile = restoreInputFile,
                     passwordKey = password
                 )
-
-                tempEncFile.delete()
 
                 result.onSuccess { restoredList ->
                     for (doc in restoredList) {
@@ -908,6 +909,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             } catch (e: Exception) {
                 onComplete(0, e.localizedMessage ?: "Fehler bei der Wiederherstellung")
+            } finally {
+                tempEncFile?.let { runCatching { it.delete() } }
             }
         }
     }
