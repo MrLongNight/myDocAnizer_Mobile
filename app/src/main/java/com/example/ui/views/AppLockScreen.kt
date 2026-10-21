@@ -232,7 +232,24 @@ fun AppLockScreen(
             viewModel.authenticateBiometric(
                 activity = activity,
                 onSuccess = { errorMessage = null },
-                onError = { err -> errorMessage = err }
+                onError = { err ->
+                    errorMessage = err
+                    // A configured biometric flag is not proof that the wrapped vault key
+                    // is still usable. If the biometric path fails, try the stored password
+                    // credential before leaving the user at the manual fallback.
+                    if (
+                        !vaultStatus.isUnencryptedMode &&
+                        !vaultStatus.keyFileEnabled &&
+                        !vaultStatus.totpEnabled
+                    ) {
+                        coroutineScope.launch {
+                            retrieveMasterPasswordFromManager(
+                                showErrors = false,
+                                onlyIfAvailable = true
+                            )
+                        }
+                    }
+                }
             )
         } else if (
             activity != null &&
