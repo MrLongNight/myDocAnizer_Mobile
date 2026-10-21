@@ -7,7 +7,7 @@
 | Micro-APs insgesamt | **119** |
 | Einzelstatus dokumentiert | **40** |
 | Einzelstatus noch abzugleichen | **79** |
-| Dokumentierte Statusverteilung | 1 abgenommen · 6 getestet · 24 Patch erstellt · 1 in Arbeit · 5 nicht gestartet · 1 ADR freigegeben · 1 Audit dokumentiert · 1 ADR erstellt |
+| Dokumentierte Statusverteilung | 1 abgenommen · 7 getestet · 24 Patch erstellt · 5 nicht gestartet · 1 ADR freigegeben · 1 Audit dokumentiert · 1 ADR erstellt |
 | Tests | 23 Testklassen inkl. `VaultTwoFactorSecurityTest`; vorhanden heißt nicht automatisch ausgeführt oder bestanden |
 | Build/Tests | GitHub Actions Run `39633700992` auf Commit `d509ebb` erfolgreich: `assembleDebug`, `testDebugUnitTest`, `connectedDebugAndroidTest`, APK-Metadatenprüfung und Artefakt-Upload |
 
@@ -177,7 +177,6 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 **Prompt:** Prüfe die exportierte `MainActivity` sowie Widget-/Intent-Aufrufstellen. Validiere `EXTRA_START_TAB`, `EXTRA_OPEN_ACTION`, URIs und weitere externe Extras gegen feste Whitelists. Während der Vault gesperrt ist, dürfen externe Aktionen höchstens sicher zwischengespeichert und erst nach erfolgreichem Unlock verarbeitet werden. Ungültige Extras ignorieren und nicht später wiederverwenden. **Abnahme:** Tests für gültige, unbekannte, fehlerhafte und während Lock eintreffende Extras; kein Lock-Bypass.
 
 **Umsetzung direkt auf `main`:** `ExternalIntentPolicy.consume()` liest nur unterstützte Navigationswerte aus, verwirft unbekannte Extras und entfernt anschließend alle Extras, `data` und `clipData` aus dem Intent. `MainActivity` konsumiert den Payload **vor** der Lock-/Unlock-Prüfung; bei gesperrtem Zustand bleibt daher kein externer Befehl zur späteren Wiederholung an der Activity hängen. Ein Deep-Link-/URI-Schema wird derzeit nicht unterstützt und wird verworfen. `ExternalIntentPolicyInstrumentedTest` deckt gültige Werte, unbekannte Extras, ungültige Werte, falsch typisierte Boolean-Extras und das Entfernen von URI-/ClipData ab. Der Nutzer bestätigt erfolgreichen Build, `:app:testDebugUnitTest` und App-Start im Streaming-Emulator. Ein separater `connectedDebugAndroidTest`-Lauf sowie ein gezielter Widget-Cold-Start-/Lock-Replay-Test wurden in der Rückmeldung nicht ausdrücklich benannt und bleiben als spezifische Abnahme offen.
-
 ---
 
 # D – Dokumentdateien, Index, Backup und Restore
@@ -357,7 +356,6 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## C09 – Cloud-End-to-End-Tests
 **Abhängigkeit:** C02–C08, jeweils nur für ausgewählte Provider.  
 **Prompt:** Ergänze echte Worker-/Provider-Integrationstests für Upload, Resume, 401, 429/Retry-After, 5xx, Offline/Netzwechsel, falschen Hash, gesperrten Vault, fehlende Konfiguration, Abbruch und Prozessneustart. Markiere nicht verfügbare Live-OAuth-/Providerprüfungen klar als offen. **Abnahme:** Testprotokoll trennt Mock-, WorkManager-, Integration- und reale Providerprüfung.
-
 ---
 
 # DB – Room, FTS, Migrationen und Finanzbeträge
@@ -505,7 +503,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | Micro-AP | Status | Patch-Datei | Lokal übernommen | Lokale Tests | Nächster Schritt |
 |---|---|---|---|---|---|
 | M00 | ABGENOMMEN | micro-ap-M00.patch | Ja | Bestanden | V01 |
-| V01 | IN ARBEIT | VaultSecurityManager.kt, VaultV2OnlyTest.kt | Ja | Initialisierung ändert den Unencrypted-Modus erst nach dauerhaftem V2-Header-Commit; Regressionstest für fehlgeschlagene Neuinitialisierung ergänzt, CI offen | CI grün; anschließend V01–V04 als Gesamtbasis abgleichen |
+| V01 | GETESTET (CI) | VaultSecurityManager.kt, VaultV2OnlyTest.kt | Ja | GitHub Actions Run [39644923474](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39644923474) erfolgreich: Debug-APK-Build, Android-Instrumentierungstests und Artefaktprüfung; Regressionstest für fehlgeschlagene Neuinitialisierung enthalten. `pre-commit.ci` meldet separat einen Fehler; dessen Ursache ist nicht durch den erfolgreichen Android-Workflow abgedeckt. | V01–V04 als gemeinsame Sicherheitsbasis abgleichen; pre-commit-Befund separat klären |
 | V02 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V03 |
 | V03 | GETESTET (CI) | VaultHeaderV2.kt, VaultHeaderV2Test.kt, VaultV2OnlyTest.kt | Ja | Parser-, Recovery- und Faktor-Negativtests einschließlich Pflichtfeld-/Typvalidierung liefen in GitHub Actions Run `39633700992` erfolgreich; staged crypto headers bleiben parsebar. Gesamt-Abnahme V01–V04 weiterhin separat abgleichen | V04 / Gesamt-Abnahme V01–V04 |
 | V04 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V05 |
@@ -537,8 +535,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | S09 | IN ARBEIT | direkt in main | Ja | GitHub Actions für Commit `1d593056` erfolgreich: Build, Unit-Tests und connectedDebugAndroidTest. Secret-/Token-Abgleich, physischer Gerätetest und Migration-Fehlerpfade bleiben offen. | S09-Instrumentation und verbleibende S01-Secrets abgleichen |
 | S10 | GETESTET (Nutzerbestätigung) | direkt in main | Ja | Nutzer bestätigt erfolgreichen Build, `:app:testDebugUnitTest` und App-Start im Streaming-Emulator. Separater `connectedDebugAndroidTest`-Lauf und gezielter Widget-Cold-Start-/Lock-Replay-Test sind nicht ausdrücklich ausgewiesen. | S09-Secret-Inventar abschließen, anschließend D01/D02-Abhängigkeiten prüfen |
 | D01 | AUDIT DOKUMENTIERT | docs/security/document-data-flow.md | Ja | Codepfad-Inventar erstellt; dynamische Geräte-/Share-/Restore-Abnahme bleibt für Folge-APs offen | D02 |
-| D02 | ADR ERSTELLT | docs/security/adr-003-sqlcipher-room-database.md | Ja | SQLCipher for Android 4.19.1 / Room 2.7.0 als technischer Vorschlag; Runtime bleibt bis D03 und DB01–DB04 blockiert | D03 |
-| DB03 | PATCH ERSTELLT | AppDatabase.kt / DatabaseDowngradeSafetyTest.kt | Ja | Destruktiven Downgrade-Fallback entfernt; Emulator-Abnahme dieses Commits steht noch aus | DB04 |
+| D02 | ADR ERSTELLT | docs/security/adr-003-sqlcipher-room-database.md | Ja | SQLCipher for Android 4.19.1 / Room 2.7.0 als technischer Vorschlag; Runtime bleibt bis D03 und DB01–DB04 blockiert | D03 || DB03 | PATCH ERSTELLT | AppDatabase.kt / DatabaseDowngradeSafetyTest.kt | Ja | Destruktiven Downgrade-Fallback entfernt; Emulator-Abnahme dieses Commits steht noch aus | DB04 |
 | D13 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; Restore-/Geräteabnahme separat prüfen | D14 |
 | D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | D15 |
 | D15 | NICHT GESTARTET | – | Nein | Alle dauerhaft gespeicherten Einstellungen verschlüsseln | DB/Persistenztests |
