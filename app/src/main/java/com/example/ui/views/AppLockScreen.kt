@@ -261,11 +261,11 @@ fun AppLockScreen(
             !vaultStatus.keyFileEnabled &&
             !vaultStatus.totpEnabled
         ) {
-            // Also probe the password manager when biometric unlock is configured
-            // but the device can no longer offer a usable biometric prompt.
+            // Biometric unlock cannot run in this branch, so request the saved
+            // password directly instead of silently returning when preflight finds no candidate.
             retrieveMasterPasswordFromManager(
                 showErrors = false,
-                onlyIfAvailable = true
+                onlyIfAvailable = false
             )
         }
     }
