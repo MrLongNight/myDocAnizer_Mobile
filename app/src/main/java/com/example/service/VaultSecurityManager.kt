@@ -336,6 +336,12 @@ class VaultSecurityManager private constructor(private val context: Context) {
         recoveryCode: String? = null,
         autoLockMinutes: Int = 5
     ): VaultSetupResult {
+        require(factorType != VaultFactorType.PASSWORD_AND_TOTP) {
+            "TOTP ist kein unterstützter Tresor-Faktor. Verwende für Zwei-Faktor-Absicherung Passwort und Schlüsseldatei."
+        }
+        require(totpSecret.isNullOrBlank()) {
+            "TOTP-Secrets dürfen nicht im Tresor-Header gespeichert werden."
+        }
         if (securityTier == VaultSecurityTier.TWO_FACTOR) {
             require(factorType == VaultFactorType.PASSWORD_AND_KEYFILE) {
                 "Die Zwei-Faktor-Verschlüsselung erfordert Passwort und Schlüsseldatei. TOTP ist kein kryptografischer zweiter Faktor."
@@ -502,7 +508,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             emergencyPinSaltBase64 = pinSaltBase64,
             securityTier = securityTier,
             factorType = factorType,
-            totpSecret = totpSecret,
+            totpSecret = null,
             keyFileTokenHash = keyTokenHash,
             recoveryCodeHash = recCodeHash,
             autoLockMinutes = autoLockMinutes
@@ -517,7 +523,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             dek = dek,
             bip39Words = effectiveBip39Words,
             shamirShares = generatedShamirShares,
-            totpSecret = totpSecret,
+            totpSecret = null,
             keyFileToken = keyFileToken,
             recoveryCode = effectiveRecoveryCode
         )
@@ -527,9 +533,10 @@ class VaultSecurityManager private constructor(private val context: Context) {
      * Entsperrt den Tresor mit dem Master-Passwort und lädt den DEK in den RAM.
      */
     /**
-     * Entsperrt den Tresor mit den gewählten Faktoren (Passwort, Schlüsseldatei, TOTP).
-     * Unterstützt Zero-Knowledge 1-Faktor und 2-Faktor Authentifizierung.
+     * Entsperrt mit Passwort oder mit Passwort plus Schlüsseldatei.
+     * TOTP wird nicht als Tresor-Faktor akzeptiert oder geprüft.
      */
+    @Suppress("UNUSED_PARAMETER")
     @Synchronized
     fun unlockVault(
         password: String? = null,
@@ -537,15 +544,14 @@ class VaultSecurityManager private constructor(private val context: Context) {
         totpCode: String? = null
     ): Boolean {
         if (!authenticationBackoff.isAllowed()) return false
-        val result = unlockVaultUnchecked(password, keyFileToken, totpCode)
+        val result = unlockVaultUnchecked(password, keyFileToken)
         authenticationBackoff.recordResult(result)
         return result
     }
 
     private fun unlockVaultUnchecked(
         password: String? = null,
-        keyFileToken: String? = null,
-        totpCode: String? = null
+        keyFileToken: String? = null
     ): Boolean {
         val header = _vaultHeader.value ?: return false
         if (header.version != 2 || password.isNullOrBlank()) return false
@@ -562,9 +568,8 @@ class VaultSecurityManager private constructor(private val context: Context) {
                 )) return false
         }
 
-        if (!header.totpSecret.isNullOrBlank()) {
-            if (totpCode == null || !verifyTotpCode(header.totpSecret, totpCode)) return false
-        }
+        // Legacy TOTP metadata is scrubbed when the header is loaded. Only the password
+        // wrapper or password+keyfile wrapper controls cryptographic DEK release.
 
         val opened = openStoredV2Header(header.vaultId, password, keyFileToken) ?: return false
         val dek = opened.second
@@ -726,7 +731,6 @@ class VaultSecurityManager private constructor(private val context: Context) {
                     shamirShareHashes = parsed.shamirShareHashes,
                     hasEmergencyPin = parsed.hasEmergencyPin,
                     emergencyPinSaltBase64 = parsed.emergencyPinSaltBase64,
-                    totpSecret = parsed.totpSecret,
                     keyFileTokenHash = parsed.keyFileTokenHash,
                     recoveryCodeHash = parsed.recoveryCodeHash
                 )
@@ -1294,7 +1298,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             shamirShareHashes = header.shamirShareHashes,
             hasEmergencyPin = header.hasEmergencyPin,
             emergencyPinSaltBase64 = header.emergencyPinSaltBase64,
-            totpSecret = header.totpSecret,
+            totpSecret = null,
             keyFileTokenHash = header.keyFileTokenHash,
             recoveryCodeHash = header.recoveryCodeHash
         )
@@ -1303,15 +1307,29 @@ class VaultSecurityManager private constructor(private val context: Context) {
         val editor = prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, serialized)
         if (currentForVault == null) editor.remove(V2_AUTO_LOCK_OVERRIDE_PREF_KEY)
         check(editor.commit()) { "Unable to persist V2 vault header" }
-        _vaultHeader.value = header
-        _vaultStatus.value = computeStatus(header)
+        val sanitizedHeader = header.copy(totpSecret = null)
+        _vaultHeader.value = sanitizedHeader
+        _vaultStatus.value = computeStatus(sanitizedHeader)
     }
 
     private fun loadVaultHeader(): VaultHeader? {
-        val v2 = VaultHeaderParserV2.parse(prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null)) ?: return null
+        val rawHeader = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null) ?: return null
+        val parsedV2 = VaultHeaderParserV2.parse(rawHeader) ?: return null
         // A staged crypto header may exist before the manager adds the token hash, but a
         // persisted active two-factor vault must never load without that verifier.
-        if (v2.securityTier == "TWO_FACTOR" && v2.keyFileTokenHash.isNullOrBlank()) return null
+        if (parsedV2.securityTier == "TWO_FACTOR" && parsedV2.keyFileTokenHash.isNullOrBlank()) return null
+
+        // Historical builds could persist a TOTP shared secret beside the V2 wrapper in
+        // plaintext. Remove that legacy field without changing the authenticated key wrapper.
+        val hasLegacyTotpField = runCatching { org.json.JSONObject(rawHeader).has("totpSecret") }
+            .getOrDefault(false)
+        val v2 = if (hasLegacyTotpField || !parsedV2.totpSecret.isNullOrBlank()) {
+            val sanitizedJson = runCatching {
+                org.json.JSONObject(rawHeader).apply { remove("totpSecret") }.toString()
+            }.getOrNull() ?: return null
+            if (!prefs.edit().putString(V2_ACTIVE_HEADER_PREF_KEY, sanitizedJson).commit()) return null
+            parsedV2.copy(totpSecret = null)
+        } else parsedV2
         val domainTier = runCatching { VaultSecurityTier.valueOf(v2.domainSecurityTier) }
             .getOrDefault(if (v2.securityTier == "TWO_FACTOR") VaultSecurityTier.TWO_FACTOR else VaultSecurityTier.ONE_FACTOR)
         val domainFactor = runCatching { VaultFactorType.valueOf(v2.domainFactorType) }
@@ -1340,7 +1358,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
             emergencyPinSaltBase64 = v2.emergencyPinSaltBase64,
             securityTier = domainTier,
             factorType = domainFactor,
-            totpSecret = v2.totpSecret,
+            totpSecret = null,
             keyFileTokenHash = v2.keyFileTokenHash,
             recoveryCodeHash = v2.recoveryCodeHash,
             autoLockMinutes = prefs.getInt(V2_AUTO_LOCK_OVERRIDE_PREF_KEY, v2.autoLockMinutes).coerceIn(0, 1440)
@@ -1411,8 +1429,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
                         shamirShareHashes = parsed.shamirShareHashes,
                         hasEmergencyPin = parsed.hasEmergencyPin,
                         emergencyPinSaltBase64 = parsed.emergencyPinSaltBase64,
-                        totpSecret = parsed.totpSecret,
-                        keyFileTokenHash = parsed.keyFileTokenHash,
+                            keyFileTokenHash = parsed.keyFileTokenHash,
                         recoveryCodeHash = parsed.recoveryCodeHash
                     )
                     val committed = prefs.edit()
