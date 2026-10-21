@@ -355,6 +355,7 @@ fun SetupWizardDialog(
                         }
 
                         if (WizardStep.fromId(currentStepId) !is WizardStep.SecurityAndBiometrics) {
+                            Button(
                                 onClick = {
                                     val currentStepItem = WizardStep.fromId(currentStepId)
                                     if (currentStepItem is WizardStep.SecurityAndBiometrics) {
@@ -379,7 +380,7 @@ fun SetupWizardDialog(
                                         viewModel.setSyncPasswordKey(customPassword)
                                         viewModel.setBiometricAuthEnabled(biometricEnabled)
                                         viewModel.setAutoCloudSyncEnabled(autoCloudSyncEnabled)
-    
+
                                         viewModel.updateCloudSyncConfig(
                                             cloudSyncConfig.copy(
                                                 enableGoogleDrive = enableDrive,
@@ -395,7 +396,7 @@ fun SetupWizardDialog(
                                                 syncTarget = if (enableDrive && enableNas) "HYBRID_ALL" else if (enableNas) "WEBDAV_NAS" else if (enableDrive) "GOOGLE_DRIVE" else if (enableManualUsb) "MANUAL_USB" else "OFFLINE_ONLY"
                                             )
                                         )
-    
+
                                         if (!isManualReconfig) {
                                             viewModel.setWizardCompleted(true)
                                         }
