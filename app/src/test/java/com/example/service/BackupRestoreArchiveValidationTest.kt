@@ -34,4 +34,47 @@ class BackupRestoreArchiveValidationTest {
         assertFalse(DocumentStorageService.isSafeBackupDocumentEntryName("vault_metadata.json"))
         assertFalse(DocumentStorageService.isSafeBackupDocumentEntryName("documents/bad\u0000name.pdf"))
     }
+    @Test
+    fun `document index must only reference safe staged archive files`() {
+        val valid = org.json.JSONArray()
+            .put(org.json.JSONObject().put("id", 123L).put("fileName", "invoice.pdf.enc"))
+        assertTrue(
+            DocumentStorageService.validateBackupDocumentIndex(
+                valid,
+                setOf("123_invoice.pdf.enc")
+            ).contains("123_invoice.pdf.enc")
+        )
+
+        val missing = org.json.JSONArray()
+            .put(org.json.JSONObject().put("id", 123L).put("fileName", "missing.pdf.enc"))
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            DocumentStorageService.validateBackupDocumentIndex(missing, emptySet())
+        }
+
+        val externalPath = org.json.JSONArray()
+            .put(org.json.JSONObject().put("id", 123L).put("fileName", "../outside.pdf"))
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            DocumentStorageService.validateBackupDocumentIndex(externalPath, setOf("123_outside.pdf"))
+        }
+
+        val duplicateIds = org.json.JSONArray()
+            .put(org.json.JSONObject().put("id", 123L).put("fileName", "first.pdf"))
+            .put(org.json.JSONObject().put("id", 123L).put("fileName", "second.pdf"))
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            DocumentStorageService.validateBackupDocumentIndex(
+                duplicateIds,
+                setOf("123_first.pdf", "123_second.pdf")
+            )
+        }
+
+        val orphan = org.json.JSONArray()
+            .put(org.json.JSONObject().put("id", 123L).put("fileName", "invoice.pdf.enc"))
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            DocumentStorageService.validateBackupDocumentIndex(
+                orphan,
+                setOf("123_invoice.pdf.enc", "999_unreferenced.pdf.enc")
+            )
+        }
+    }
+
 }

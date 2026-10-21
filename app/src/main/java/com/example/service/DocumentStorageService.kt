@@ -1349,10 +1349,14 @@ object DocumentStorageService {
             if (parsedIndex.length() > MAX_RESTORE_ENTRIES) {
                 throw SecurityException("Zu viele Dokumente im Backup-Index.")
             }
-            for (index in 0 until parsedIndex.length()) {
-                // Validate every entry's JSON type before restoring metadata or files.
-                parsedIndex.getJSONObject(index)
-            }
+            // Resolve every metadata record to an archive-owned staged file before any
+            // database writes or destination-file changes. Never trust filePath from backup JSON.
+            val stagedFileNames = tempExtractDir.listFiles()
+                ?.filter { it.isFile }
+                ?.map { it.name }
+                ?.toSet()
+                ?: emptySet()
+            val referencedArchiveFiles = validateBackupDocumentIndex(parsedIndex, stagedFileNames)
             val metadataToRestore = vaultMetadataJsonString?.let {
                 try { jsonToVaultMetadata(JSONObject(it)) }
                 catch (e: Exception) { throw SecurityException("Tresor-Metadaten im Backup sind ungültig.", e) }
@@ -1387,9 +1391,9 @@ object DocumentStorageService {
                 val array = parsedIndex
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
-                    val id = obj.optLong("id", System.currentTimeMillis() + i)
-                    val rawFileName = obj.optString("fileName", "doc_$id.pdf")
-                    val safeFileName = File(rawFileName).name
+                    val id = obj.getLong("id")
+                    val rawFileName = obj.getString("fileName")
+                    val safeFileName = rawFileName
                     val mainCat = obj.optString("mainCategory", "Allgemein")
                     val subCat = obj.optString("subCategory", "Diverses")
                     val mainCatId = obj.optString("mainCategoryId", "")
@@ -1405,34 +1409,34 @@ object DocumentStorageService {
                     )
 
                     val targetFile = File(targetDir, safeFileName)
-                    val finalDestFile = if (targetFile.exists()) {
-                        File(targetDir, "${id}_$safeFileName")
-                    } else {
-                        targetFile
+                    var finalDestFile = targetFile
+                    var collisionIndex = 0
+                    while (finalDestFile.exists()) {
+                        collisionIndex++
+                        finalDestFile = File(
+                            targetDir,
+                            if (collisionIndex == 1) "${id}_$safeFileName" else "${id}_${collisionIndex}_$safeFileName"
+                        )
                     }
-                    if (!finalDestFile.canonicalPath.startsWith(targetDir.canonicalPath)) {
+                    if (finalDestFile.canonicalFile.parentFile != targetDir.canonicalFile) {
                         throw SecurityException("Ungültiger Zielpfad für Dokument (Zip Slip Schutz).")
                     }
 
-                    // Suche nach der entpackten Datei im tempExtractDir
-                    val candidate1 = File(tempExtractDir, "${id}_$safeFileName")
-                    val candidate2 = File(tempExtractDir, safeFileName)
+                    // Only use files validated as part of this encrypted archive. Existing
+                    // device paths copied inside doc_index.json must never become restore targets.
+                    val prefixedName = "${id}_$safeFileName"
                     val sourceFile = when {
-                        candidate1.exists() -> candidate1
-                        candidate2.exists() -> candidate2
-                        else -> null
+                        prefixedName in referencedArchiveFiles -> File(tempExtractDir, prefixedName)
+                        safeFileName in referencedArchiveFiles -> File(tempExtractDir, safeFileName)
+                        else -> throw SecurityException("Dokumentdatei fehlt im Backup: $safeFileName")
                     }
+                    if (!sourceFile.isFile) {
+                        throw SecurityException("Validierte Dokumentdatei fehlt während der Wiederherstellung.")
+                    }
+                    sourceFile.copyTo(finalDestFile, overwrite = false)
+                    sourceFile.delete()
 
-                    if (sourceFile != null && sourceFile.exists()) {
-                        sourceFile.copyTo(finalDestFile, overwrite = true)
-                        sourceFile.delete()
-                    }
-
-                    val resolvedPath = if (finalDestFile.exists()) {
-                        finalDestFile.absolutePath
-                    } else {
-                        obj.optString("filePath", finalDestFile.absolutePath)
-                    }
+                    val resolvedPath = finalDestFile.absolutePath
 
                     val docEntity = DocumentEntity(
                         id = id,
@@ -1491,6 +1495,54 @@ object DocumentStorageService {
         val child = entryName.substringAfter("documents/", missingDelimiterValue = "")
         return child.isNotBlank() && child != "." && child != ".." &&
             '/' !in child && '\\' !in child
+    }
+
+    internal fun isSafeBackupFileName(fileName: String): Boolean =
+        fileName.isNotBlank() &&
+            fileName.length <= MAX_RESTORE_ENTRY_NAME_CHARS &&
+            fileName != "." && fileName != ".." &&
+            '/' !in fileName && '\\' !in fileName &&
+            fileName.none { it.isISOControl() }
+
+    /**
+     * Preflight the full document index against the files extracted from the archive.
+     * Reject missing files, duplicate IDs/names, and unreferenced binary payloads before
+     * restoring metadata or touching any destination directory.
+     */
+    internal fun validateBackupDocumentIndex(index: JSONArray, stagedFileNames: Set<String>): Set<String> {
+        require(index.length() <= MAX_RESTORE_ENTRIES) { "Zu viele Dokumente im Backup-Index." }
+        val seenIds = HashSet<Long>()
+        val seenArchiveFiles = LinkedHashSet<String>()
+
+        for (indexNumber in 0 until index.length()) {
+            val obj = index.optJSONObject(indexNumber)
+                ?: throw SecurityException("Ungültiger Dokumenteintrag im Backup-Index.")
+            val rawId = obj.opt("id")
+            val id = (rawId as? Number)?.toString()?.toLongOrNull()
+                ?: throw SecurityException("Ungültige Dokument-ID im Backup-Index.")
+            if (id <= 0L || !seenIds.add(id)) {
+                throw SecurityException("Ungültige oder doppelte Dokument-ID im Backup-Index.")
+            }
+            val fileName = obj.opt("fileName") as? String
+                ?: throw SecurityException("Ungültiger Dateiname im Backup-Index.")
+            if (!isSafeBackupFileName(fileName)) {
+                throw SecurityException("Ungültiger Dateiname im Backup-Index.")
+            }
+
+            val prefixed = "${id}_$fileName"
+            val sourceName = when {
+                prefixed in stagedFileNames -> prefixed
+                fileName in stagedFileNames -> fileName
+                else -> throw SecurityException("Dokumentdatei fehlt im Backup: $fileName")
+            }
+            if (!seenArchiveFiles.add(sourceName)) {
+                throw SecurityException("Mehrere Indexeinträge verweisen auf dieselbe Archivdatei.")
+            }
+        }
+        if (seenArchiveFiles != stagedFileNames) {
+            throw SecurityException("Backup enthält nicht referenzierte Dokumentdateien.")
+        }
+        return seenArchiveFiles
     }
 
     private fun readCurrentZipEntryBounded(
