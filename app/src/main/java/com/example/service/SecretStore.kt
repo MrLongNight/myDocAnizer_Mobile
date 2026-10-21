@@ -23,7 +23,7 @@ class SecretStore(context: Context) {
 
     @Synchronized
     fun put(name: String, secret: ByteArray): Boolean {
-        if (!isValidName(name) || secret.isEmpty()) return false
+        if (!isValidName(name) || secret.isEmpty() || secret.size > MAX_SECRET_BYTES) return false
         return try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
@@ -52,6 +52,8 @@ class SecretStore(context: Context) {
     fun get(name: String): ByteArray? {
         if (!isValidName(name)) return null
         val encoded = prefs.getString(storageKey(name), null) ?: return null
+        // Bound attacker-controlled SharedPreferences data before Base64 allocation.
+        if (encoded.length > MAX_ENCODED_PAYLOAD_CHARS) return null
         var payload: ByteArray? = null
         var ciphertext: ByteArray? = null
         return try {
@@ -127,5 +129,7 @@ class SecretStore(context: Context) {
         private const val GCM_IV_BYTES = 12
         private const val GCM_TAG_BITS = 128
         private const val GCM_TAG_BYTES = GCM_TAG_BITS / 8
+        private const val MAX_SECRET_BYTES = 64 * 1024
+        private const val MAX_ENCODED_PAYLOAD_CHARS = 90_000
     }
 }
