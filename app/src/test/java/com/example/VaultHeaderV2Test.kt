@@ -144,6 +144,23 @@ class VaultHeaderV2Test {
     }
 
     @Test
+    fun `v2 parser rejects integer fields that overflow Int`() {
+        // These values wrap to otherwise valid Int values if optInt() runs before range validation.
+        val overflowingValues = listOf(
+            "version" to 4_294_967_298L,
+            "argon2Iterations" to 4_294_967_298L,
+            "argon2MemoryKb" to 4_294_986_752L,
+            "tagLengthBits" to 4_294_967_424L,
+            "autoLockMinutes" to 4_294_967_301L
+        )
+
+        overflowingValues.forEach { (field, value) ->
+            val json = org.json.JSONObject(createValidV2Header().toJson()).put(field, value)
+            assertNull("Overflowing integer $field must fail closed", VaultHeaderParserV2.parse(json.toString()))
+        }
+    }
+
+    @Test
     fun `v2 parser rejects inconsistent recovery and factor metadata`() {
         val biometricWithoutSlot = org.json.JSONObject(createValidV2Header().toJson())
             .put("biometric2FaEnabled", true)

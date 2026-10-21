@@ -95,12 +95,15 @@ object VaultHeaderParserV2 {
             if (requiredFields.any { !json.has(it) || json.isNull(it) }) return null
             val stringFields = listOf("algorithmId", "vaultId", "saltBase64", "ivBase64", "encryptedDekBase64", "securityTier", "factorType", "domainSecurityTier", "domainFactorType", "recoveryMethod")
             if (stringFields.any { json.opt(it) !is String }) return null
-            val numberFields = listOf("version", "createdAt", "argon2Iterations", "argon2MemoryKb", "tagLengthBits", "autoLockMinutes")
-            // Reject fractional/overflowing JSON numbers instead of letting optInt/optLong truncate them.
-            if (numberFields.any { field ->
+            // Validate each JSON number against the width of its destination type before
+            // JSONObject.optInt/optLong can truncate or wrap oversized values.
+            val intFields = listOf("version", "argon2Iterations", "argon2MemoryKb", "tagLengthBits", "autoLockMinutes")
+            if (intFields.any { field ->
                     val value = json.opt(field)
-                    value !is Number || value.toString().toLongOrNull() == null
+                    value !is Number || value.toString().toIntOrNull() == null
                 }) return null
+            val createdAtValue = json.opt("createdAt")
+            if (createdAtValue !is Number || createdAtValue.toString().toLongOrNull() == null) return null
             if (json.opt("biometric2FaEnabled") !is Boolean || json.opt("hasEmergencyPin") !is Boolean) return null
             val optionalStringFields = listOf(
                 "encryptedDekByBiometricsBase64", "biometricDekIvBase64",
