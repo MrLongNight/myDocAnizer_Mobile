@@ -66,14 +66,15 @@ fun VaultSettingsScreen(
     val vaultStatus by vaultSecManager.vaultStatus.collectAsState()
     val vaultHeader by vaultSecManager.vaultHeader.collectAsState()
 
-    val syncPasswordKey by viewModel.syncPasswordKey.collectAsState()
     val isUnencryptedModeConfirmed by viewModel.isUnencryptedModeConfirmed.collectAsState()
-    val hasCustomPassword = syncPasswordKey.isNotBlank()
 
     val coroutineScope = rememberCoroutineScope()
     val passkeyName by viewModel.passkeyName.collectAsState()
     val passkeyCreatedAt by viewModel.passkeyCreatedAt.collectAsState()
     var isSavingToGoogleManager by remember { mutableStateOf(false) }
+    var showSaveMasterPasswordDialog by remember { mutableStateOf(false) }
+    var masterPasswordForManager by remember { mutableStateOf("") }
+    var passwordManagerSaveError by remember { mutableStateOf<String?>(null) }
     var isRegisteringPasskey by remember { mutableStateOf(false) }
 
     var showChangePasswordDialog by remember { mutableStateOf(false) }
@@ -85,6 +86,81 @@ fun VaultSettingsScreen(
 
     var actionFeedbackMessage by remember { mutableStateOf<String?>(null) }
     var actionIsError by remember { mutableStateOf(false) }
+
+    if (showSaveMasterPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showSaveMasterPasswordDialog = false
+                masterPasswordForManager = ""
+                passwordManagerSaveError = null
+            },
+            icon = { Icon(Icons.Default.Password, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text("Master-Passwort speichern", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Gib das aktuelle Master-Passwort ein. Es wird zuerst lokal geprüft; nur bei erfolgreicher Prüfung wird es an den Passwortmanager übergeben.")
+                    OutlinedTextField(
+                        value = masterPasswordForManager,
+                        onValueChange = {
+                            masterPasswordForManager = it
+                            passwordManagerSaveError = null
+                        },
+                        label = { Text("Aktuelles Master-Passwort") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth().testTag("input_password_manager_master_password")
+                    )
+                    passwordManagerSaveError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = masterPasswordForManager.isNotBlank() && !isSavingToGoogleManager,
+                    onClick = {
+                        isSavingToGoogleManager = true
+                        passwordManagerSaveError = null
+                        coroutineScope.launch {
+                            try {
+                                if (!vaultSecManager.unlockWithPassword(masterPasswordForManager)) {
+                                    passwordManagerSaveError = "Das Master-Passwort ist falsch. Es wurde nichts gespeichert."
+                                    return@launch
+                                }
+                                val credentialManager = CredentialManager.create(context)
+                                credentialManager.createCredential(
+                                    context,
+                                    CreatePasswordRequest("myDocAnizer-Master-Key", masterPasswordForManager)
+                                )
+                                actionFeedbackMessage = "Master-Passwort erfolgreich im Passwortmanager gespeichert."
+                                actionIsError = false
+                                showSaveMasterPasswordDialog = false
+                                masterPasswordForManager = ""
+                            } catch (_: CreateCredentialCancellationException) {
+                                passwordManagerSaveError = "Speichern im Passwortmanager wurde abgebrochen."
+                            } catch (e: Exception) {
+                                passwordManagerSaveError = "Passwortmanager konnte das Master-Passwort nicht speichern: ${e.message ?: "unbekannter Fehler"}"
+                            } finally {
+                                isSavingToGoogleManager = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.testTag("btn_confirm_save_master_password")
+                ) {
+                    Text(if (isSavingToGoogleManager) "Speichere..." else "Prüfen und speichern")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showSaveMasterPasswordDialog = false
+                    masterPasswordForManager = ""
+                    passwordManagerSaveError = null
+                }) {
+                    Text("Abbrechen")
+                }
+            }
+        )
+    }
 
     // Dialog Master-Passwort ändern
     if (showChangePasswordDialog) {
@@ -571,33 +647,14 @@ fun VaultSettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                if (hasCustomPassword) {
+                if (vaultHeader != null && !vaultStatus.isUnencryptedMode &&
+                    !vaultStatus.keyFileEnabled && !vaultStatus.totpEnabled
+                ) {
                     Button(
                         onClick = {
-                            isSavingToGoogleManager = true
-                            actionFeedbackMessage = null
-                            coroutineScope.launch {
-                                try {
-                                    val credManager = runCatching { CredentialManager.create(context) }.getOrNull()
-                                    if (credManager != null) {
-                                        val req = CreatePasswordRequest("myDocAnizer-Master-Key", syncPasswordKey)
-                                        credManager.createCredential(context, req)
-                                        actionFeedbackMessage = "✅ Master-Passwort erfolgreich im Google Passwort-Manager hinterlegt!"
-                                        actionIsError = false
-                                    } else {
-                                        actionFeedbackMessage = "✅ Lokal als Master-Schlüssel aktiv."
-                                        actionIsError = false
-                                    }
-                                } catch (e: CreateCredentialCancellationException) {
-                                    actionFeedbackMessage = "Vorgang im Google Passwort-Manager abgebrochen."
-                                    actionIsError = false
-                                } catch (e: Throwable) {
-                                    actionFeedbackMessage = "Hinweis: ${e.message ?: "Passwort lokal gesichert"}"
-                                    actionIsError = false
-                                } finally {
-                                    isSavingToGoogleManager = false
-                                }
-                            }
+                            showSaveMasterPasswordDialog = true
+                            masterPasswordForManager = ""
+                            passwordManagerSaveError = null
                         },
                         enabled = !isSavingToGoogleManager,
                         modifier = Modifier.fillMaxWidth().testTag("btn_save_to_google_password_manager")
@@ -607,14 +664,11 @@ fun VaultSettingsScreen(
                         Text(if (isSavingToGoogleManager) "Speichere..." else "Im Google Passwort-Manager sichern")
                     }
                 } else {
-                    OutlinedButton(
-                        onClick = { showChangePasswordDialog = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Zuerst Master-Passwort einrichten")
-                    }
+                    Text(
+                        "Diese Funktion ist nur für einen eingerichteten, verschlüsselten Tresor mit Master-Passwort ohne zusätzlichen Schlüsseldatei-/TOTP-Faktor verfügbar.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
