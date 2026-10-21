@@ -522,7 +522,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 | V12 | PATCH ERSTELLT | direkt in main | Ja | PDF-Regressionstest ergänzt; explizites Notfalldokument und Geräterestore abzunehmen | V12B/V13 |
 | V12B | NICHT GESTARTET | – | Nein | Unauffällige Druckvariante erstellen | V12 |
 | V13 | PATCH ERSTELLT | direkt in main | Ja | CryptoObject-Instrumented-Test ergänzt; Gerätetest offen | V14 |
-| V14 | IN ARBEIT | VaultSecurityManager.kt, VaultHeaderV2.kt | Ja | V2-only Laufzeit; keine V1-Migration oder Rückfalllogik | CI-Build/Testlauf und Repository-Suche nach V1-Restpfaden |
+| V14 | IN ARBEIT | VaultSecurityManager.kt, VaultHeaderV2.kt, VaultV2OnlyTest.kt | Ja | Codeprüfung bestätigt V2-only-Headerpfad; Negativ-Regressionstest für alte Header-Schlüssel ergänzt, CI-Abnahme ausstehend. Keine Migration/Fallbacks. | CI-Ergebnis des neuen Negativtests; danach Gesamtstatus V01–V04 separat abnehmen |
 | V15 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; weitere AP-Abnahme separat prüfen | S01 |
 | V16 | NICHT GESTARTET | – | Nein | Passkey muss echte Wiederherstellung ermöglichen | V09/V10 |
 | V17 | NICHT GESTARTET | – | Nein | Sicherheitsfragen nur zusätzlicher, begrenzt starker Faktor | V10/V16 |

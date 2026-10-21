@@ -111,6 +111,27 @@ class VaultV2OnlyTest {
     }
 
     @Test
+    fun `legacy header keys are ignored and never migrated into V2`() {
+        val context = context()
+        val prefs = context.getSharedPreferences("mydocanizer_vault_security", Context.MODE_PRIVATE)
+        val legacyMarker = """{"version":1,"vaultId":"LEGACY-MUST-NOT-LOAD"}"""
+        assertTrue(
+            prefs.edit()
+                .putString("vault_header_json", legacyMarker)
+                .putString("vault_header_json_v1", legacyMarker)
+                .remove("vault_header_json_v2_active")
+                .commit()
+        )
+
+        val manager = VaultSecurityManager.getInstance(context)
+        assertNull("Legacy-only data must not be interpreted as a V2 vault", manager.vaultHeader.value)
+        assertFalse("A legacy-only vault must not unlock through the V2 path", manager.unlockWithPassword("LegacyPassword2026!"))
+        assertEquals(legacyMarker, prefs.getString("vault_header_json", null))
+        assertEquals(legacyMarker, prefs.getString("vault_header_json_v1", null))
+        assertNull("Startup must not create or promote a V2 header", prefs.getString("vault_header_json_v2_active", null))
+    }
+
+    @Test
     fun `malformed active V2 header fails closed`() {
         val context = context()
         val manager = VaultSecurityManager.getInstance(context)

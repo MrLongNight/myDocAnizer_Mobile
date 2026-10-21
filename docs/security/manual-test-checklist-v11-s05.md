@@ -37,10 +37,11 @@ Stand: 2026-10-18. **Diese Checkliste ist noch nicht ausgeführt.** Bitte die Te
 - [ ] **BIO-6:** Biometrische Registrierung im Android-System ändern/entfernen und erneut entsperren. Erwartung: invalidierter Schlüssel führt fail-closed zum Passwort-Recovery.
 - [ ] **BIO-7:** Mindestens ein Gerät mit API 24–29 und eines mit API 30+ prüfen, wenn verfügbar. StrongBox ist nicht Voraussetzung; fehlende Hardware darf keinen unsicheren Fallback auslösen.
 
-## V14 — v1→v2-Header-Migration
+## V14 — V2-only-Laufzeit und Behandlung alter Header
 
-- [ ] **MIGRATION NICHT FREIGEGEBEN:** Der Laufzeitpfad liest und schreibt aktuell weiterhin vault_header_json_v1. Die sichere atomare Migration ist blockiert, bis v2 als Laufzeitformat integriert ist. Keine manuelle Migration oder v1-Pref-Manipulation durchführen.
-- [ ] Nach Umsetzung separat testen: korrektes Passwort migriert denselben DEK; falsches Passwort verändert v1 nicht; erzwungener Schreib-/Readback-Fehler lässt v1 unverändert; zweiter Lauf ist idempotent.
+- [x] Codeprüfung: `VaultSecurityManager` liest/schreibt den aktiven Header ausschließlich über `vault_header_json_v2_active` und `VaultHeaderParserV2`; kein Laufzeit-Migrations-/Fallbackpfad für V1 gefunden.
+- [ ] Regressionstest: alte Header-Schlüssel werden weder als Vault geladen noch automatisch migriert oder überschrieben; der Test muss in CI bestehen.
+- [ ] Keine V1-Migration: vorhandene Altbestände werden nicht automatisch übernommen. Vor einer späteren Produktfreigabe muss die UX für solche Altbestände ausdrücklich geklärt sein; nicht manuell an SharedPreferences manipulieren.
 
 ## V15 — Android-Backup und Geräteübertragung
 
@@ -90,4 +91,4 @@ Stand: 2026-10-18. **Diese Checkliste ist noch nicht ausgeführt.** Bitte die Te
 
 - [ ] Jede Zeile als BESTANDEN, FEHLGESCHLAGEN oder NICHT AUSGEFÜHRT markieren.
 - [ ] Build-/Testausgabe und Gerät/API-Level notieren; keine Secrets anhängen.
-- [ ] V14 bleibt blockiert, bis eine echte Runtime-Migration und Rollbacktests vorliegen.
+- [ ] V14-Abnahme: V2-only-Laufzeit plus Negativtest für ignorierte Legacy-Header muss CI bestehen. Keine Runtime-Migration ist Teil der beschlossenen V2-only-Strategie; alte Daten dürfen nicht stillschweigend migriert oder überschrieben werden.
