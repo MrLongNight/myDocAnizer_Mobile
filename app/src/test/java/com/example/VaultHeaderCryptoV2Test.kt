@@ -64,6 +64,28 @@ class VaultHeaderCryptoV2Test {
     }
 
     @Test
+    fun `downgrading v2 two factor metadata does not enable password only unlock`() {
+        val token = "d".repeat(64).toCharArray()
+        val header = VaultHeaderCryptoV2.createHeader(
+            vaultId = vaultId,
+            createdAt = 1729177200000L,
+            password = password,
+            dek = dek,
+            securityTier = "TWO_FACTOR",
+            factorType = "PASSWORD_AND_KEYFILE",
+            keyFileToken = token
+        )
+        val downgraded = header.copy(
+            securityTier = "ONE_FACTOR",
+            factorType = "PASSWORD"
+        )
+
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            VaultHeaderCryptoV2.unwrapDek(downgraded, password)
+        }
+    }
+
+    @Test
     fun `one factor v2 cannot silently ignore a supplied key file`() {
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
             VaultHeaderCryptoV2.createHeader(
