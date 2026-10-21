@@ -221,8 +221,8 @@ fun MainBottomBar(
                     },
                     colors = navItemColors,
                     modifier = Modifier
-                        .weight(1.1f)
-                        .padding(horizontal = 12.dp)
+                        .weight(1.25f)
+                        .padding(horizontal = 2.dp)
                         .onGloballyPositioned { coords ->
                             val bounds = coords.boundsInRoot()
                             val elemBounds = TourElementBounds(
