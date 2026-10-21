@@ -1,7 +1,6 @@
 package com.example.service
 
 import android.content.Context
-import android.os.Build
 import android.util.Log
 import com.example.model.FolderStrategy
 import kotlinx.coroutines.Dispatchers
@@ -9,6 +8,9 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.sync.withLock
+import dev.ffmpegkit.llama.Llama
+import dev.ffmpegkit.llama.LlamaConfig
+import dev.ffmpegkit.llama.LlamaModel
 import java.io.File
 
 /**
@@ -96,9 +98,17 @@ data class DmsExtractionResponse(
  */
 class LlamaCppInferenceEngine(private val context: Context) {
 
+    enum class InferenceMode { NOT_RUN, LOCAL_LLM, RULE_FALLBACK }
+
+    @Volatile
+    var lastInferenceMode: InferenceMode = InferenceMode.NOT_RUN
+        private set
+
+    private var loadedModel: LlamaModel? = null
+    private var loadedModelPath: String? = null
+
     companion object {
         private const val TAG = "LlamaCppEngine"
-        private var isNativeLibLoaded = false
         private val inferenceMutex = kotlinx.coroutines.sync.Mutex()
 
         private fun safeLogI(tag: String, msg: String) {
@@ -109,18 +119,6 @@ class LlamaCppInferenceEngine(private val context: Context) {
         }
         private fun safeLogE(tag: String, msg: String, tr: Throwable? = null) {
             try { Log.e(tag, msg, tr) } catch (_: Throwable) { println("[$tag] $msg ${tr?.message ?: ""}") }
-        }
-
-        init {
-            try {
-                // Direktes Laden der nativen Bibliothek (AGP/NNDK übernimmt das Deployment)
-                System.loadLibrary("llama_android")
-                isNativeLibLoaded = true
-                safeLogI(TAG, "Native llama.cpp JNI-Bibliothek erfolgreich geladen.")
-            } catch (e: Throwable) {
-                isNativeLibLoaded = false
-                safeLogI(TAG, "Fallback-Pipeline aktiv: On-Device Kotlin/JNI Fallback (100% lokal). Grund: ${e.message}")
-            }
         }
 
         /**
@@ -409,7 +407,8 @@ ws ::= [ \t\n\r]*
         val topP: Float = 0.9f,
         val maxTokens: Int = 512,
         val threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(2, 6),
-        val gpuLayers: Int = 99,
+        val gpuLayers: Int = 0,
+        /** Compatibility field only: this runtime does not expose GBNF enforcement. */
         val grammar: String? = DMS_JSON_GBNF
     )
 
@@ -417,14 +416,8 @@ ws ::= [ \t\n\r]*
      * Prüft, ob GPU-Hardwarebeschleunigung (Vulkan) auf diesem Android-Gerät verfügbar ist.
      */
     fun checkGpuAccelerationSupport(): Boolean {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && (
-            Build.HARDWARE.contains("qcom", ignoreCase = true) ||
-            Build.HARDWARE.contains("mali", ignoreCase = true) ||
-            Build.HARDWARE.contains("exynos", ignoreCase = true) ||
-            Build.HARDWARE.contains("tensor", ignoreCase = true) ||
-            Build.HARDWARE.contains("kirin", ignoreCase = true) ||
-            Build.HARDWARE.contains("mediatek", ignoreCase = true)
-        )
+        // This pinned AAR ships CPU/NEON only; chipset names do not prove GPU support.
+        return false
     }
 
     /**
@@ -440,6 +433,7 @@ ws ::= [ \t\n\r]*
         params: InferenceParams = InferenceParams(maxTokens = 350, grammar = DMS_JSON_GBNF)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
+            lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText)
         }
         val filteredSlice = OcrPreFilterMatrix.extractFirstRunSlice(ocrText)
@@ -471,6 +465,7 @@ ws ::= [ \t\n\r]*
         params: InferenceParams = InferenceParams(maxTokens = 600, grammar = DMS_JSON_GBNF)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
+            lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText, folderStrategy)
         }
         val targetDept = department ?: DepartmentTeam.dispatch(ocrText)
@@ -527,71 +522,69 @@ ws ::= [ \t\n\r]*
         systemPrompt: String = BASE_SYSTEM_PROMPT,
         params: InferenceParams = InferenceParams()
     ): String = withContext(Dispatchers.Default) {
-        val startTime = System.currentTimeMillis()
-        val startRam = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
-        val startNativeRam = try { android.os.Debug.getNativeHeapAllocatedSize() } catch (_: Throwable) { 0L }
+        if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
+            lastInferenceMode = InferenceMode.RULE_FALLBACK
+            return@withContext executeFallbackInference(prompt, systemPrompt)
+        }
 
         try {
-            if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
-                // Fallback wenn GGUF noch nicht heruntergeladen ist
-                return@withContext executeFallbackInference(prompt, systemPrompt)
-            }
-
-            val formattedPrompt = buildChatPrompt(systemPrompt, prompt, modelFile.name)
-
-            val output = inferenceMutex.withLock {
-                if (isNativeLibLoaded) {
-                    nativeExecuteLlamaWithGrammar(
-                        modelPath = modelFile.absolutePath,
-                        prompt = formattedPrompt,
-                        threads = params.threads,
-                        gpuLayers = if (checkGpuAccelerationSupport()) params.gpuLayers else 0,
-                        temp = params.temperature,
-                        topP = params.topP,
-                        maxTokens = params.maxTokens,
-                        grammar = params.grammar ?: ""
+            inferenceMutex.withLock {
+                val path = modelFile.absolutePath
+                var model = loadedModel
+                if (model == null || !model.isLoaded || loadedModelPath != path) {
+                    model?.let { runCatching { Llama.releaseModel(it) } }
+                    loadedModel = null
+                    loadedModelPath = null
+                    model = Llama.loadModel(
+                        modelPath = path,
+                        config = LlamaConfig(
+                            contextSize = 2048,
+                            threads = params.threads.coerceIn(1, 8),
+                            gpuLayers = 0,
+                            temperature = params.temperature,
+                            topP = params.topP
+                        )
                     )
-                } else {
-                    executeFallbackInference(prompt, systemPrompt)
+                    loadedModel = model
+                    loadedModelPath = path
                 }
+
+                // The native API applies the GGUF chat template; do not hand-format a
+                // second, model-name-based template before inference.
+                val result = Llama.complete(
+                    model = model,
+                    prompt = prompt,
+                    systemPrompt = systemPrompt,
+                    maxTokens = params.maxTokens
+                )
+                lastInferenceMode = InferenceMode.LOCAL_LLM
+                AppAuditLogger.log(
+                    category = LogCategory.AI_INFERENCE,
+                    tag = TAG,
+                    message = "Echte lokale llama.cpp-Inferenz abgeschlossen",
+                    details = "Modell=${modelFile.name}; Tokens=${result.tokensGenerated}; " +
+                        "Prompt=${result.promptEvalTimeMs} ms; Generierung=${result.generateTimeMs} ms; " +
+                        "gemessene Geschwindigkeit=${result.tokensPerSecond} Tokens/s; Backend=CPU/NEON",
+                    isError = false
+                )
+                result.text
             }
-
-            val endTime = System.currentTimeMillis()
-            val endRam = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()
-            val endNativeRam = try { android.os.Debug.getNativeHeapAllocatedSize() } catch (_: Throwable) { 0L }
-            val latency = (endTime - startTime).coerceAtLeast(1)
-            val ramDeltaMb = (((endRam + endNativeRam) - (startRam + startNativeRam)) / (1024f * 1024f)).coerceAtLeast(0.1f)
-            val generatedTokens = (output.length / 3.6f).toInt().coerceAtLeast(1)
-            val tokensPerSecond = ((generatedTokens / (latency / 1000f)) * 10).toInt() / 10f
-            val safeTps = tokensPerSecond.coerceAtLeast(0.1f)
-
-            AppAuditLogger.logAiInference(
-                modelId = modelFile.name,
-                docType = "GGUF Inferenz",
-                sender = if (isNativeLibLoaded) "llama.cpp (GBNF/Vulkan)" else "On-Device Engine",
-                confidence = 0.98f,
-                latencyMs = latency,
-                customFieldsCount = 5,
-                reasoningSnippet = "Inferenz via llama.cpp (${safeTps} TPS, ${generatedTokens} Tokens, Chain-of-Thought) abgeschlossen.",
-                ramDeltaMb = ramDeltaMb,
-                fullReasoning = output,
-                tokensPerSecond = safeTps
-            )
-
-            output
+        } catch (e: LinkageError) {
+            lastInferenceMode = InferenceMode.RULE_FALLBACK
+            safeLogW(TAG, "Native llama.cpp-Laufzeit auf dieser ABI nicht verfügbar: ${e.message}")
+            executeFallbackInference(prompt, systemPrompt)
         } catch (e: Exception) {
+            lastInferenceMode = InferenceMode.RULE_FALLBACK
             AppAuditLogger.log(
                 category = LogCategory.AI_INFERENCE,
-                tag = "LlamaCppEngine",
-                message = "Fehler bei Llama.cpp Inferenz (${modelFile.name}): ${e.message}",
-                details = e.stackTraceToString().take(300),
+                tag = TAG,
+                message = "Lokale Modellinferenz fehlgeschlagen; deterministischer Fallback verwendet",
+                details = "Modell=${modelFile.name}; Fehler=${e.message}",
                 isError = true
             )
-            // Fehlertoleranter Fallback
             executeFallbackInference(prompt, systemPrompt)
         }
     }
-
     /**
      * Parst den rohen Modell-Output fehlertolerant in ein [DmsExtractionResponse] Objekt.
      * Filtert Markdown-Codeblöcke heraus und repariert gängige JSON-Ungenauigkeiten.
@@ -678,24 +671,11 @@ ws ::= [ \t\n\r]*
             )
         } catch (e: Exception) {
             safeLogW(TAG, "JSON-Parsing fehlgeschlagen: ${e.message}, erzeuge Heuristik-Antwort")
+            lastInferenceMode = InferenceMode.RULE_FALLBACK
             return createHeuristicFallbackResponse(fallbackOcrText, folderStrategy)
         }
     }
 
-    private fun buildChatPrompt(system: String, user: String, modelName: String = ""): String {
-        val lower = modelName.lowercase()
-        return when {
-            lower.contains("llama-3") || lower.contains("llama3") ->
-                "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n$system<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n$user<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
-            else ->
-                "<|im_start|>system\n$system<|im_end|>\n<|im_start|>user\n$user<|im_end|>\n<|im_start|>assistant\n"
-        }
-    }
-
-    fun executeFallbackInference(ocrText: String, systemPrompt: String): String {
-        val parsed = createHeuristicFallbackResponse(ocrText)
-        return parsed.toJsonString()
-    }
 
     /**
      * Führt eine Chatbot-Inferenz mit dynamisch injiziertem System-Prompt und Function-Calling Tools aus.
@@ -922,17 +902,6 @@ ws ::= [ \t\n\r]*
         return "Ich bin dein persönlicher myDocAnizer Assistent. Womit kann ich dir behilflich sein?"
     }
 
-    // Native JNI Methoden
-    private external fun nativeExecuteLlamaWithGrammar(
-        modelPath: String,
-        prompt: String,
-        threads: Int,
-        gpuLayers: Int,
-        temp: Float,
-        topP: Float,
-        maxTokens: Int,
-        grammar: String
-    ): String
 }
 
 /**

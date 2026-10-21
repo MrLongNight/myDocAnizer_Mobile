@@ -124,6 +124,8 @@ dependencies {
   // implementation(libs.firebase.appcheck.recaptcha)
   // implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
+  // Open-source llama.cpp AAR for genuine local GGUF inference on arm64-v8a (CPU/NEON).
+  implementation("dev.ffmpegkit-maintained:llama-android:0.1.1")
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.logging.interceptor)
