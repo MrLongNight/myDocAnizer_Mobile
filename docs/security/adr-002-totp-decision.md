@@ -1,6 +1,6 @@
 # ADR 002: Optionale Zwei-Faktor-Absicherung des Tresors
 
-**Status:** ENTSCHEIDUNG GETROFFEN; Laufzeitumsetzung und Tests offen.  
+**Status:** ENTSCHEIDUNG GETROFFEN; TOTP-Klartextbereinigung und Regressionstests zur CI-Prüfung offen.  
 **Datum:** 2026-10-20
 
 ## Entscheidung
@@ -27,7 +27,7 @@ Ein sechsstelliger TOTP-Code hat nur etwa eine Million mögliche Werte. Bei eine
 3. Negativtests müssen zeigen, dass Passwort allein, Schlüsseldatei allein, falsche/gekürzte Datei und manipulierte Eingaben scheitern.
 4. Passwort-/Keyfile-Wechsel atomar ausführen; bei Fehler bleibt der vorherige Wrapper gültig.
 5. Kein Schlüsseldatei-Inhalt in Logs, Crashmeldungen, Backups oder Einstellungen im Klartext.
-6. TOTP-Felder erst nach Aufrufstelleninventur und getesteter Legacy-Behandlung entfernen oder klar als nicht-kryptografische Legacy-Prüfung kennzeichnen.
+6. Umsetzung: Der aktive V2-Unlock wertet TOTP nicht aus. Historische `totpSecret`-Felder werden beim Laden aus dem persistierten Header entfernt; neue Header serialisieren sie nicht. Neue Vault-Einrichtung weist ein nicht-leeres TOTP-Secret zurück. RFC-6238-Hilfsfunktionen dürfen isoliert getestet werden, sind aber keine Tresor-Absicherung.
 7. Recovery bleibt ein eigenständiger, bewusst eingerichteter Pfad. Ein gerätegebundener Keystore-Schlüssel ist nicht automatisch portabel.
 8. Abnahme erfordert Unit-/Robolectric- und Android-Instrumentationstests; Gerätetests separat dokumentieren.
 
