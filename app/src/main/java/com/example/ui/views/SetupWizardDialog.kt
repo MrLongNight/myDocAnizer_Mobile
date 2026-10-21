@@ -282,7 +282,7 @@ fun SetupWizardDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                    Row(
+                Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
