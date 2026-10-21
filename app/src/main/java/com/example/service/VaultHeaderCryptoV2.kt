@@ -69,7 +69,9 @@ object VaultHeaderCryptoV2 {
             encryptedDekBase64 = "",
             securityTier = securityTier,
             factorType = factorType,
-            autoLockMinutes = autoLockMinutes
+            autoLockMinutes = autoLockMinutes,
+            // Bind the authenticator version to the DEK-wrapping tag to prevent downgrade.
+            metadataAuthVersion = 1
         )
         val kdfInput = buildKdfInput(password, keyFileToken, securityTier, factorType)
         val kek = try {
@@ -231,20 +233,27 @@ object VaultHeaderCryptoV2 {
         }
     }
 
-    private fun aad(header: VaultHeaderV2): ByteArray = listOf(
-        "myDocAnizer-VaultHeader-v2",
-        "version=${header.version}",
-        "algorithmId=${header.algorithmId}",
-        "vaultId=${header.vaultId}",
-        "createdAt=${header.createdAt}",
-        "argon2Iterations=${header.argon2Iterations}",
-        "argon2MemoryKb=${header.argon2MemoryKb}",
-        "saltBase64=${header.saltBase64}",
-        "tagLengthBits=${header.tagLengthBits}",
-        "securityTier=${header.securityTier}",
-        "factorType=${header.factorType}",
-        "autoLockMinutes=${header.autoLockMinutes}"
-    ).joinToString("|").toByteArray(StandardCharsets.UTF_8)
+    private fun aad(header: VaultHeaderV2): ByteArray {
+        val fields = mutableListOf(
+            "myDocAnizer-VaultHeader-v2",
+            "version=${header.version}",
+            "algorithmId=${header.algorithmId}",
+            "vaultId=${header.vaultId}",
+            "createdAt=${header.createdAt}",
+            "argon2Iterations=${header.argon2Iterations}",
+            "argon2MemoryKb=${header.argon2MemoryKb}",
+            "saltBase64=${header.saltBase64}",
+            "tagLengthBits=${header.tagLengthBits}",
+            "securityTier=${header.securityTier}",
+            "factorType=${header.factorType}",
+            "autoLockMinutes=${header.autoLockMinutes}"
+        )
+        // Old V2 headers have no metadata authenticator and must retain the original AAD
+        // for controlled migration. New headers bind version 1 into GCM so deleting the
+        // HMAC field cannot silently downgrade an authenticated header to legacy mode.
+        if (header.metadataAuthVersion == 1) fields.add("metadataAuthVersion=1")
+        return fields.joinToString("|").toByteArray(StandardCharsets.UTF_8)
+    }
 
     /**
      * Adds an HMAC-SHA-256 authenticator over all persisted security-relevant header

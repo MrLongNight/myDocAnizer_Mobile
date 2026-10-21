@@ -149,7 +149,7 @@ class VaultHeaderCryptoV2Test {
             VaultHeaderCryptoV2.unwrapDek(header.copy(keyFileTokenHash = "b".repeat(64)), password)
         }
 
-        val alteredMac = android.util.Base64.decode(header.metadataAuthBase64, android.util.Base64.NO_WRAP)
+        val alteredMac = android.util.Base64.decode(requireNotNull(header.metadataAuthBase64), android.util.Base64.NO_WRAP)
         alteredMac[0] = (alteredMac[0].toInt() xor 1).toByte()
         org.junit.Assert.assertThrows(SecurityException::class.java) {
             VaultHeaderCryptoV2.unwrapDek(
@@ -163,16 +163,17 @@ class VaultHeaderCryptoV2Test {
     }
 
     @Test
-    fun `legacy unsigned V2 headers require explicit migration permission`() {
+    fun `removing the metadata authenticator cannot downgrade a signed header`() {
         val signed = newHeader()
-        val legacy = signed.copy(metadataAuthVersion = 0, metadataAuthBase64 = null)
+        val stripped = signed.copy(metadataAuthVersion = 0, metadataAuthBase64 = null)
         org.junit.Assert.assertThrows(SecurityException::class.java) {
-            VaultHeaderCryptoV2.unwrapDek(legacy, password)
+            VaultHeaderCryptoV2.unwrapDek(stripped, password)
         }
-        assertArrayEquals(
-            dek,
-            VaultHeaderCryptoV2.unwrapDek(legacy, password, allowLegacyMetadataUpgrade = true)
-        )
+        // Even the legacy migration path must still authenticate the original DEK wrapper;
+        // this header was created with the new AAD marker and is not a genuine legacy header.
+        org.junit.Assert.assertThrows(SecurityException::class.java) {
+            VaultHeaderCryptoV2.unwrapDek(stripped, password, allowLegacyMetadataUpgrade = true)
+        }
     }
 
     @Test
