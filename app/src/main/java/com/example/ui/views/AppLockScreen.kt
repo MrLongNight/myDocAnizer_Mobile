@@ -243,9 +243,12 @@ fun AppLockScreen(
                         !vaultStatus.totpEnabled
                     ) {
                         coroutineScope.launch {
+                            // Do not suppress the picker behind candidate probing here:
+                            // the biometric path has already failed and the user needs a
+                            // direct opportunity to select the saved password credential.
                             retrieveMasterPasswordFromManager(
                                 showErrors = false,
-                                onlyIfAvailable = true
+                                onlyIfAvailable = false
                             )
                         }
                     }
