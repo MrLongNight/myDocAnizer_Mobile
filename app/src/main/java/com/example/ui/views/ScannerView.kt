@@ -103,7 +103,10 @@ fun ScannerView(
     val batchQueue by viewModel.batchQueue.collectAsStateWithLifecycle()
     val isBatchModeActive by viewModel.isBatchModeActive.collectAsStateWithLifecycle()
     val pendingRuleSuggestion by viewModel.pendingRuleSuggestion.collectAsStateWithLifecycle()
+    val scanWorkflowError by viewModel.scanWorkflowError.collectAsStateWithLifecycle()
+    val scanWorkflowState by viewModel.scanWorkflowState.collectAsStateWithLifecycle()
 
+    var showFailedScanDiscardConfirmation by remember { mutableStateOf(false) }
     var showTemplateModal by remember { mutableStateOf(false) }
     var flashOption by remember(scannerSettings.flashMode) {
         mutableStateOf(
@@ -696,6 +699,49 @@ fun ScannerView(
             suggestion = suggestion,
             availableDocTypes = docTypes,
             viewModel = viewModel
+        )
+    }
+
+    if (scanWorkflowError != null && pendingRuleSuggestion == null) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text(if (scanWorkflowState == "Failed") "Scan nicht abgeschlossen" else "Scan-Status") },
+            text = { Text(scanWorkflowError.orEmpty()) },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.retryScanSave() },
+                    enabled = !isProcessing
+                ) { Text("Erneut versuchen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFailedScanDiscardConfirmation = true }) {
+                    Text("Verwerfen", color = MaterialTheme.colorScheme.error)
+                }
+            }
+        )
+    }
+
+    if (showFailedScanDiscardConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showFailedScanDiscardConfirmation = false },
+            title = { Text("Scan wirklich verwerfen?") },
+            text = { Text("Das nicht gespeicherte Bild wird endgültig verworfen.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFailedScanDiscardConfirmation = false
+                        viewModel.discardFailedScan()
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Scan verwerfen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFailedScanDiscardConfirmation = false }) {
+                    Text("Weiter versuchen")
+                }
+            }
         )
     }
 }
