@@ -10,6 +10,7 @@ All notable changes to **myDocAnizer-Mobile** are documented here.
 - Neuer `DocumentTracker`: Lock bei mindestens 5 von 7 Frames mit confidence ≥ 0,55 und Eckbewegung < 3 % der Bilddiagonale; Lock-Verlust erst nach 6 Fehlframes; EMA-Eckenglättung und Stabilitätsprüfung über ca. 500 ms.
 - `CameraFrameAnalysis` liefert Quad, Confidence, Stabilität, Ablehnungsgrund sowie Rotation, Quellabmessungen und CropRect für spätere Overlay-Ausrichtung. Schärfe (Laplace) und mittlere Helligkeit werden im Quad-Inneren gemessen, mit Bildmitte als Fallback.
 - Autofokus wird bei neuem Lock auf den Quad-Mittelpunkt gelegt und auf maximal einen Versuch je 1,5 Sekunden begrenzt. Tap-to-focus bleibt unverändert.
+- Hautähnliche U/V-Werte sind nur ein weicher Confidence-Abzug (Faktor 0,72), kein eigenständiger Hard-Reject; synthetischer Regressionstest für hautähnliche Chroma-Werte auf einer geometrisch klaren Seite ergänzt.
 - JVM-Tests decken Lock, Flackern, kurze Aussetzer, Unlock nach 6 Fehlframes und springende Ecken ab.
 - **Wichtig: Detektor- und Tracker-Schwellen sind vorläufig und ausdrücklich nicht auf realen Geräten validiert.** FPS und <15-ms-Zielwert müssen auf realer Hardware gemessen werden.
 
