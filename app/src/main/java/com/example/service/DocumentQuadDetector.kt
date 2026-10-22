@@ -120,7 +120,7 @@ data class DocumentDetection(
 object DocumentDetectionConfig {
     const val TARGET_LONG_EDGE = 160
     const val MIN_COMPONENT_AREA_RATIO = 0.15f
-    const val MAX_COMPONENT_AREA_RATIO = 0.92f
+    const val MAX_COMPONENT_AREA_RATIO = 0.88f
     const val MIN_QUAD_TO_HULL_AREA_RATIO = 0.90f
     const val MIN_COMPONENT_TO_HULL_AREA_RATIO = 0.88f
     const val MIN_EDGE_MARGIN_RATIO = 0.01f
