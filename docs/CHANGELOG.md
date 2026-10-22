@@ -2,7 +2,14 @@
 
 All notable changes to **myDocAnizer-Mobile** are documented here.
 
-## [Unreleased] - 2026-10-22 (Scan-/Chat-Stabilisierung – noch nicht vollständig verifiziert)
+## [Unreleased]
+
+### Automatische Dokumentenerkennung (Detektor-Prototyp)
+- Neue JVM-testbare, reine Kotlin-Viereck-Erkennung ohne OpenCV oder neue Runtime-Abhängigkeiten: geglättete Luma, Otsu mit beiden Polaritäten, gefüllte Komponenten, morphologisches Öffnen, konvexe Hülle, Quad-Vereinfachung, Geometrie-/Randkontrastprüfung und optionaler weicher Haut-Chroma-Abzug.
+- Neue YUV_420_888-Konvertierung berücksichtigt Y/U/V rowStride und pixelStride, reduziert auf maximal 160 px lange Kante und kann Zielpuffer wiederverwenden.
+- Automatischer Detektor ist in diesem Schritt **noch nicht in die Live-Kamera eingebunden**; bestehende Funktionen und UI bleiben unverändert.
+- **Wichtig: Alle Schwellen sind vorläufig und ausdrücklich nicht auf realen Geräten validiert.** JVM-Synthesetests und Laufzeit-Richtwert sind ebenfalls erst nach CI-Ausführung bestätigt.
+ - 2026-10-22 (Scan-/Chat-Stabilisierung – noch nicht vollständig verifiziert)
 
 - Added native inference phase/progress reporting to the chat and benchmark, plus keyboard-aware chat expansion.
 - Benchmark token cap reduced from 350 to 160 for the fixed extraction case; visible chat output strips internal `<think>` blocks.
