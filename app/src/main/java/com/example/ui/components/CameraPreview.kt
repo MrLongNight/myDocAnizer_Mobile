@@ -266,12 +266,17 @@ fun CameraPreview(
 
                                     // Tatsächliche Bildschärfe aus lokalen Luma-Kanten messen.
                                     // Das ist unabhängig von der Neigung/Bewegung des Smartphones.
+                                    // Measure focus only where the document is expected to be.
+                                    // Sharp table edges, plants, or candle edges outside this region must
+                                    // not make an out-of-focus page pass the automatic scan gate.
                                     val focusGridSize = 80
+                                    val focusMargin = focusGridSize / 5
+                                    val focusRange = (focusMargin + 1)..(focusGridSize - focusMargin)
                                     var laplacianSum = 0L
                                     var laplacianCount = 0
-                                    for (fy in 1..focusGridSize) {
+                                    for (fy in focusRange) {
                                         val y = (height * fy / (focusGridSize + 1)).coerceIn(1, height - 2)
-                                        for (fx in 1..focusGridSize) {
+                                        for (fx in focusRange) {
                                             val x = (width * fx / (focusGridSize + 1)).coerceIn(1, width - 2)
                                             val centerIndex = y * rowStride + x * pixelStride
                                             val leftIndex = y * rowStride + (x - 1) * pixelStride
