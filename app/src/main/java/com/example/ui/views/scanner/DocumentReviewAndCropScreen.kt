@@ -318,6 +318,7 @@ fun DocumentReviewAndCropScreen(
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 var initialTwoFingerDist: Float? = null
+                                var cornerGrabOffset = Offset.Zero
                                 val touchThresholdPx = with(density) { 64.dp.toPx() }
 
                                 fun currentBitmapToScreen(pt: PointF): Offset {
@@ -352,10 +353,13 @@ fun DocumentReviewAndCropScreen(
                                     }
                                 }
 
-                                if (closestIndex != null) {
-                                    activeCornerIndex = closestIndex
+                                val selectedCornerIndex = closestIndex
+                                if (selectedCornerIndex != null) {
+                                    activeCornerIndex = selectedCornerIndex
                                     isDraggingSplitter = false
                                     touchScreenOffset = startOffset
+                                    cornerGrabOffset = startOffset -
+                                        currentBitmapToScreen(latestCornersInBitmap.value[selectedCornerIndex])
                                 } else {
                                     val rect = latestDisplayedImageRect.value
                                     val splitterX = rect.left + (rect.width * latestSplitPosition.value)
@@ -403,7 +407,9 @@ fun DocumentReviewAndCropScreen(
                                             val rect = latestDisplayedImageRect.value
                                             if (currentIndex != null && currentIndex in currentCorners.indices) {
                                                 touchScreenOffset = change.position
-                                                val newBitmapPt = currentScreenToBitmap(change.position)
+                                                // Preserve the finger's grab point inside the 64dp handle.
+                                                // Otherwise the corner jumps under the finger on the first move.
+                                                val newBitmapPt = currentScreenToBitmap(change.position - cornerGrabOffset)
                                                 val updated = currentCorners.toMutableList()
                                                 updated[currentIndex] = newBitmapPt
                                                 if (isValidCornerQuadrilateral(updated)) {

@@ -34,6 +34,31 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `simple greeting Hi returns immediately without model inference`() = runBlocking {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val viewModel = DocAnizerViewModel(app)
+    val initialMessageCount = viewModel.chatMessages.value.size
+
+    val result = kotlinx.coroutines.withTimeout(2_000L) {
+      viewModel.sendChatMessageSync("Hi")
+    }
+
+    assertTrue(
+      "A greeting must use the immediate text path, not the native model",
+      result is com.example.service.LlmRouterResult.Text
+    )
+    val addedMessages = viewModel.chatMessages.value.drop(initialMessageCount)
+    assertEquals(2, addedMessages.size)
+    assertTrue(addedMessages[0].isUser)
+    assertEquals("Hi", addedMessages[0].text)
+    assertFalse(addedMessages[1].isUser)
+    assertEquals(
+      "Hallo! Ich bin dein myDocAnizer-Assistent. Wobei kann ich dir helfen?",
+      addedMessages[1].text
+    )
+  }
+
+  @Test
   fun `verify DocAnizerApp initialization and CrashGuard setup`() {
     val app = DocAnizerApp()
     app.onCreate()

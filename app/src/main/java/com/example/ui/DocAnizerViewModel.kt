@@ -1868,6 +1868,53 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
      * damit der Nutzer ohne Zwischenschritte direkt das nächste Dokument scannen kann.
      */
     /**
+     * Every scan requires explicit review of its proposed rule before a document is saved.
+     * A unique existing match pre-fills the editable proposal; it never bypasses confirmation.
+     */
+    private fun requestScanRuleConfirmation(
+        bitmap: Bitmap,
+        ocrText: String,
+        matchingRules: List<com.example.model.DocRule>,
+        isColor: Boolean,
+        onComplete: ((DocumentEntity) -> Unit)? = null
+    ) {
+        val suggestedRule = matchingRules.singleOrNull() ?: buildFastRuleSuggestion(ocrText)
+        dmsManager.setPendingRuleSuggestion(
+            com.example.model.PendingRuleSuggestion(
+                bitmap = bitmap,
+                ocrText = ocrText,
+                suggestedRule = suggestedRule,
+                matchingRules = matchingRules,
+                onSingleUseOnly = { finalRule ->
+                    dmsManager.clearPendingRuleSuggestion()
+                    saveProcessedBitmapWithRule(
+                        bitmap = bitmap,
+                        ocrText = ocrText,
+                        rule = finalRule,
+                        isColor = isColor,
+                        onComplete = onComplete
+                    )
+                },
+                onSaveAsPermanentRule = { permanentRule ->
+                    dmsManager.clearPendingRuleSuggestion()
+                    addDocRule(permanentRule)
+                    saveProcessedBitmapWithRule(
+                        bitmap = bitmap,
+                        ocrText = ocrText,
+                        rule = permanentRule,
+                        isColor = isColor,
+                        onComplete = onComplete
+                    )
+                },
+                onDismiss = {
+                    dmsManager.clearPendingRuleSuggestion()
+                    runCatching { bitmap.recycle() }
+                }
+            )
+        )
+    }
+
+    /**
      * Sofortiges Speichern im Einzel-/Bulk-Scan Modus mit intelligentem Regel-Workflow:
      * 1. OCR ausführen
      * 2. Wenn eine Schlagwort-Regel matcht -> sofortige automatische Zuordnung und Speicherung
@@ -1904,62 +1951,32 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 analysisReport.append("OCR-Länge: ${ocrText.length} Zeichen\n")
                 analysisReport.append("Vorschau: ${ocrText.take(100).replace("\n", " ")}...\n")
 
-                // 2. Alle konkreten Treffer sammeln; Mehrdeutigkeit später dem Nutzer anzeigen.
+                // A matched rule is a proposal to review, not permission to silently save.
                 val matchingRules = ruleRepo.matchingRules(ocrText)
                 val matchedRule = matchingRules.singleOrNull()
-                
-                if (matchedRule != null) {
-                    analysisReport.append("REGEL-TREFFER: '${matchedRule.name}'\n")
-                    analysisReport.append("Zuweisung: ${matchedRule.targetMainCategoryId} -> ${matchedRule.targetSubCategoryId}")
-                    diagnosticService.updateLastAnalysisReport(analysisReport.toString())
-                    
-                    // Fall A: Regel matcht! Vollautomatische Zuordnung und Speicherung
-                    saveProcessedBitmapWithRule(
-                        bitmap = processed,
-                        ocrText = ocrText,
-                        rule = matchedRule,
-                        isColor = isColor,
-                        onComplete = onComplete
-                    )
-                } else {
-                    analysisReport.append("KEIN REGEL-TREFFER. Erstelle schnellen, bearbeitbaren Regelvorschlag.\n")
-                    diagnosticService.updateLastAnalysisReport(analysisReport.toString())
-                    val suggestedRule = buildFastRuleSuggestion(ocrText)
-                    _isProcessingScan.value = false
-                    dmsManager.setPendingRuleSuggestion(
-                        com.example.model.PendingRuleSuggestion(
-                            bitmap = processed,
-                            ocrText = ocrText,
-                            suggestedRule = suggestedRule,
-                            matchingRules = matchingRules,
-                            onSingleUseOnly = { finalRule ->
-                                dmsManager.clearPendingRuleSuggestion()
-                                saveProcessedBitmapWithRule(
-                                    bitmap = processed,
-                                    ocrText = ocrText,
-                                    rule = finalRule,
-                                    isColor = isColor,
-                                    onComplete = onComplete
-                                )
-                            },
-                            onSaveAsPermanentRule = { finalRule ->
-                                dmsManager.clearPendingRuleSuggestion()
-                                addDocRule(finalRule)
-                                saveProcessedBitmapWithRule(
-                                    bitmap = processed,
-                                    ocrText = ocrText,
-                                    rule = finalRule,
-                                    isColor = isColor,
-                                    onComplete = onComplete
-                                )
-                            },
-                            onDismiss = {
-                                dmsManager.clearPendingRuleSuggestion()
-                                runCatching { processed.recycle() }
-                            }
-                        )
-                    )
+                when {
+                    matchedRule != null -> {
+                        analysisReport.append("REGEL-TREFFER: '${matchedRule.name}'\n")
+                        analysisReport.append("Zuweisung: ${matchedRule.targetMainCategoryId} -> ${matchedRule.targetSubCategoryId}\n")
+                        analysisReport.append("Wartet vor dem Speichern auf Bestätigung/Bearbeitung.")
+                    }
+                    matchingRules.isNotEmpty() -> {
+                        analysisReport.append("MEHRERE REGEL-TREFFER: ${matchingRules.joinToString { it.name }}\n")
+                        analysisReport.append("Bitte Regel im Vorschlag bestätigen oder bearbeiten.")
+                    }
+                    else -> {
+                        analysisReport.append("KEIN REGEL-TREFFER. Erstelle schnellen, bearbeitbaren Regelvorschlag.\n")
+                    }
                 }
+                diagnosticService.updateLastAnalysisReport(analysisReport.toString())
+                _isProcessingScan.value = false
+                requestScanRuleConfirmation(
+                    bitmap = processed,
+                    ocrText = ocrText,
+                    matchingRules = matchingRules,
+                    isColor = isColor,
+                    onComplete = onComplete
+                )
             } catch (e: Exception) {
                 Log.e("DocAnizerViewModel", "Fehler in saveSinglePageBulk: ${e.message}", e)
                 _isProcessingScan.value = false
@@ -2167,50 +2184,14 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     _isColorMode.value
                 }
                 val matchingRules = ruleRepo.matchingRules(ocrText)
-                val matchedRule = matchingRules.singleOrNull()
-
-                if (matchedRule != null) {
-                    saveProcessedBitmapWithRule(
-                        bitmap = finalBitmap,
-                        ocrText = ocrText,
-                        rule = matchedRule,
-                        isColor = isColor,
-                        onComplete = onComplete
-                    )
-                } else {
-                    val suggestedRule = buildFastRuleSuggestion(ocrText)
-                    _isProcessingScan.value = false
-                    dmsManager.setPendingRuleSuggestion(com.example.model.PendingRuleSuggestion(
-                        bitmap = finalBitmap,
-                        ocrText = ocrText,
-                        suggestedRule = suggestedRule,
-                        matchingRules = matchingRules,
-                        onSingleUseOnly = { finalRule ->
-                            dmsManager.clearPendingRuleSuggestion()
-                            saveProcessedBitmapWithRule(
-                                bitmap = finalBitmap,
-                                ocrText = ocrText,
-                                rule = finalRule,
-                                isColor = isColor,
-                                onComplete = onComplete
-                            )
-                        },
-                        onSaveAsPermanentRule = { permanentRule ->
-                            addDocRule(permanentRule)
-                            dmsManager.clearPendingRuleSuggestion()
-                            saveProcessedBitmapWithRule(
-                                bitmap = finalBitmap,
-                                ocrText = ocrText,
-                                rule = permanentRule,
-                                isColor = isColor,
-                                onComplete = onComplete
-                            )
-                        },
-                        onDismiss = {
-                            dmsManager.clearPendingRuleSuggestion()
-                        }
-                    ))
-                }
+                _isProcessingScan.value = false
+                requestScanRuleConfirmation(
+                    bitmap = finalBitmap,
+                    ocrText = ocrText,
+                    matchingRules = matchingRules,
+                    isColor = isColor,
+                    onComplete = onComplete
+                )
             } catch (e: Exception) {
                 Log.e("DocAnizerViewModel", "Fehler bei finalizeScanWithOptimizedBitmap: ${e.message}", e)
             } finally {
