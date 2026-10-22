@@ -87,16 +87,16 @@ fun ImageProxy.toLumaChromaFrame(
                 }
                 if (useChroma) {
                     val cy = sy / 2
-                    var ui = uBase + cy * uPlane!!.rowStride + (x0 / 2) * uPlane.pixelStride
-                    var vi = vBase + cy * vPlane!!.rowStride + (x0 / 2) * vPlane.pixelStride
+                    var ui = uBase + cy * uPlane!!.rowStride + (x0 / 2) * uPlane!!.pixelStride
+                    var vi = vBase + cy * vPlane!!.rowStride + (x0 / 2) * vPlane!!.pixelStride
                     for (sx in x0 until x1) {
                         if (sx % 2 == 0) {
                             if (ui in uBase until uLimit) sumU += uBuffer!!.get(ui).toInt() and 0xff
                             if (vi in vBase until vLimit) sumV += vBuffer!!.get(vi).toInt() and 0xff
                             countUV++
                         }
-                        ui += uPlane.pixelStride
-                        vi += vPlane.pixelStride
+                        ui += uPlane!!.pixelStride
+                        vi += vPlane!!.pixelStride
                     }
                 }
             }
