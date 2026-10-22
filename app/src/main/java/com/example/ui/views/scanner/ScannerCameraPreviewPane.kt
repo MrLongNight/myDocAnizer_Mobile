@@ -539,14 +539,14 @@ fun ScannerCameraPreviewPane(
                         )
                     }
                 } else if (hasCapturedCurrentDocument) {
+                    val isSaved = lastBulkSavedDoc != null
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFF065F46).copy(alpha = 0.9f),
+                        color = if (isSaved) Color(0xFF065F46).copy(alpha = 0.9f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                onResetCapturedDocument()
-                            }
+                            .clickable { onResetCapturedDocument() }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -554,17 +554,19 @@ fun ScannerCameraPreviewPane(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CheckCircle,
+                                imageVector = if (isSaved) Icons.Default.CheckCircle else Icons.Default.HourglassTop,
                                 contentDescription = null,
-                                tint = Color.White,
+                                tint = if (isSaved) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "✓ Blatt erfasst • Neues Blatt auflegen oder weiter scannen",
+                                text = if (isSaved) "✓ PDF gespeichert • Neues Blatt auflegen oder weiter scannen"
+                                    else if (isProcessing) "Blatt aufgenommen • Analyse/Verarbeitung läuft – noch nicht gespeichert"
+                                    else "Blatt aufgenommen • Regelvorschlag bestätigen oder Mehrseitenscan abschließen",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = if (isSaved) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
