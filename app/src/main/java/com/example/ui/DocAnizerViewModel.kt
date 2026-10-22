@@ -1780,6 +1780,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
             var processedPages: List<Bitmap> = emptyList()
             val rawPages = _capturedPages.value
             try {
+                if (rawPages.isEmpty()) {
+                    return@launch
+                }
                 withTimeout(60_000L) {
                 val context = getApplication<Application>()
                 val template = _selectedTemplate.value 
@@ -1798,10 +1801,6 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     )
                 val sender = template.defaultSender.ifBlank { "Unbekannt" }
                 val title = template.subCategory.ifBlank { "Dokument" }
-
-                if (rawPages.isEmpty()) {
-                    return@launch
-                }
 
                 val preferredMode = pdfSettings.value.defaultColorMode
                 var anyPageHasColor = false
