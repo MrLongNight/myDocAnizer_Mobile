@@ -69,7 +69,6 @@ import java.util.Locale
 import kotlin.math.sqrt
 import kotlin.math.abs
 import kotlin.math.atan2
-import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
 private fun quadMovedBeyondThreshold(reference: List<android.graphics.PointF>?, current: List<android.graphics.PointF>?): Boolean {
@@ -376,10 +375,6 @@ fun ScannerView(
         scannerSettings.tripodAutoScan,
         scannerSettings.triggerMode,
         scannerSettings.toolsInfoOnly,
-        tiltAngleDegrees,
-        frameAnalysis.isDocumentDetected,
-        frameAnalysis.isDocumentStable,
-        frameAnalysis.averageLuminance,
         capturedRawBitmap,
         pendingRuleSuggestion
     ) {
