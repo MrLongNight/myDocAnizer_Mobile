@@ -3,7 +3,6 @@ package com.example
 import android.graphics.Bitmap
 import android.graphics.Color
 import com.example.service.ImageProcessingService
-import com.example.ui.components.hasCoherentPaperGrid
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -16,38 +15,6 @@ import kotlin.math.abs
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ScanDetectionRegressionTest {
-
-    @Test
-    fun `rectangular bright area passes the live paper-shape gate but a candle-like circle does not`() {
-        val paperGrid = IntArray(8 * 8) { 30 }
-        for (row in 1..6) {
-            for (column in 1..6) {
-                paperGrid[row * 8 + column] = 225
-            }
-        }
-        assertTrue(hasCoherentPaperGrid(paperGrid))
-
-        val candleGrid = IntArray(8 * 8) { 30 }
-        for (row in 1..6) {
-            for (column in 1..6) {
-                val dx = column - 3.5f
-                val dy = row - 3.5f
-                if (dx * dx + dy * dy <= 2.8f * 2.8f) {
-                    candleGrid[row * 8 + column] = 225
-                }
-            }
-        }
-        assertFalse(hasCoherentPaperGrid(candleGrid))
-
-        val shoeGrid = IntArray(8 * 8) { 30 }
-        for (row in 2..5) {
-            for (column in 1..6) {
-                val roundedEnd = (row == 2 || row == 5) && (column == 1 || column == 6)
-                if (!roundedEnd) shoeGrid[row * 8 + column] = 225
-            }
-        }
-        assertFalse("A bright elongated shoe-like silhouette is not a document", hasCoherentPaperGrid(shoeGrid))
-    }
 
     @Test
     fun `automatic crop corners follow a skewed page instead of its axis aligned bounds`() {

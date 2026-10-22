@@ -4,6 +4,16 @@ All notable changes to **myDocAnizer-Mobile** are documented here.
 
 ## [Unreleased]
 
+### Live-Dokumenterkennung: Quad-Detektor integriert
+- CameraX-Analyzer nutzt jetzt `DocumentQuadDetector` statt 12×12-Helligkeitsraster, `hasCoherentPaperGrid`, Luma-Fenster und 30-Frame-Zähler.
+- Analyse auf etwa 9 fps gedrosselt; verkleinerte YUV-Luma/Chroma-Frames werden mit wiederverwendbaren Puffern an den Detektor übergeben.
+- Neuer `DocumentTracker`: Lock bei mindestens 5 von 7 Frames mit confidence ≥ 0,55 und Eckbewegung < 3 % der Bilddiagonale; Lock-Verlust erst nach 6 Fehlframes; EMA-Eckenglättung und Stabilitätsprüfung über ca. 500 ms.
+- `CameraFrameAnalysis` liefert Quad, Confidence, Stabilität, Ablehnungsgrund sowie Rotation, Quellabmessungen und CropRect für spätere Overlay-Ausrichtung. Schärfe (Laplace) und mittlere Helligkeit werden im Quad-Inneren gemessen, mit Bildmitte als Fallback.
+- Autofokus wird bei neuem Lock auf den Quad-Mittelpunkt gelegt und auf maximal einen Versuch je 1,5 Sekunden begrenzt. Tap-to-focus bleibt unverändert.
+- JVM-Tests decken Lock, Flackern, kurze Aussetzer, Unlock nach 6 Fehlframes und springende Ecken ab.
+- **Wichtig: Detektor- und Tracker-Schwellen sind vorläufig und ausdrücklich nicht auf realen Geräten validiert.** FPS und <15-ms-Zielwert müssen auf realer Hardware gemessen werden.
+
+
 ### Automatische Dokumentenerkennung (Detektor-Prototyp)
 - Neue JVM-testbare, reine Kotlin-Viereck-Erkennung ohne OpenCV oder neue Runtime-Abhängigkeiten: geglättete Luma, Otsu mit beiden Polaritäten, gefüllte Komponenten, morphologisches Öffnen, konvexe Hülle, Quad-Vereinfachung, Geometrie-/Randkontrastprüfung und optionaler weicher Haut-Chroma-Abzug.
 - Neue YUV_420_888-Konvertierung berücksichtigt Y/U/V rowStride und pixelStride, reduziert auf maximal 160 px lange Kante und kann Zielpuffer wiederverwenden.
