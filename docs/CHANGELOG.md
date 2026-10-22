@@ -4,6 +4,15 @@ All notable changes to **myDocAnizer-Mobile** are documented here.
 
 ## [Unreleased]
 
+### Scanner: Regelvorschlag, Speicherstatus und Fehlerpfad
+- Regelvorschlag-Dialog ist nicht mehr durch Außenklick oder Zurück verwerfbar; „Verwerfen“ verlangt eine explizite Bestätigung.
+- Der Scanner unterscheidet Aufnahme, Analyse, Regelentscheidung, Speichern und gespeichertes PDF. Der Erfolgshinweis wird erst über den Marker nach PDF-Erzeugung und Datenbankeintrag angezeigt; beim Start eines neuen Scans wird ein alter Erfolgshinweis zurückgesetzt.
+- OCR im Einzel-/Bulk-Pfad und nach bestätigtem Zuschnitt hat ein 12-s-Timeout. Speicheroperationen im Regelpfad haben ein 60-s-Timeout. Fehler (einschließlich Vault gesperrt und OutOfMemoryError) werden als Failed angezeigt und halten den Scan für Retry bzw. explizites Verwerfen vor.
+- Beim Schließen der Zuschnittansicht werden die Vorschau-Bitmaps freigegeben; das an den ViewModel-Speicherpfad übergebene Bitmap bleibt erhalten.
+- **Noch offen:** ViewModel-Tests der vollständigen Zustandsfolge und Fehlerfälle, Prüfung aller Scanner-Erfolgstexte, Heap-/10-Scans-Test und Entscheidung zum Regelvorschlag im Mehrseitenmodus. Der Mehrseitenpfad umgeht den Regelvorschlag weiterhin.
+- **Nicht am Gerät validiert:** Detektor-Schwellen, Kamera-/Koordinatenverhalten und die tatsächliche Bitmap-Freigabe unter realer Speichernutzung.
+
+
 ### Auto-Scan-Bereitschaft und Live-Quad-Overlay
 - Auto-Scan erfordert weiterhin einen gelockten, stabilen Dokument-Quad; Wasserwaage ist kein allgemeiner Blocker mehr. Im Stativmodus gilt nur eine großzügigere Neigungsschwelle von 8°.
 - Starres Luminanzfenster 125–245 entfernt; Mindesthelligkeit im Dokumentbereich ist 50. Schärfe blockiert nicht mehr dauerhaft: bei mindestens 1,5 s stabiler, aber unscharfer Seite wird einmalig AF/AE am Quad-Mittelpunkt angefordert und nach etwa 1 s auch bei weiterhin niedriger Schärfe ausgelöst.
