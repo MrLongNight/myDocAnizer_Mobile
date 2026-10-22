@@ -1016,7 +1016,7 @@ class LlmService(private val context: Context) {
                     modelFile = modelFile,
                     ocrText = referenceOcrText,
                     whitelistedCustomFields = listOf("Rechnungsbetrag", "Fälligkeit", "IBAN", "Kundennummer"),
-                    params = LlamaCppInferenceEngine.InferenceParams(temperature = 0.1f, maxTokens = 350, grammar = null)
+                    params = LlamaCppInferenceEngine.InferenceParams(temperature = 0.1f, maxTokens = 160, grammar = null)
                 )
                 nativeExtraction!!.toJsonString()
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -2659,12 +2659,20 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
             )
             
             if (modelFile.exists() && modelFile.length() > 1024 * 1024) {
-                val reply = llamaCppEngine.executeChatInferenceWithTools(
+                val rawReply = llamaCppEngine.executeChatInferenceWithTools(
                     modelFile = modelFile,
                     userMessage = question,
                     documentContextSummary = documentContextSummary
                 )
-                LocalAiChatResult(replyText = reply)
+                val visibleReply = rawReply
+                    .replace(Regex("(?is)<think>.*?</think>"), "")
+                    .let { value -> if (value.contains("<think>", ignoreCase = true)) value.substringBefore("<think>") else value }
+                    .trim()
+                LocalAiChatResult(
+                    replyText = visibleReply.ifBlank {
+                        "Das Modell hat keine sichtbare Antwort ausgegeben. Die Inferenz ist beendet, aber es wurde kein Antworttext erzeugt."
+                    }
+                )
             } else {
                 LlmToolExecutor().executeAssistantWithFollowUps(question, documents, attachedDoc, documentContextSummary)
             }

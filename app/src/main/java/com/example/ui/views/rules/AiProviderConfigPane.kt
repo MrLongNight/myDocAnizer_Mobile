@@ -659,6 +659,7 @@ fun ModelCardHorizontal(
     hardwareInfo: com.example.model.DeviceHardwareInfo,
     viewModel: DocAnizerViewModel
 ) {
+    val context = LocalContext.current
     val compatibility = hardwareInfo.getCompatibility(model.recommendedRamGb)
     var isBenchmarking by remember { mutableStateOf(false) }
     var benchmarkResult by remember { mutableStateOf<com.example.model.ModelBenchmarkResult?>(null) }

@@ -38,6 +38,15 @@ class ScanDetectionRegressionTest {
             }
         }
         assertFalse(hasCoherentPaperGrid(candleGrid))
+
+        val shoeGrid = IntArray(8 * 8) { 30 }
+        for (row in 2..5) {
+            for (column in 1..6) {
+                val roundedEnd = (row == 2 || row == 5) && (column == 1 || column == 6)
+                if (!roundedEnd) shoeGrid[row * 8 + column] = 225
+            }
+        }
+        assertFalse("A bright elongated shoe-like silhouette is not a document", hasCoherentPaperGrid(shoeGrid))
     }
 
     @Test

@@ -3,6 +3,11 @@
 All notable changes to **myDocAnizer-Mobile** are documented here.
 
 ## [Unreleased] - 2026-10-22 (Scan-/Chat-Stabilisierung – noch nicht vollständig verifiziert)
+
+- Added native inference phase/progress reporting to the chat and benchmark, plus keyboard-aware chat expansion.
+- Benchmark token cap reduced from 350 to 160 for the fixed extraction case; visible chat output strips internal `<think>` blocks.
+- Live scanner now evaluates connected bright components, inferred quadrilateral containment, and frame-aware aspect ratio instead of only the 8×8 brightness pattern; added a shoe-like negative test.
+- Scan processing preserves color source pixels and avoids a second crop after explicit corner warping. Physical-device validation remains pending.
 - Chat: zeitbegrenzter Smoke-Test für die einfache Begrüßung ergänzt; der Test bestand im letzten protokollierten Lauf in 0,1 s. Das beweist noch keine zuverlässige physische Geräte-/LLM-Inferenz.
 - Scan-Regeln: Vorschlag/Bestätigung wird auch bei einem einzelnen bestehenden Treffer angefordert; endgültiger Speichervorgang soll erst nach Nutzerentscheidung erfolgen. Sequenz und UI auf Gerät noch nachzuprüfen.
 - OCR: ML-Kit-Callback mit 12-s-Timeout abgesichert; Timeout-Fallback und Bitmap-Lebensdauer angepasst.

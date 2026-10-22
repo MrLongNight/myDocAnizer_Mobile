@@ -23,6 +23,15 @@
 | `6dc6b096` | Perspektiv-Regressionsassertion auf einen inneren Bildpunkt umgestellt, um eine fragile Randpixel-Prüfung zu vermeiden. | Aktuelle Tests grün; prüfen, dass die Teständerung keinen echten Geometriefehler kaschiert. |
 | `c593d26d` | `snapshotFlow` + `collectLatest`: Auto-Scan-Countdown wird abgebrochen, wenn Dokument-, Ausrichtungs-, Schärfe-, Bewegungs- oder Helligkeitsbedingung nicht mehr erfüllt ist. | CI-Lauf `39766676859` erfolgreich; Verhalten mit realem Kamerabild noch offen. |
 
+## Arbeitsblock 22.10.2026 – Live-Erkennung, Inferenzstatus und Scan-Verarbeitung
+
+- Commit `3891ab8`: native llama.cpp-Phase/Fortschritt wird an Chat und Benchmark gemeldet; Chat maximiert sich bei geöffneter Tastatur; Benchmark zeigt Phase/Laufzeit und setzt Busy-State auch bei Fehlern zurück.
+- Commit `a`: Live-Kamera-Prüfung wird von bloßer 8×8-Helligkeitsbelegung auf zusammenhängende helle Komponenten mit Viereck-/Konturprüfung und Seitenverhältnis umgestellt; Abtastraster auf 12×12 erhöht. Ein Negativtest für eine schuhähnliche helle Form ergänzt.
+- Scan-Qualitätscheck: Farberkennung ist konservativer; Farbbilder werden nicht automatisch nachverstärkt. Bereits manuell entzerrte Seiten umgehen den zweiten heuristischen Zuschnitt.
+- Benchmark-Ausgabe begrenzt auf 160 Tokens, weil der feste Extraktionsfall keine 350 Tokens benötigt. Chat entfernt versteckte `<think>`-Blöcke aus sichtbaren Antworten.
+- **Noch kein Gerätetest:** Die Raster-/Konturheuristik ist ein messbarer Zwischenschritt, keine Zusicherung zuverlässiger Erkennung in allen Szenen. Positiv-/Negativ-Fotos und echte Kamera-Tests bleiben erforderlich. Die 280-ms-Vorschau-Neuberechnung und Drag-Latenz sind noch offen.
+- **CI für Commit `3891ab8` wird durch diesen Folgeschritt ersetzt; das Ergebnis ist erst nach Abschluss des neuen Workflows gültig.**
+
 ## Offene Fehler und konkrete Abnahmekriterien
 
 | Priorität | Problem / IST | SOLL / nächste Lösungsschritte | Status |

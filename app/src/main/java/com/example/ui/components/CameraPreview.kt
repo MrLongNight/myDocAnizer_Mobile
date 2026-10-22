@@ -49,40 +49,98 @@ data class CameraFrameAnalysis(
  * Rejects bright objects that only match by average luminance. A sheet should span
  * most interior rows and columns, unlike a circular candle or scattered plant leaves.
  */
-internal fun hasCoherentPaperGrid(lumaGrid: IntArray, gridSize: Int = 8, threshold: Int = 135): Boolean {
-    if (gridSize < 5 || lumaGrid.size != gridSize * gridSize) return false
-    val interiorSize = gridSize - 2
-    val requiredBrightCells = (interiorSize * 2 + 2) / 3
-    val requiredCoveredLines = (interiorSize * 4 + 4) / 5
-    var brightCells = 0
-    val interiorCells = interiorSize * interiorSize
+internal fun hasCoherentPaperGrid(
+    lumaGrid: IntArray,
+    gridSize: Int = 8,
+    threshold: Int = 135,
+    frameAspectRatio: Float = 1f
+): Boolean {
+    if (gridSize < 5 || lumaGrid.size != gridSize * gridSize || !frameAspectRatio.isFinite()) return false
+    val bright = BooleanArray(lumaGrid.size) { lumaGrid[it] >= threshold }
+    val visited = BooleanArray(lumaGrid.size)
+    val total = lumaGrid.size
 
-    for (row in 1 until gridSize - 1) {
-        for (column in 1 until gridSize - 1) {
-            if (lumaGrid[row * gridSize + column] >= threshold) brightCells++
+    fun insideConvexQuad(x: Float, y: Float, corners: List<Pair<Float, Float>>): Boolean {
+        var positive = false
+        var negative = false
+        for (i in corners.indices) {
+            val a = corners[i]
+            val b = corners[(i + 1) % corners.size]
+            val cross = (b.first - a.first) * (y - a.second) -
+                (b.second - a.second) * (x - a.first)
+            if (cross > 0.01f) positive = true
+            if (cross < -0.01f) negative = true
+            if (positive && negative) return false
         }
-    }
-    if (brightCells.toFloat() / interiorCells.toFloat() < 0.72f) return false
-
-    var coveredRows = 0
-    for (row in 1 until gridSize - 1) {
-        var brightInRow = 0
-        for (column in 1 until gridSize - 1) {
-            if (lumaGrid[row * gridSize + column] >= threshold) brightInRow++
-        }
-        if (brightInRow >= requiredBrightCells) coveredRows++
-    }
-
-    var coveredColumns = 0
-    for (column in 1 until gridSize - 1) {
-        var brightInColumn = 0
-        for (row in 1 until gridSize - 1) {
-            if (lumaGrid[row * gridSize + column] >= threshold) brightInColumn++
-        }
-        if (brightInColumn >= requiredBrightCells) coveredColumns++
+        return true
     }
 
-    return coveredRows >= requiredCoveredLines && coveredColumns >= requiredCoveredLines
+    for (start in 0 until total) {
+        if (!bright[start] || visited[start]) continue
+        val queue = IntArray(total)
+        val component = IntArray(total)
+        var head = 0
+        var tail = 0
+        queue[tail++] = start
+        visited[start] = true
+        var minX = gridSize
+        var maxX = -1
+        var minY = gridSize
+        var maxY = -1
+        while (head < tail) {
+            val index = queue[head++]
+            component[head - 1] = index
+            val x = index % gridSize
+            val y = index / gridSize
+            minX = minOf(minX, x)
+            maxX = maxOf(maxX, x)
+            minY = minOf(minY, y)
+            maxY = maxOf(maxY, y)
+            for (dy in -1..1) for (dx in -1..1) {
+                if (dx == 0 && dy == 0) continue
+                val nx = x + dx
+                val ny = y + dy
+                if (nx !in 0 until gridSize || ny !in 0 until gridSize) continue
+                val next = ny * gridSize + nx
+                if (bright[next] && !visited[next]) {
+                    visited[next] = true
+                    queue[tail++] = next
+                }
+            }
+        }
+
+        val boxW = maxX - minX + 1
+        val boxH = maxY - minY + 1
+        if (tail < total * 0.10f ||
+            boxW < gridSize * 0.35f || boxH < gridSize * 0.35f ||
+            (boxW * boxH).toFloat() / total !in 0.12f..0.92f
+        ) continue
+
+        val aspect = boxW.toFloat() / boxH.toFloat() * frameAspectRatio
+        if (aspect !in 0.45f..2.10f) continue
+
+        val points = component.copyOf(tail).map { index ->
+            (index % gridSize).toFloat() to (index / gridSize).toFloat()
+        }
+        val topLeft = points.minByOrNull { it.first + it.second } ?: continue
+        val topRight = points.maxByOrNull { it.first - it.second } ?: continue
+        val bottomRight = points.maxByOrNull { it.first + it.second } ?: continue
+        val bottomLeft = points.minByOrNull { it.first - it.second } ?: continue
+        val corners = listOf(topLeft, topRight, bottomRight, bottomLeft)
+        var twiceArea = 0f
+        for (i in corners.indices) {
+            val a = corners[i]
+            val b = corners[(i + 1) % corners.size]
+            twiceArea += a.first * b.second - b.first * a.second
+        }
+        if (kotlin.math.abs(twiceArea) / 2f < total * 0.10f) continue
+
+        // Rounded/elongated objects have many bright samples outside their inferred diamond;
+        // a paper-like quadrilateral should contain nearly all samples in its component.
+        val insideCount = points.count { insideConvexQuad(it.first, it.second, corners) }
+        if (insideCount.toFloat() / points.size.toFloat() >= 0.82f) return true
+    }
+    return false
 }
 
 @Composable
@@ -216,7 +274,7 @@ fun CameraPreview(
 
                                     // Schnelle 8x8-Abtastung. Ein Dokument muss eine große,
                                     // helle zusammenhängend wirkende Fläche mit Randkontrast haben.
-                                    val gridSize = 8
+                                    val gridSize = 12
                                     var innerSum = 0L
                                     var innerCount = 0
                                     var outerSum = 0L
@@ -347,7 +405,11 @@ fun CameraPreview(
                                         (avgInnerLuma - avgOuterLuma) >= 10f &&
                                         brightInnerRatio >= 0.72f &&
                                         innerStdDev in 4f..58f &&
-                                        hasCoherentPaperGrid(lumaGrid, gridSize)
+                                        hasCoherentPaperGrid(
+                                            lumaGrid,
+                                            gridSize,
+                                            frameAspectRatio = width.toFloat() / height.toFloat()
+                                        )
                                     val isDoc =
                                         avgInnerLuma in 125f..245f &&
                                         hasPaperContrast &&
