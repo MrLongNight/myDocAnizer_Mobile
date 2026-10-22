@@ -5,7 +5,7 @@
 **Stand:** Oktober 2026  
 **Status:** Teilweise implementiert; CI- und Geräte-Nachweise sind getrennt auszuweisen  
 
-> **Aktueller Stand:** Komponenten im Repository sind nicht automatisch ein Nachweis für Ende-zu-Ende-Modellbetrieb. Der CI-Lauf baut/testet nur die in diesem Lauf definierten Schritte; echte GGUF-Inferenz auf Hardware steht noch aus. Native llama.cpp-Konfiguration ist CPU-only (Vulkan deaktiviert), mit Builds für `arm64-v8a` und `x86_64`; andere ABIs gehen auf Stub/Fallback. TPS- und Modellqualitätswerte sind nur dann Messwerte, wenn sie aus einem tatsächlichen nativen Modelllauf stammen. Regeln-/Heuristik-Fallbacks sind keine LLM-Ausgabe. Offene Punkte siehe [Live-Plan](LLM_NATIVE_PRODUCTION_PLAN.md).
+> **Aktueller Stand:** Komponenten im Repository sind nicht automatisch ein Nachweis für Ende-zu-Ende-Modellbetrieb. Der CI-Lauf baut/testet nur die in diesem Lauf definierten Schritte; echte GGUF-Inferenz auf Hardware steht noch aus. Native llama.cpp-Konfiguration ist CPU-only (Vulkan deaktiviert), mit Builds für `arm64-v8a` und `x86_64`; andere ABIs gehen auf Stub/Fallback. TPS- und Modellqualitätswerte sind nur dann Messwerte, wenn sie aus einem tatsächlichen nativen Modelllauf stammen. Regeln-/Heuristik-Fallbacks sind keine LLM-Ausgabe. Benchmark-Tokens, Prompt-/Generierungszeiten und Tokens/s werden nur aus den nativen llama.cpp-Zählern übernommen; fehlen valide Zähler, wird das Ergebnis ausdrücklich als nicht gemessen markiert. Tokens werden nicht aus der Zeichenlänge geschätzt. Offene Punkte siehe [Live-Plan](LLM_NATIVE_PRODUCTION_PLAN.md).
 
 ---
 
