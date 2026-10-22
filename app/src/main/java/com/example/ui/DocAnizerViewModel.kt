@@ -1960,11 +1960,24 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         bitmap: Bitmap,
         onComplete: ((DocumentEntity) -> Unit)? = null
     ) {
+        var processedForFailure: Bitmap? = null
+        scanRetryAction = {
+            processedForFailure?.takeIf { it !== bitmap }?.let { runCatching { it.recycle() } }
+            processedForFailure = null
+            saveSinglePageBulk(bitmap, onComplete)
+        }
+        scanDiscardAction = {
+            processedForFailure?.takeIf { it !== bitmap }?.let { runCatching { it.recycle() } }
+            runCatching { bitmap.recycle() }
+            processedForFailure = null
+            scanRetryAction = null
+            scanDiscardAction = null
+        }
         viewModelScope.launch(Dispatchers.IO) {
             _isProcessingScan.value = true
+            _scanWorkflowState.value = "Analyzing"
+            _scanWorkflowError.value = null
             try {
-                val context = getApplication<Application>()
-
                 val preferredMode = if (scannerSettings.value.scanMode == "AUTO") {
                     pdfSettings.value.defaultColorMode
                 } else {
@@ -1975,23 +1988,19 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     src = bitmap,
                     preferredMode = preferredMode
                 )
-                if (processed != bitmap) {
-                    runCatching { bitmap.recycle() }
+                processedForFailure = processed
+
+                val ocrText = withTimeout(12_000L) {
+                    OcrService.recognizeText(processed, "", "")
                 }
 
-                // 1. Echte Offline ML-Kit OCR
-                val ocrText = OcrService.recognizeText(processed, "", "")
-
-                // Integrierte Diagnose für Routine 2
                 val analysisReport = StringBuilder()
                 analysisReport.append("OCR-Länge: ${ocrText.length} Zeichen\n")
                 analysisReport.append("Vorschau: ${ocrText.take(100).replace("\n", " ")}...\n")
-
-                // A matched rule is a proposal to review, not permission to silently save.
                 val matchingRules = ruleRepo.matchingRules(ocrText)
-                val matchedRule = matchingRules.singleOrNull()
                 when {
-                    matchedRule != null -> {
+                    matchingRules.singleOrNull() != null -> {
+                        val matchedRule = matchingRules.single()
                         analysisReport.append("REGEL-TREFFER: '${matchedRule.name}'\n")
                         analysisReport.append("Zuweisung: ${matchedRule.targetMainCategoryId} -> ${matchedRule.targetSubCategoryId}\n")
                         analysisReport.append("Wartet vor dem Speichern auf Bestätigung/Bearbeitung.")
@@ -2000,12 +2009,14 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         analysisReport.append("MEHRERE REGEL-TREFFER: ${matchingRules.joinToString { it.name }}\n")
                         analysisReport.append("Bitte Regel im Vorschlag bestätigen oder bearbeiten.")
                     }
-                    else -> {
-                        analysisReport.append("KEIN REGEL-TREFFER. Erstelle schnellen, bearbeitbaren Regelvorschlag.\n")
-                    }
+                    else -> analysisReport.append("KEIN REGEL-TREFFER. Erstelle schnellen, bearbeitbaren Regelvorschlag.\n")
                 }
                 diagnosticService.updateLastAnalysisReport(analysisReport.toString())
-                _isProcessingScan.value = false
+
+                if (processed !== bitmap) runCatching { bitmap.recycle() }
+                scanRetryAction = null
+                scanDiscardAction = null
+                _scanWorkflowState.value = "AwaitingRuleDecision"
                 requestScanRuleConfirmation(
                     bitmap = processed,
                     ocrText = ocrText,
@@ -2013,8 +2024,11 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     isColor = isColor,
                     onComplete = onComplete
                 )
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                _scanWorkflowState.value = "Failed"
+                _scanWorkflowError.value = scanFailureMessage(e, if (e is kotlinx.coroutines.TimeoutCancellationException) "OCR" else "Analyse")
                 Log.e("DocAnizerViewModel", "Fehler in saveSinglePageBulk: ${e.message}", e)
+            } finally {
                 _isProcessingScan.value = false
             }
         }
