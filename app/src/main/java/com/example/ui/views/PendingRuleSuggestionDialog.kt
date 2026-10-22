@@ -95,6 +95,7 @@ fun PendingRuleSuggestionDialog(
     }
 
     var copyNotificationMessage by remember { mutableStateOf<String?>(null) }
+    var showDiscardConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(copyNotificationMessage) {
         if (copyNotificationMessage != null) {
@@ -167,9 +168,34 @@ fun PendingRuleSuggestionDialog(
         )
     }
 
+    if (showDiscardConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirmation = false },
+            title = { Text("Scan wirklich verwerfen?") },
+            text = { Text("Das noch nicht gespeicherte Dokument und seine Regelbearbeitung werden verworfen.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDiscardConfirmation = false
+                        suggestion.onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Scan verwerfen") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirmation = false }) { Text("Weiter bearbeiten") }
+            }
+        )
+    }
+
     Dialog(
-        onDismissRequest = { suggestion.onDismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        // Outside taps and Back must never silently discard the captured bitmap.
+        onDismissRequest = { },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnClickOutside = false,
+            dismissOnBackPress = false
+        )
     ) {
         Surface(
             shape = RoundedCornerShape(20.dp),
@@ -1051,11 +1077,17 @@ fun PendingRuleSuggestionDialog(
                     }
                 }
 
-                // Aktions-Buttons: Einmalig anwenden vs. Dauerhafte Regel speichern
+                // Explicit discard only; accidental outside taps/Back do not destroy the scan.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    TextButton(
+                        onClick = { showDiscardConfirmation = true },
+                        modifier = Modifier.height(48.dp).testTag("btn_discard_scan")
+                    ) { Text("Verwerfen", color = MaterialTheme.colorScheme.error, fontSize = 11.sp) }
+
                     OutlinedButton(
                         onClick = {
                             if (suggestion.matchingRules.size > 1) {
