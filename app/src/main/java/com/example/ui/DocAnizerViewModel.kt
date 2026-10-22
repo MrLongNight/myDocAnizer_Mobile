@@ -30,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.util.UUID
 
@@ -1217,6 +1218,12 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isProcessingScan = MutableStateFlow(false)
     val isProcessingScan: StateFlow<Boolean> = _isProcessingScan.asStateFlow()
 
+    // Explicit scan workflow status; Saved is reached only after document persistence.
+    private val _scanWorkflowState = MutableStateFlow("Idle")
+    val scanWorkflowState: StateFlow<String> = _scanWorkflowState.asStateFlow()
+    private val _scanWorkflowError = MutableStateFlow<String?>(null)
+    val scanWorkflowError: StateFlow<String?> = _scanWorkflowError.asStateFlow()
+
     private val _filter = MutableStateFlow(ExplorerFilter())
     val filter: StateFlow<ExplorerFilter> = _filter.asStateFlow()
 
@@ -1888,7 +1895,6 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 suggestedRule = suggestedRule,
                 matchingRules = matchingRules,
                 onSingleUseOnly = { finalRule ->
-                    dmsManager.clearPendingRuleSuggestion()
                     saveProcessedBitmapWithRule(
                         bitmap = bitmap,
                         ocrText = ocrText,
@@ -1898,14 +1904,13 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     )
                 },
                 onSaveAsPermanentRule = { permanentRule ->
-                    dmsManager.clearPendingRuleSuggestion()
-                    addDocRule(permanentRule)
                     saveProcessedBitmapWithRule(
                         bitmap = bitmap,
                         ocrText = ocrText,
                         rule = permanentRule,
                         isColor = isColor,
-                        onComplete = onComplete
+                        onComplete = onComplete,
+                        afterSaved = { addDocRule(permanentRule) }
                     )
                 },
                 onDismiss = {
@@ -2208,11 +2213,16 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         ocrText: String,
         rule: com.example.model.DocRule,
         isColor: Boolean,
-        onComplete: ((DocumentEntity) -> Unit)? = null
+        onComplete: ((DocumentEntity) -> Unit)? = null,
+        afterSaved: (() -> Unit)? = null
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             _isProcessingScan.value = true
+            _scanWorkflowState.value = "Saving"
+            _scanWorkflowError.value = null
+            var saveCompleted = false
             try {
+                withTimeout(60_000L) {
                 val context = getApplication<Application>()
                 val template = templates.value.find {
                     it.mainCategoryId == rule.targetMainCategoryId && it.subCategoryId == rule.targetSubCategoryId
@@ -2365,13 +2375,31 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
 
+                saveCompleted = true
+                _lastBulkSavedDoc.value = created
+                _scanWorkflowState.value = "Saved"
+                _scanWorkflowError.value = null
+                dmsManager.clearPendingRuleSuggestion()
                 withContext(Dispatchers.Main) {
+                    afterSaved?.invoke()
                     onComplete?.invoke(created)
                 }
-            } catch (e: Exception) {
+                }
+            } catch (e: Throwable) {
+                val message = when {
+                    e.message?.contains("Vault is locked", ignoreCase = true) == true ->
+                        "Der Tresor ist gesperrt. Bitte entsperren und danach „Erneut versuchen“ wählen."
+                    e is OutOfMemoryError ->
+                        "Zu wenig Arbeitsspeicher beim Speichern. Der Scan bleibt erhalten; bitte andere Apps schließen und erneut versuchen."
+                    e is kotlinx.coroutines.TimeoutCancellationException ->
+                        "Das Speichern hat länger als 60 Sekunden gedauert. Der Scan bleibt erhalten; bitte erneut versuchen."
+                    else -> "Speichern fehlgeschlagen: ${e.message ?: e.javaClass.simpleName}. Der Scan bleibt erhalten."
+                }
+                _scanWorkflowState.value = "Failed"
+                _scanWorkflowError.value = message
                 Log.e("DocAnizerViewModel", "Fehler in saveProcessedBitmapWithRule: ${e.message}", e)
             } finally {
-                runCatching { bitmap.recycle() }
+                if (saveCompleted) runCatching { bitmap.recycle() }
                 _isProcessingScan.value = false
             }
         }
