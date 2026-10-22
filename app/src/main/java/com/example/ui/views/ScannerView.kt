@@ -36,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -361,21 +362,18 @@ fun ScannerView(
             (scannerSettings.tripodAutoScan || scannerSettings.triggerMode == "AUTO_DETECT")
 
         if (isTripodOrAuto && !isPreScanActive && !hasCapturedCurrentDocument && !isProcessing && !isCountdownRunning && capturedRawBitmap == null && pendingRuleSuggestion == null) {
-            val isReady = frameAnalysis.isDocumentDetected &&
-                isPhoneInWaage &&
-                isSharpnessOptimal &&
-                frameAnalysis.motionScore < 4.5f &&
-                frameAnalysis.averageLuminance in 125f..245f
-            if (isReady) {
-                autoDetectProgress = 0.5f
-                // Give autofocus/exposure and hand motion longer to settle before capturing.
-                kotlinx.coroutines.delay(650L)
-                val stillReady = frameAnalysis.isDocumentDetected &&
+            // Keep the settle window alive only while all quality checks remain valid.
+            // collectLatest cancels the delay when the readiness predicate flips false.
+            snapshotFlow {
+                frameAnalysis.isDocumentDetected &&
                     isPhoneInWaage &&
                     isSharpnessOptimal &&
                     frameAnalysis.motionScore < 4.5f &&
                     frameAnalysis.averageLuminance in 125f..245f
-                if (stillReady) {
+            }.collectLatest { isReady ->
+                if (isReady) {
+                    autoDetectProgress = 0.5f
+                    kotlinx.coroutines.delay(650L)
                     autoDetectProgress = 1.0f
                     executeCapture()
                     hasCapturedCurrentDocument = true
@@ -384,8 +382,6 @@ fun ScannerView(
                 } else {
                     autoDetectProgress = 0f
                 }
-            } else {
-                autoDetectProgress = 0f
             }
         } else {
             autoDetectProgress = 0f
