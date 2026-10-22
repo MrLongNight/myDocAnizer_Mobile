@@ -39,9 +39,10 @@ enum class FlashOption(val label: String) {
 }
 
 data class CameraFrameAnalysis(
-    val isDocumentDetected: Boolean = true,
+    val isDocumentDetected: Boolean = false,
     val motionScore: Float = 0f, // 0f = komplett still, > 15f = Bewegung / Blattwechsel
-    val averageLuminance: Float = 128f
+    val averageLuminance: Float = 128f,
+    val sharpnessScore: Float = 0f
 )
 
 @Composable
@@ -172,10 +173,9 @@ fun CameraPreview(
                                     val rowStride = plane.rowStride
                                     val pixelStride = plane.pixelStride
 
-                                    // Schnelle Abtastung eines 6x6 Rasters:
-                                    // Innere Zone (gx 2..5, gy 2..5 = Dokumentbereich)
-                                    // Äußere Zone (gx 1,6 oder gy 1,6 = Tisch/Hintergrund)
-                                    val gridSize = 6
+                                    // Schnelle 8x8-Abtastung. Ein Dokument muss eine große,
+                                    // helle zusammenhängend wirkende Fläche mit Randkontrast haben.
+                                    val gridSize = 8
                                     var innerSum = 0L
                                     var innerCount = 0
                                     var outerSum = 0L
@@ -219,6 +219,43 @@ fun CameraPreview(
                                         varianceSum += (diff * diff)
                                     }
                                     val innerStdDev = Math.sqrt(varianceSum / safeInnerCount).toFloat()
+                                    val brightInnerRatio =
+                                        innerLumas.count { it >= 135 }.toFloat() / safeInnerCount.toFloat()
+
+                                    // Tatsächliche Bildschärfe aus lokalen Luma-Kanten messen.
+                                    // Das ist unabhängig von der Neigung/Bewegung des Smartphones.
+                                    val focusGridSize = 80
+                                    var laplacianSum = 0L
+                                    var laplacianCount = 0
+                                    for (fy in 1..focusGridSize) {
+                                        val y = (height * fy / (focusGridSize + 1)).coerceIn(1, height - 2)
+                                        for (fx in 1..focusGridSize) {
+                                            val x = (width * fx / (focusGridSize + 1)).coerceIn(1, width - 2)
+                                            val centerIndex = y * rowStride + x * pixelStride
+                                            val leftIndex = y * rowStride + (x - 1) * pixelStride
+                                            val rightIndex = y * rowStride + (x + 1) * pixelStride
+                                            val topIndex = (y - 1) * rowStride + x * pixelStride
+                                            val bottomIndex = (y + 1) * rowStride + x * pixelStride
+                                            if (centerIndex in 0 until buffer.capacity() &&
+                                                leftIndex in 0 until buffer.capacity() &&
+                                                rightIndex in 0 until buffer.capacity() &&
+                                                topIndex in 0 until buffer.capacity() &&
+                                                bottomIndex in 0 until buffer.capacity()
+                                            ) {
+                                                val center = buffer.get(centerIndex).toInt() and 0xFF
+                                                val left = buffer.get(leftIndex).toInt() and 0xFF
+                                                val right = buffer.get(rightIndex).toInt() and 0xFF
+                                                val top = buffer.get(topIndex).toInt() and 0xFF
+                                                val bottom = buffer.get(bottomIndex).toInt() and 0xFF
+                                                laplacianSum += kotlin.math.abs(4 * center - left - right - top - bottom)
+                                                laplacianCount++
+                                            }
+                                        }
+                                    }
+                                    val averageLaplacian = if (laplacianCount > 0) {
+                                        laplacianSum.toFloat() / laplacianCount.toFloat()
+                                    } else 0f
+                                    val sharpnessScore = (averageLaplacian / 12f * 100f).coerceIn(0f, 100f)
 
                                     // Bewegung / Blattwechsel ermitteln
                                     val prev = previousSamplesRef[0]
@@ -233,18 +270,24 @@ fun CameraPreview(
                                     }
                                     previousSamplesRef[0] = currentSamples
 
-                                    // Echte Dokument-Erkennung:
-                                    // 1. Nicht im Dunkeln / keine verdeckte Linse (Helligkeit >= 60)
-                                    // 2. Dokument hat Kontrast zum Hintergrund (Tisch) ODER Textur/Schrift (StdDev >= 16)
-                                    // 3. Kein hektisches Verwackeln (motionDiff < 6.0)
-                                    val hasPaperContrast = (avgInnerLuma - avgOuterLuma) >= 8f || innerStdDev >= 16f
-                                    val isDoc = (avgInnerLuma in 60f..250f) && hasPaperContrast && (motionDiff < 6.0f)
+                                    // Pflanzen/Kerzen bestehen die alte Prüfung oft allein wegen Textur.
+                                    // Papier muss den Innenbereich mehrheitlich aufhellen und zum Außenrand passen.
+                                    val hasPaperContrast =
+                                        (avgInnerLuma - avgOuterLuma) >= 10f &&
+                                        brightInnerRatio >= 0.68f &&
+                                        innerStdDev in 4f..58f
+                                    val isDoc =
+                                        avgInnerLuma in 125f..245f &&
+                                        hasPaperContrast &&
+                                        motionDiff < 6.0f &&
+                                        sharpnessScore >= 18f
                                     mainHandler.post {
                                         onFrameAnalysis(
                                             CameraFrameAnalysis(
                                                 isDocumentDetected = isDoc,
                                                 motionScore = motionDiff,
-                                                averageLuminance = avgInnerLuma
+                                                averageLuminance = avgInnerLuma,
+                                                sharpnessScore = sharpnessScore
                                             )
                                         )
                                     }

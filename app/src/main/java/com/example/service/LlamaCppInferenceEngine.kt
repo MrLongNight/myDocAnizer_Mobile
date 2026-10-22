@@ -418,8 +418,11 @@ ws ::= [ \t\n\r]*
         val maxTokens: Int = 512,
         val threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(2, 6),
         val gpuLayers: Int = 0,
-        /** Compatibility field only: this runtime does not expose GBNF enforcement. */
-        val grammar: String? = DMS_JSON_GBNF
+        /**
+         * Optional grammar. Keep disabled until the grammar is validated against the
+         * pinned llama.cpp parser on the target Android ABI.
+         */
+        val grammar: String? = null
     )
 
     /**
@@ -440,7 +443,7 @@ ws ::= [ \t\n\r]*
         ocrText: String,
         whitelistedCustomFields: List<String> = emptyList(),
         useStrictTriage: Boolean = true,
-        params: InferenceParams = InferenceParams(maxTokens = 350, grammar = DMS_JSON_GBNF)
+        params: InferenceParams = InferenceParams(maxTokens = 350, grammar = null)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
         lastInferenceMode = InferenceMode.NOT_RUN
         lastInferenceMetrics = null
@@ -451,7 +454,12 @@ ws ::= [ \t\n\r]*
         val filteredSlice = OcrPreFilterMatrix.extractFirstRunSlice(ocrText)
         val useTriage = useStrictTriage || whitelistedCustomFields.isEmpty()
         val systemPrompt = if (useTriage) TRIAGE_SYSTEM_PROMPT else buildSmallModelOptimizedPrompt(whitelistedCustomFields)
-        val targetParams = if (useTriage) params.copy(maxTokens = 200, grammar = TRIAGE_JSON_GBNF) else params
+        // The active TRIAGE/DMS grammars are rejected by llama.cpp on the target device.
+        // Do not let grammar construction abort structured extraction; parse the model JSON afterward.
+        val targetParams = params.copy(
+            maxTokens = if (useTriage) 200 else params.maxTokens,
+            grammar = null
+        )
 
         val rawOutput = executeInference(
             modelFile = modelFile,
@@ -474,7 +482,7 @@ ws ::= [ \t\n\r]*
         userCorrectionPrompt: String? = null,
         folderStrategy: FolderStrategy = FolderStrategy.BY_CATEGORY,
         department: DepartmentTeam? = null,
-        params: InferenceParams = InferenceParams(maxTokens = 600, grammar = DMS_JSON_GBNF)
+        params: InferenceParams = InferenceParams(maxTokens = 600, grammar = null)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
         lastInferenceMode = InferenceMode.NOT_RUN
         lastInferenceMetrics = null

@@ -125,6 +125,8 @@ fun DocumentReviewAndCropScreen(
         rotationAngle
     ) {
         isUpdatingBitmaps = true
+        // Wait for a short pause in the drag before allocating multiple full-size bitmaps.
+        kotlinx.coroutines.delay(140L)
         val warped = withContext(Dispatchers.Default) {
             val cropped = ImageProcessingService.cropAndWarpPerspective(capturedBitmap, cornersInBitmap)
             if (Math.abs(rotationAngle) > 0.1f) {
@@ -153,6 +155,11 @@ fun DocumentReviewAndCropScreen(
     val density = LocalDensity.current
     var canvasSize by remember { mutableStateOf(Size.Zero) }
     var displayedImageRect by remember { mutableStateOf(Rect.Zero) }
+
+    // Keep the pointer coroutine alive while corner coordinates change during dragging.
+    val latestCornersInBitmap = rememberUpdatedState(cornersInBitmap)
+    val latestSplitPosition = rememberUpdatedState(splitPosition)
+    val latestDisplayedImageRect = rememberUpdatedState(displayedImageRect)
 
     val rawImageBitmap = remember(capturedBitmap) { capturedBitmap.asImageBitmap() }
 
@@ -242,18 +249,36 @@ fun DocumentReviewAndCropScreen(
                 Canvas(
                     modifier = Modifier
                         .fillMaxSize()
-                        .pointerInput(cornersInBitmap, splitPosition, displayedImageRect) {
+                        .pointerInput(Unit) {
                             awaitEachGesture {
                                 var initialTwoFingerDist: Float? = null
                                 val touchThresholdPx = with(density) { 48.dp.toPx() }
+
+                                fun currentBitmapToScreen(pt: PointF): Offset {
+                                    val rect = latestDisplayedImageRect.value
+                                    if (rect.width <= 0f || rect.height <= 0f) return Offset.Zero
+                                    return Offset(
+                                        rect.left + pt.x * rect.width / bmpWidth,
+                                        rect.top + pt.y * rect.height / bmpHeight
+                                    )
+                                }
+
+                                fun currentScreenToBitmap(offset: Offset): PointF {
+                                    val rect = latestDisplayedImageRect.value
+                                    if (rect.width <= 0f || rect.height <= 0f) return PointF(0f, 0f)
+                                    return PointF(
+                                        ((offset.x - rect.left) * bmpWidth / rect.width).coerceIn(0f, bmpWidth),
+                                        ((offset.y - rect.top) * bmpHeight / rect.height).coerceIn(0f, bmpHeight)
+                                    )
+                                }
 
                                 val firstDown = awaitFirstDown(requireUnconsumed = false)
                                 val startOffset = firstDown.position
 
                                 var closestIndex: Int? = null
                                 var minDistance = Float.MAX_VALUE
-                                cornersInBitmap.forEachIndexed { index, pt ->
-                                    val screenPt = bitmapToScreen(pt)
+                                latestCornersInBitmap.value.forEachIndexed { index, pt ->
+                                    val screenPt = currentBitmapToScreen(pt)
                                     val dist = hypot(screenPt.x - startOffset.x, screenPt.y - startOffset.y)
                                     if (dist < minDistance && dist <= touchThresholdPx) {
                                         minDistance = dist
@@ -266,7 +291,8 @@ fun DocumentReviewAndCropScreen(
                                     isDraggingSplitter = false
                                     touchScreenOffset = startOffset
                                 } else {
-                                    val splitterX = displayedImageRect.left + (displayedImageRect.width * splitPosition)
+                                    val rect = latestDisplayedImageRect.value
+                                    val splitterX = rect.left + (rect.width * latestSplitPosition.value)
                                     if (kotlin.math.abs(startOffset.x - splitterX) < touchThresholdPx * 1.2f) {
                                         isDraggingSplitter = true
                                         activeCornerIndex = null
@@ -307,14 +333,16 @@ fun DocumentReviewAndCropScreen(
                                             val change = pressedPointers[0]
                                             change.consume()
                                             val currentIndex = activeCornerIndex
-                                            if (currentIndex != null && currentIndex in cornersInBitmap.indices) {
+                                            val currentCorners = latestCornersInBitmap.value
+                                            val rect = latestDisplayedImageRect.value
+                                            if (currentIndex != null && currentIndex in currentCorners.indices) {
                                                 touchScreenOffset = change.position
-                                                val newBitmapPt = screenToBitmap(change.position)
-                                                val updated = cornersInBitmap.toMutableList()
+                                                val newBitmapPt = currentScreenToBitmap(change.position)
+                                                val updated = currentCorners.toMutableList()
                                                 updated[currentIndex] = newBitmapPt
                                                 cornersInBitmap = updated
-                                            } else if (isDraggingSplitter && displayedImageRect.width > 0f) {
-                                                val relX = (change.position.x - displayedImageRect.left) / displayedImageRect.width
+                                            } else if (isDraggingSplitter && rect.width > 0f) {
+                                                val relX = (change.position.x - rect.left) / rect.width
                                                 splitPosition = relX.coerceIn(0.05f, 0.95f)
                                             }
                                         }

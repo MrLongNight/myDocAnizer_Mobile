@@ -255,63 +255,125 @@ object ImageProcessingService {
     }
 
     /**
-     * Ermittelt automatisch die 4 Eckpunkte eines Dokuments [TL, TR, BR, BL] im Bild.
-     * Bei unklaren Konturen wird ein sicherer Randabstand von 8% als Basis verwendet.
+     * Detects a dominant paper-like bright component in a downscaled image.
+     * Separate bright objects (plant leaves, candle wax, lamps) are not unioned into one huge box.
+     * Rectangular corners are only an initial estimate; the review screen allows manual correction.
      */
-    fun detectDocumentCorners(bitmap: Bitmap): List<PointF> {
-        val w = bitmap.width.toFloat()
-        val h = bitmap.height.toFloat()
-        return try {
-            val workingSrc = ensureSoftwareBitmap(bitmap)
-            val scale = 0.1f
-            val smallW = (w * scale).toInt().coerceAtLeast(10)
-            val smallH = (h * scale).toInt().coerceAtLeast(10)
-            val small = Bitmap.createScaledBitmap(workingSrc, smallW, smallH, false)
+    private fun detectBrightPaperBounds(bitmap: Bitmap): Rect? {
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width < 160 || height < 160) return null
 
-            var minX = smallW
-            var maxX = 0
-            var minY = smallH
-            var maxY = 0
-
-            val pixels = IntArray(smallW * smallH)
+        val scale = minOf(0.12f, 320f / maxOf(width, height).toFloat())
+        val smallW = (width * scale).roundToInt().coerceAtLeast(20)
+        val smallH = (height * scale).roundToInt().coerceAtLeast(20)
+        val small = Bitmap.createScaledBitmap(bitmap, smallW, smallH, false)
+        try {
+            val total = smallW * smallH
+            val pixels = IntArray(total)
             small.getPixels(pixels, 0, smallW, 0, 0, smallW, smallH)
-            for (y in 0 until smallH) {
-                for (x in 0 until smallW) {
-                    val pixel = pixels[y * smallW + x]
-                    val r = (pixel shr 16) and 0xFF
-                    val g = (pixel shr 8) and 0xFF
-                    val b = pixel and 0xFF
-                    val luma = 0.299 * r + 0.587 * g + 0.114 * b
-                    if (luma > 135) {
-                        if (x < minX) minX = x
-                        if (x > maxX) maxX = x
-                        if (y < minY) minY = y
-                        if (y > maxY) maxY = y
+            val bright = BooleanArray(total)
+            for (i in pixels.indices) {
+                val pixel = pixels[i]
+                val red = (pixel shr 16) and 0xFF
+                val green = (pixel shr 8) and 0xFF
+                val blue = pixel and 0xFF
+                bright[i] = (0.299 * red + 0.587 * green + 0.114 * blue) >= 140.0
+            }
+
+            val visited = BooleanArray(total)
+            val queue = IntArray(total)
+            var bestScore = 0.0
+            var bestBounds: IntArray? = null
+            for (start in 0 until total) {
+                if (!bright[start] || visited[start]) continue
+                var head = 0
+                var tail = 0
+                queue[tail++] = start
+                visited[start] = true
+                var minX = smallW
+                var maxX = -1
+                var minY = smallH
+                var maxY = -1
+                while (head < tail) {
+                    val index = queue[head++]
+                    val x = index % smallW
+                    val y = index / smallW
+                    minX = minOf(minX, x)
+                    maxX = maxOf(maxX, x)
+                    minY = minOf(minY, y)
+                    maxY = maxOf(maxY, y)
+                    for (dy in -1..1) {
+                        for (dx in -1..1) {
+                            if (dx == 0 && dy == 0) continue
+                            val nx = x + dx
+                            val ny = y + dy
+                            if (nx !in 0 until smallW || ny !in 0 until smallH) continue
+                            val neighbour = ny * smallW + nx
+                            if (bright[neighbour] && !visited[neighbour]) {
+                                visited[neighbour] = true
+                                queue[tail++] = neighbour
+                            }
+                        }
                     }
                 }
-            }
-            small.recycle()
 
-            val detectedW = maxX - minX
-            val detectedH = maxY - minY
-            if (detectedW > smallW * 0.35f && detectedH > smallH * 0.35f) {
-                val pad = (12f / scale).coerceAtLeast(0f)
-                val left = ((minX / scale) - pad).coerceIn(0f, w)
-                val top = ((minY / scale) - pad).coerceIn(0f, h)
-                val right = ((maxX / scale) + pad).coerceIn(0f, w)
-                val bottom = ((maxY / scale) + pad).coerceIn(0f, h)
-                listOf(
-                    PointF(left, top),
-                    PointF(right, top),
-                    PointF(right, bottom),
-                    PointF(left, bottom)
-                )
-            } else {
-                getDefaultCorners(w, h)
+                val boxW = maxX - minX + 1
+                val boxH = maxY - minY + 1
+                if (tail < total * 0.08 ||
+                    boxW < smallW * 0.35f || boxH < smallH * 0.35f
+                ) continue
+                val boxArea = boxW * boxH
+                val fillRatio = tail.toFloat() / boxArea.toFloat()
+                val frameRatio = boxArea.toFloat() / total.toFloat()
+                val aspectRatio = boxW.toFloat() / boxH.toFloat()
+                val hasMargins = minX > smallW * 0.01f && minY > smallH * 0.01f &&
+                    maxX < smallW * 0.99f && maxY < smallH * 0.99f
+                if (fillRatio < 0.42f || frameRatio !in 0.12f..0.92f ||
+                    aspectRatio !in 0.32f..3.1f || !hasMargins
+                ) continue
+
+                val score = tail.toDouble() * fillRatio.toDouble()
+                if (score > bestScore) {
+                    bestScore = score
+                    bestBounds = intArrayOf(minX, minY, maxX + 1, maxY + 1)
+                }
             }
-        } catch (_: Throwable) {
-            getDefaultCorners(w, h)
+
+            val bounds = bestBounds ?: return null
+            val sx = width.toFloat() / smallW.toFloat()
+            val sy = height.toFloat() / smallH.toFloat()
+            return Rect(
+                (bounds[0] * sx).toInt().coerceIn(0, width - 1),
+                (bounds[1] * sy).toInt().coerceIn(0, height - 1),
+                ((bounds[2] * sx).roundToInt()).coerceIn(1, width),
+                ((bounds[3] * sy).roundToInt()).coerceIn(1, height)
+            ).takeIf { it.width() > 0 && it.height() > 0 }
+        } finally {
+            if (small !== bitmap) small.recycle()
         }
+    }
+
+    /**
+     * Estimates the four initial corners [TL, TR, BR, BL]. If a clear paper-like region
+     * cannot be detected, it returns a conservative inset rectangle for manual correction.
+     */
+    fun detectDocumentCorners(bitmap: Bitmap): List<PointF> {
+        val width = bitmap.width.toFloat()
+        val height = bitmap.height.toFloat()
+        val bounds = try { detectBrightPaperBounds(ensureSoftwareBitmap(bitmap)) } catch (_: Throwable) { null }
+        if (bounds == null) return getDefaultCorners(width, height)
+
+        val padX = (width * 0.012f).coerceAtLeast(4f)
+        val padY = (height * 0.012f).coerceAtLeast(4f)
+        val left = (bounds.left.toFloat() - padX).coerceIn(0f, width)
+        val top = (bounds.top.toFloat() - padY).coerceIn(0f, height)
+        val right = (bounds.right.toFloat() + padX).coerceIn(0f, width)
+        val bottom = (bounds.bottom.toFloat() + padY).coerceIn(0f, height)
+        if (right - left < width * 0.3f || bottom - top < height * 0.3f) {
+            return getDefaultCorners(width, height)
+        }
+        return listOf(PointF(left, top), PointF(right, top), PointF(right, bottom), PointF(left, bottom))
     }
 
     fun getDefaultCorners(width: Float, height: Float, marginFraction: Float = 0.08f): List<PointF> {
@@ -417,70 +479,33 @@ object ImageProcessingService {
     }
 
     /**
-     * Automatischer Zuschnitt (Auto-Crop): Sucht nach dem eigentlichen Dokumentenbereich
-     * (heller Papierbereich vor dunklerem Tischhintergrund) und schneidet das Bild präzise zu.
+     * Crops only a dominant paper-like connected component. Unrelated bright objects are ignored.
+     * If a reliable paper area is not found, preserve the original image rather than over-cropping.
      */
     fun autoCropDocument(src: Bitmap): Bitmap {
-        try {
-            val workingSrc = ensureSoftwareBitmap(src)
-            val width = workingSrc.width
-            val height = workingSrc.height
-            
-            // Schnelle Analyse auf einer herunterskalierten Version
-            val scale = 0.1f
-            val smallBmp = Bitmap.createScaledBitmap(workingSrc, (width * scale).toInt(), (height * scale).toInt(), false)
-            val sw = smallBmp.width
-            val sh = smallBmp.height
-            
-            var minX = sw
-            var maxX = 0
-            var minY = sh
-            var maxY = 0
-            
-            val pixels = IntArray(sw * sh)
-            smallBmp.getPixels(pixels, 0, sw, 0, 0, sw, sh)
-            
-            // Finde den hellsten zusammenhängenden Bereich (Papier luma > 140)
-            for (y in 0 until sh) {
-                for (x in 0 until sw) {
-                    val pixel = pixels[y * sw + x]
-                    val r = (pixel shr 16) and 0xFF
-                    val g = (pixel shr 8) and 0xFF
-                    val b = pixel and 0xFF
-                    val luma = 0.299 * r + 0.587 * g + 0.114 * b
-                    
-                    if (luma > 140) {
-                        if (x < minX) minX = x
-                        if (x > maxX) maxX = x
-                        if (y < minY) minY = y
-                        if (y > maxY) maxY = y
-                    }
-                }
+        val workingSrc = ensureSoftwareBitmap(src)
+        return try {
+            val bounds = detectBrightPaperBounds(workingSrc) ?: return src
+            val padX = (bounds.width() * 0.025f).toInt().coerceAtLeast(8)
+            val padY = (bounds.height() * 0.025f).toInt().coerceAtLeast(8)
+            val left = (bounds.left - padX).coerceAtLeast(0)
+            val top = (bounds.top - padY).coerceAtLeast(0)
+            val right = (bounds.right + padX).coerceAtMost(workingSrc.width)
+            val bottom = (bounds.bottom + padY).coerceAtMost(workingSrc.height)
+            val cropW = right - left
+            val cropH = bottom - top
+            if (cropW < workingSrc.width * 0.25f ||
+                cropH < workingSrc.height * 0.25f ||
+                cropW >= workingSrc.width * 0.98f ||
+                cropH >= workingSrc.height * 0.98f
+            ) {
+                src
+            } else {
+                Bitmap.createBitmap(workingSrc, left, top, cropW, cropH)
             }
-            
-            smallBmp.recycle()
-            
-            // Prüfen ob wir einen sinnvollen Bereich gefunden haben (mindestens 40% der Bildfläche)
-            val detectedW = maxX - minX
-            val detectedH = maxY - minY
-            if (detectedW > sw * 0.4 && detectedH > sh * 0.4) {
-                // Zurückrechnen auf Originalgröße mit Sicherheits-Padding von 20px
-                val padding = (20 / scale).toInt()
-                val origMinX = ((minX / scale).toInt() - padding).coerceAtLeast(0)
-                val origMinY = ((minY / scale).toInt() - padding).coerceAtLeast(0)
-                val origMaxX = ((maxX / scale).toInt() + padding).coerceIn(0, width)
-                val origMaxY = ((maxY / scale).toInt() + padding).coerceIn(0, height)
-                
-                val cropW = origMaxX - origMinX
-                val cropH = origMaxY - origMinY
-                if (cropW > 100 && cropH > 100 && cropW < width && cropH < height) {
-                    return Bitmap.createBitmap(workingSrc, origMinX, origMinY, cropW, cropH)
-                }
-            }
-        } catch (_: Exception) {
-            // Fallback auf Original bei jedem Fehler
+        } catch (_: Throwable) {
+            src
         }
-        return src
     }
 
     /**

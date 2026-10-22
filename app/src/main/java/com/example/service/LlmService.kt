@@ -1547,7 +1547,7 @@ class LlmService(private val context: Context) {
                     params = LlamaCppInferenceEngine.InferenceParams(
                         temperature = config.temperature,
                         threads = config.threadCount,
-                        grammar = LlamaCppInferenceEngine.DMS_JSON_GBNF
+                        grammar = null
                     )
                 )
 
@@ -2015,7 +2015,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                 systemPrompt = LlamaCppInferenceEngine.BASE_SYSTEM_PROMPT,
                 params = LlamaCppInferenceEngine.InferenceParams(
                     temperature = 0.1f,
-                    grammar = LlamaCppInferenceEngine.DMS_JSON_GBNF
+                    grammar = null
                 )
             )
 
@@ -2211,7 +2211,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                     params = LlamaCppInferenceEngine.InferenceParams(
                         temperature = config.temperature,
                         threads = config.threadCount,
-                        grammar = LlamaCppInferenceEngine.DMS_JSON_GBNF
+                        grammar = null
                     )
                 )
 
@@ -2620,6 +2620,28 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
     ): LocalAiChatResult = withContext(Dispatchers.Default) {
         _isGenerating.value = true
         try {
+            // A simple greeting does not need model loading or token generation.
+            // Avoid leaving a trivial "Hi" behind a slow native inference call.
+            val normalizedGreeting = question
+                .lowercase()
+                .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
+                .trim()
+            if (normalizedGreeting in setOf(
+                    "hi", "hey", "hello", "hallo", "moin", "servus", "yo",
+                    "guten morgen", "guten tag", "guten abend"
+                )
+            ) {
+                AppAuditLogger.log(
+                    category = LogCategory.AI_INFERENCE,
+                    tag = "Chatbot",
+                    message = "Kurze Begrüßung ohne Modelllauf beantwortet",
+                    details = "Keine native Inferenz gestartet."
+                )
+                return@withContext LocalAiChatResult(
+                    replyText = "Hallo! Ich bin dein myDocAnizer-Assistent. Wobei kann ich dir helfen?"
+                )
+            }
+
             val activeModel = getSelectedModel()
             val modelFile = getModelFile(activeModel.id)
             

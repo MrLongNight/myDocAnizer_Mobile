@@ -171,15 +171,8 @@ fun ScannerView(
     val tiltAngleDegrees = (atan2(xyMagnitude.toDouble(), abs(sensorTiltZ).toDouble()) * (180.0 / Math.PI)).toFloat()
     val isPhoneInWaage = tiltAngleDegrees <= 3.2f
 
-    // 2. Bildschärfe-Prüfung (Erschütterung / Stillstandsanalyse)
-    val sharpnessScore = when {
-        xyMagnitude < 0.45f -> 100
-        xyMagnitude < 0.95f -> 95
-        xyMagnitude < 1.6f -> 85
-        xyMagnitude < 2.5f -> 65
-        else -> 40
-    }
-    val isSharpnessOptimal = sharpnessScore >= 85
+    // Bildschärfe anhand echter Kanten im Kamera-Lumakanal (nicht aus Telefonbewegung schätzen).
+    val isSharpnessOptimal = frameAnalysis.sharpnessScore >= 18f
 
     val isAutoMode = scannerSettings.scanMode == "AUTO"
 
