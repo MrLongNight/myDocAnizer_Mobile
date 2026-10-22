@@ -33,6 +33,7 @@ myDocAnizer-Mobile is the counter-design to commercial scanner apps with opaque 
 
 - **100% PRIVACY & GDPR:** No scanned document and no OCR text ever leaves your smartphone unencrypted.
 - **ZERO-CLOUD AI:** The app uses exclusively on-device AI models (quantized GGUF weights via HuggingFace) and offline OCR via Google ML Kit.
+- **HONEST BENCHMARKS:** Token counts and tokens/second are reported as measured only when valid native llama.cpp counters are available; missing counters are labeled unmeasured, never estimated from output length.
 - **0 € TOKEN COSTS:** Neither users nor developers incur ongoing API costs from OpenAI, Google Cloud, or Anthropic.
 - **ZERO-KNOWLEDGE ENCRYPTION:** Backups and optional cloud backups (WebDAV, Nextcloud, Google Drive) are encrypted locally on the device via AES-256-GCM and PBKDF2 (100,000 iterations). Only the owner can read them.
 - **TRANSPARENT MONETIZATION:** An honest hybrid model of free community access, modular lifetime one-time purchases, and fair monthly/project passes without lock-in.
