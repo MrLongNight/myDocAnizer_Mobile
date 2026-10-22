@@ -686,8 +686,12 @@ fun ModelCardHorizontal(
                             Text("Gewichtung: 65% Qualität + 35% Geschwindigkeit", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                    Text("• Qualität: ${bench.qualityScore}% (Ground-Truth Check)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Text("• Durchsatz: ${bench.quantityScore}% (${bench.tokensPerSecond} TPS, ${bench.latencyMs}ms)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    if (bench.isMeasured) {
+                        Text("• Qualität: ${bench.qualityScore}% (heuristische Testfall-Prüfung)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text("• Geschwindigkeit: ${bench.tokensPerSecond} TPS (Schätzung; ${bench.latencyMs} ms Laufzeit)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    } else {
+                        Text("Benchmark nicht gemessen", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                    }
                     Text("• Absender: ${bench.extractedSender} | Typ: ${bench.extractedDocType}", fontSize = 11.sp)
                     if (bench.extractedAmount.isNotBlank()) {
                         Text("• Rechnungsbetrag: ${bench.extractedAmount}", fontSize = 11.sp)
@@ -782,7 +786,7 @@ fun ModelCardHorizontal(
                                 }
                             }
                             Text(
-                                text = "${model.parameterSize} • ${if (model.estimatedTps > 0f) "${model.estimatedTps} TPS" else model.modelCategory} • Score: ${model.recommendationScore}/100",
+                                text = "${model.parameterSize} • ${if (model.estimatedTps > 0f) "≈${model.estimatedTps} TPS (Schätzung)" else model.modelCategory} • Score: ${model.recommendationScore}/100",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 9.sp,

@@ -1030,6 +1030,24 @@ class LlmService(private val context: Context) {
             )
         }
 
+        // Do not present heuristic fallback output as a measured local-model benchmark.
+        if (llamaCppEngine.lastInferenceMode != LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM) {
+            val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
+            return@withContext com.example.model.ModelBenchmarkResult(
+                modelId = model.id,
+                modelName = model.name,
+                qualityScore = 0,
+                quantityScore = 0,
+                overallScore = 0,
+                tokensPerSecond = 0f,
+                latencyMs = elapsedMs,
+                generatedTokens = 0,
+                rawOutput = rawOutput,
+                evaluationDetails = "Nicht gemessen: Es lief kein natives lokales LLM. Es wurde nur Fallback-/Regelausgabe erzeugt.",
+                isMeasured = false
+            )
+        }
+
         val endTime = System.currentTimeMillis()
         val latencyMs = (endTime - startTime).coerceAtLeast(1)
         val generatedTokens = (rawOutput.length / 3.6f).toInt().coerceAtLeast(1)

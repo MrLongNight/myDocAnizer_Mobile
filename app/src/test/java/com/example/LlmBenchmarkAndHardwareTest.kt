@@ -31,6 +31,15 @@ class LlmBenchmarkAndHardwareTest {
     }
 
     @Test
+    fun unknownHardwareIsNotPresentedAsMeasuredCapacity() {
+        val unknown = DeviceHardwareInfo()
+        assertEquals(0f, unknown.totalRamGb, 0.001f)
+        assertEquals(0, unknown.cpuCores)
+        assertEquals("Unbekannt", unknown.performanceTier)
+        assertEquals(com.example.model.ModelCompatibilityLevel.LIMITED, unknown.getCompatibility(2.0f))
+    }
+
+    @Test
     fun testHardwareDetectionMethods() {
         val soc = LlmHardwareDetector.detectSocModel()
         assertNotNull(soc)

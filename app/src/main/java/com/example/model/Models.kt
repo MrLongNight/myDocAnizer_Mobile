@@ -1296,22 +1296,23 @@ enum class LlmPreferenceMode(
  * Echte Hardware-Telemetrie des Android-Geräts zur KI-Kompatibilitätsprüfung
  */
 data class DeviceHardwareInfo(
-    val totalRamGb: Float = 6.0f,
-    val availableRamGb: Float = 3.5f,
-    val usedRamGb: Float = 2.5f,
-    val ramUsagePercent: Int = 42,
-    val cpuCores: Int = 8,
-    val isLowRamDevice: Boolean = false,
-    val socModel: String = "",
-    val maxCpuFreqMhz: Int = 2000,
-    val supportsArmDotProd: Boolean = true,
-    val hasVulkanGpu: Boolean = true,
-    val cpuBenchmarkScore: Int = 75
+    val totalRamGb: Float = 0f,
+    val availableRamGb: Float = 0f,
+    val usedRamGb: Float = 0f,
+    val ramUsagePercent: Int = 0,
+    val cpuCores: Int = 0,
+    val isLowRamDevice: Boolean = true,
+    val socModel: String = "Unknown SoC",
+    val maxCpuFreqMhz: Int = 0,
+    val supportsArmDotProd: Boolean = false,
+    val hasVulkanGpu: Boolean = false,
+    val cpuBenchmarkScore: Int = 0
 ) {
     val freeRamGb: Float get() = availableRamGb
 
     val performanceTier: String
         get() = when {
+            totalRamGb <= 0f -> "Unbekannt"
             totalRamGb >= 8.0f -> "High-End (Flaggschiff)"
             totalRamGb >= 5.0f -> "Ausgewogen (Mittelklasse)"
             else -> "Kompakt (Basisklasse)"
@@ -1319,6 +1320,7 @@ data class DeviceHardwareInfo(
 
     fun getCompatibility(recommendedRamGb: Float): ModelCompatibilityLevel {
         return when {
+            totalRamGb <= 0f -> ModelCompatibilityLevel.LIMITED
             recommendedRamGb <= 3.2f || (totalRamGb >= 6.0f && recommendedRamGb <= 4.5f) -> ModelCompatibilityLevel.OPTIMAL
             recommendedRamGb <= 5.2f || (totalRamGb >= 8.0f && recommendedRamGb <= 7.0f) -> ModelCompatibilityLevel.LIMITED
             else -> ModelCompatibilityLevel.NOT_RECOMMENDED
@@ -1339,7 +1341,9 @@ data class ModelBenchmarkResult(
     val extractedDocType: String = "",
     val extractedAmount: String = "",
     val rawOutput: String = "",
-    val evaluationDetails: String = ""
+    val evaluationDetails: String = "",
+    /** True only when the native local model actually ran; fallback output is not a benchmark. */
+    val isMeasured: Boolean = true
 )
 
 enum class ModelCompatibilityLevel {

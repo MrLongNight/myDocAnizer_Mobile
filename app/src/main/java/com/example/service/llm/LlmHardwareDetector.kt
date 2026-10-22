@@ -77,7 +77,7 @@ object LlmHardwareDetector {
             if (!board.isNullOrBlank() && board != Build.UNKNOWN) return board
             "Unknown SoC"
         } catch (_: Throwable) {
-            "Standard ARMv8"
+            "Unknown SoC"
         }
     }
 
