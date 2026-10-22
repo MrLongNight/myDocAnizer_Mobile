@@ -56,6 +56,25 @@ class DocumentQuadDetectorTest {
         assertDetected(pixels)
     }
 
+    @Test fun skinLikeChromaReducesConfidenceWithoutRejectingClearPaper() {
+        val pixels = solid(45)
+        rect(pixels, w, h, 30, 10, 130, 110, 235)
+        val yPlane = ByteArray(w * h) { pixels[it].toByte() }
+        val uPlane = ByteArray(w * h) { 128.toByte() }
+        val vPlane = ByteArray(w * h) { 128.toByte() }
+        // Skin-range chroma across the paper interior must reduce confidence,
+        // not turn chroma alone into a rejection reason.
+        for (py in 10..110) for (px in 30..130) {
+            val index = py * w + px
+            uPlane[index] = 100.toByte() // Cb in the configured skin range
+            vPlane[index] = 150.toByte() // Cr in the configured skin range
+        }
+
+        val result = detector.detect(LumaChromaFrame(w, h, yPlane, uPlane, vPlane))
+        assertNotNull("A geometrically clear page must survive the soft chroma check: ${result.rejectReason}", result.quad)
+        assertTrue("Confidence must still permit temporal lock: ${result.confidence}", result.confidence >= DocumentTracker.LOCK_CONFIDENCE)
+    }
+
     @Test fun rejectsCircle() {
         val p = solid(40)
         ellipse(p, w, h, 80, 60, 45, 45, 230)
