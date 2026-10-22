@@ -67,6 +67,7 @@ fun ScannerCameraPreviewPane(
     hasCapturedCurrentDocument: Boolean,
     onResetCapturedDocument: () -> Unit,
     autoDetectProgress: Float,
+    focusRequestToken: Int = 0,
     preScanSecondsRemaining: Int = 0,
     postScanSecondsRemaining: Int = 0,
     scannerSettings: ScannerSettings,
