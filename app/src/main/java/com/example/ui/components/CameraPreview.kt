@@ -113,7 +113,7 @@ internal fun hasCoherentPaperGrid(
         val boxH = maxY - minY + 1
         if (tail < total * 0.10f ||
             boxW < gridSize * 0.35f || boxH < gridSize * 0.35f ||
-            (boxW * boxH).toFloat() / total !in 0.12f..0.92f
+            (boxW * boxH).toFloat() / total !in 0.12f..0.58f
         ) continue
 
         val aspect = boxW.toFloat() / boxH.toFloat() * frameAspectRatio
@@ -201,6 +201,9 @@ fun CameraPreview(
     val analysisExecutor = remember { java.util.concurrent.Executors.newSingleThreadExecutor() }
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     val previousSamplesRef = remember { arrayOfNulls<ByteArray>(1) }
+    // A plausible-looking single frame is not enough for automatic capture.
+    // Require a continuous run of valid detections before exposing the document as detected.
+    val consecutiveDocumentFrames = remember { longArrayOf(0L) }
     val lastAutoFocusAt = remember { longArrayOf(0L) }
 
     DisposableEffect(lifecycleOwner) {
@@ -410,11 +413,19 @@ fun CameraPreview(
                                             gridSize,
                                             frameAspectRatio = width.toFloat() / height.toFloat()
                                         )
-                                    val isDoc =
+                                    val isDocCandidate =
                                         avgInnerLuma in 125f..245f &&
                                         hasPaperContrast &&
                                         motionDiff < 6.0f &&
                                         sharpnessScore >= 26f
+                                    if (isDocCandidate) {
+                                        consecutiveDocumentFrames[0]++
+                                    } else {
+                                        consecutiveDocumentFrames[0] = 0L
+                                    }
+                                    // At ~30 fps this adds about one second of stable evidence.
+                                    // Large bright fields covering most of the frame are rejected above.
+                                    val isDoc = isDocCandidate && consecutiveDocumentFrames[0] >= 30L
                                     mainHandler.post {
                                         onFrameAnalysis(
                                             CameraFrameAnalysis(
