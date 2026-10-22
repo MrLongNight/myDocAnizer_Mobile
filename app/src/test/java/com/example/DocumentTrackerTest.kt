@@ -72,14 +72,14 @@ class DocumentTrackerTest {
     fun `jumping corners are not considered stable`() {
         val tracker = DocumentTracker()
         var result = tracker.update(detection(), 0L)
-        for (i in 1..7) result = tracker.update(detection(), i * 100L)
+        for (i in 1..9) result = tracker.update(detection(), i * 100L)
         assertTrue(result.isLocked)
         assertTrue(result.isStable)
 
         val jumped = page.map { PointF(it.x + 0.08f, it.y) }
-        result = tracker.update(detection(jumped), 800L)
+        result = tracker.update(detection(jumped), 1000L)
         assertFalse("A sudden corner jump invalidates stability", result.isStable)
-        result = tracker.update(detection(jumped), 900L)
+        result = tracker.update(detection(jumped), 1100L)
         assertFalse("EMA should not immediately report a moved page as stable", result.isStable)
     }
 }
