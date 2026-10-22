@@ -88,7 +88,8 @@ fun ScannerCameraPreviewPane(
     onReportElementBounds: ((step: Int, bounds: TourElementBounds) -> Unit)? = null
 ) {
     val context = LocalContext.current
-    var isDocumentDetected by remember { mutableStateOf(true) }
+    var frameAnalysis by remember { mutableStateOf(CameraFrameAnalysis()) }
+    var isDocumentDetected by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -109,6 +110,7 @@ fun ScannerCameraPreviewPane(
                     .testTag("camera_preview_surface"),
                 flashOption = flashOption,
                 onFrameAnalysis = { analysis ->
+                    frameAnalysis = analysis
                     isDocumentDetected = analysis.isDocumentDetected
                     onFrameAnalysis(analysis)
                 },
