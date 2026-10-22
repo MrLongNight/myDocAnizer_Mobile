@@ -355,6 +355,7 @@ fun ScannerView(
         isPhoneInWaage,
         isSharpnessOptimal,
         frameAnalysis.isDocumentDetected,
+        frameAnalysis.isDocumentStable,
         capturedRawBitmap,
         pendingRuleSuggestion
     ) {
@@ -366,6 +367,7 @@ fun ScannerView(
             // collectLatest cancels the delay when the readiness predicate flips false.
             snapshotFlow {
                 frameAnalysis.isDocumentDetected &&
+                    frameAnalysis.isDocumentStable &&
                     isPhoneInWaage &&
                     isSharpnessOptimal &&
                     frameAnalysis.motionScore < 4.5f &&
