@@ -1225,9 +1225,30 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val scanWorkflowError: StateFlow<String?> = _scanWorkflowError.asStateFlow()
     // Retains the selected rule and bitmap for an explicit retry after save failure.
     private var scanRetryAction: (() -> Unit)? = null
+    private var scanDiscardAction: (() -> Unit)? = null
 
     fun retryScanSave() {
         scanRetryAction?.invoke()
+    }
+
+    fun discardFailedScan() {
+        scanDiscardAction?.invoke()
+        scanDiscardAction = null
+        scanRetryAction = null
+        _scanWorkflowError.value = null
+        _scanWorkflowState.value = "Idle"
+    }
+
+    private fun scanFailureMessage(error: Throwable, phase: String): String = when {
+        error.message?.contains("Vault is locked", ignoreCase = true) == true ->
+            "Der Tresor ist gesperrt. Bitte entsperren und danach erneut versuchen."
+        error is OutOfMemoryError ->
+            "Zu wenig Arbeitsspeicher während $phase. Der Scan bleibt erhalten; bitte andere Apps schließen und erneut versuchen."
+        error is kotlinx.coroutines.TimeoutCancellationException && phase == "OCR" ->
+            "Die Texterkennung hat das Zeitlimit von 12 Sekunden überschritten. Der Scan bleibt erhalten; bitte erneut versuchen."
+        error is kotlinx.coroutines.TimeoutCancellationException ->
+            "Das Speichern hat länger als 60 Sekunden gedauert. Der Scan bleibt erhalten; bitte erneut versuchen."
+        else -> "$phase fehlgeschlagen: ${error.message ?: error.javaClass.simpleName}. Der Scan bleibt erhalten."
     }
 
     private val _filter = MutableStateFlow(ExplorerFilter())
@@ -1922,6 +1943,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 onDismiss = {
                     dmsManager.clearPendingRuleSuggestion()
                     scanRetryAction = null
+                    scanDiscardAction = null
                     runCatching { bitmap.recycle() }
                 }
             )
@@ -2187,19 +2209,29 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         finalBitmap: Bitmap,
         onComplete: ((DocumentEntity) -> Unit)? = null
     ) {
+        scanRetryAction = { finalizeScanWithOptimizedBitmap(finalBitmap, onComplete) }
+        scanDiscardAction = {
+            runCatching { finalBitmap.recycle() }
+            scanRetryAction = null
+            scanDiscardAction = null
+        }
         viewModelScope.launch(Dispatchers.IO) {
             _isProcessingScan.value = true
+            _scanWorkflowState.value = "Analyzing"
+            _scanWorkflowError.value = null
             try {
-                // Never wait for a potentially stuck native inference job here. OCR and
-                // rule matching must use the final, user-confirmed crop.
-                val ocrText = OcrService.recognizeText(finalBitmap, "", "")
+                val ocrText = withTimeout(12_000L) {
+                    OcrService.recognizeText(finalBitmap, "", "")
+                }
                 val isColor = if (scannerSettings.value.scanMode == "AUTO") {
                     pdfSettings.value.defaultColorMode.equals("COLOR", ignoreCase = true)
                 } else {
                     _isColorMode.value
                 }
                 val matchingRules = ruleRepo.matchingRules(ocrText)
-                _isProcessingScan.value = false
+                scanRetryAction = null
+                scanDiscardAction = null
+                _scanWorkflowState.value = "AwaitingRuleDecision"
                 requestScanRuleConfirmation(
                     bitmap = finalBitmap,
                     ocrText = ocrText,
@@ -2207,7 +2239,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     isColor = isColor,
                     onComplete = onComplete
                 )
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                _scanWorkflowState.value = "Failed"
+                _scanWorkflowError.value = scanFailureMessage(e, "OCR")
                 Log.e("DocAnizerViewModel", "Fehler bei finalizeScanWithOptimizedBitmap: ${e.message}", e)
             } finally {
                 _isProcessingScan.value = false
