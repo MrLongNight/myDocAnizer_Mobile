@@ -1774,11 +1774,17 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     fun finishAndSaveMultiPageScan(
         onComplete: (DocumentEntity) -> Unit
     ) {
+        scanRetryAction = { finishAndSaveMultiPageScan(onComplete) }
+        scanDiscardAction = { clearPages() }
         viewModelScope.launch(Dispatchers.IO) {
             _isProcessingScan.value = true
+            _scanWorkflowState.value = "Saving"
+            _scanWorkflowError.value = null
+            var saveCompleted = false
             var processedPages: List<Bitmap> = emptyList()
             val rawPages = _capturedPages.value
             try {
+                withTimeout(60_000L) {
                 val context = getApplication<Application>()
                 val template = _selectedTemplate.value 
                     ?: settingsRepo.templates.value.firstOrNull()
@@ -1883,16 +1889,29 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 val newId = documentDao.insertDocument(entity)
                 val created = entity.copy(id = newId)
 
+                saveCompleted = true
+                _scanWorkflowState.value = "Saved"
+                _scanWorkflowError.value = null
+                scanRetryAction = null
+                scanDiscardAction = null
+                _lastBulkSavedDoc.value = created
                 triggerUsbSyncReminderIfNeeded()
                 _capturedPages.value = emptyList()
                 withContext(Dispatchers.Main) {
                     onComplete(created)
                 }
-            } catch (e: Exception) {
+                }
+            } catch (e: Throwable) {
+                _scanWorkflowState.value = "Failed"
+                _scanWorkflowError.value = scanFailureMessage(e, if (e is kotlinx.coroutines.TimeoutCancellationException) "Speichern" else "Mehrseitiges Speichern")
                 Log.e("DocAnizerViewModel", "Fehler bei finishAndSaveMultiPageScan: ${e.message}", e)
             } finally {
-                processedPages.forEach { runCatching { it.recycle() } }
-                rawPages.forEach { runCatching { it.recycle() } }
+                processedPages.distinct().forEach { page ->
+                    if (page !in rawPages && !page.isRecycled) runCatching { page.recycle() }
+                }
+                if (saveCompleted) rawPages.distinct().forEach { page ->
+                    if (!page.isRecycled) runCatching { page.recycle() }
+                }
                 _isProcessingScan.value = false
             }
         }
