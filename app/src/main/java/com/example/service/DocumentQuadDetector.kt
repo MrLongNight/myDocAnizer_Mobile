@@ -133,7 +133,7 @@ object DocumentDetectionConfig {
     const val MAX_RECTANGLE_ASPECT_RATIO = 2.6f
     const val MIN_EDGE_CONTRAST = 14.0f
     const val SKIN_CHROMA_RATIO = 0.35f
-    const val SKIN_CONFIDENCE_MULTIPLIER = 0.18f
+    const val SKIN_CONFIDENCE_MULTIPLIER = 0.72f
     const val MIN_ACCEPT_CONFIDENCE = 0.48f
     const val OTSU_MIN_THRESHOLD = 18
     const val OTSU_MAX_THRESHOLD = 238
