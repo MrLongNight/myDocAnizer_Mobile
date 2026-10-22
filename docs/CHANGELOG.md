@@ -15,10 +15,12 @@ All notable changes to **myDocAnizer-Mobile** are documented here.
 
 
 ### Automatische Dokumentenerkennung (Detektor-Prototyp)
-- Neue JVM-testbare, reine Kotlin-Viereck-Erkennung ohne OpenCV oder neue Runtime-Abhängigkeiten: geglättete Luma, Otsu mit beiden Polaritäten, gefüllte Komponenten, morphologisches Öffnen, konvexe Hülle, Quad-Vereinfachung, Geometrie-/Randkontrastprüfung und optionaler weicher Haut-Chroma-Abzug.
+- Eigenständiger, JVM-testbarer Kotlin-Detektor ohne OpenCV oder neue Runtime-Abhängigkeiten: geglättete Luma, Otsu mit beiden Polaritäten, gefüllte Komponenten, morphologisches Öffnen, konvexe Hülle, Quad-Vereinfachung, Geometrie-/Randkontrastprüfung und optionaler weicher Haut-Chroma-Abzug.
+- Neue synthetische `DocumentQuadDetectorTest`-Suite für helle/dunkle/cremefarbene Dokumente, verschiedene Hintergründe, Rotation, Trapez/Perspektive, Textzeilen sowie Kreis, Hand, Fuß, Pflanze, Wand, Rauschen, Randbeschnitt und übergroße Flächen.
+- JVM-Laufzeittest misst den aufgewärmten Durchschnitt für 160×120; das 15-ms-Ziel ist ein Richtwert und kann je CI-Host variieren.
 - Neue YUV_420_888-Konvertierung berücksichtigt Y/U/V rowStride und pixelStride, reduziert auf maximal 160 px lange Kante und kann Zielpuffer wiederverwenden.
-- Automatischer Detektor ist in diesem Schritt **noch nicht in die Live-Kamera eingebunden**; bestehende Funktionen und UI bleiben unverändert.
-- **Wichtig: Alle Schwellen sind vorläufig und ausdrücklich nicht auf realen Geräten validiert.** JVM-Synthesetests und Laufzeit-Richtwert sind ebenfalls erst nach CI-Ausführung bestätigt.
+- Dieser Test-/Detektor-Arbeitsschritt ändert keine UI-Dateien. Die Live-Kamera-Integration ist separat zu bewerten und darf nicht als Beleg für zuverlässige Erkennung auf realen Geräten gelten.
+- **Wichtig: Alle Schwellen sind vorläufig und ausdrücklich nicht auf realen Geräten validiert.** Die synthetischen JVM-Tests und der Laufzeit-Richtwert werden erst durch den zugehörigen CI-Lauf bestätigt.
  - 2026-10-22 (Scan-/Chat-Stabilisierung – noch nicht vollständig verifiziert)
 
 - Added native inference phase/progress reporting to the chat and benchmark, plus keyboard-aware chat expansion.
