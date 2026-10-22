@@ -4,6 +4,12 @@ All notable changes to **myDocAnizer-Mobile** are documented here.
 
 ## [Unreleased]
 
+### CI-Korrektur: Kotlin-Compilerfehler im Mehrseiten-Scan
+- Der leere-Seiten-Guard in `finishAndSaveMultiPageScan` lag innerhalb des `withTimeout`-Lambdas und verwendete dort ein unzulässiges `return@launch`. Der Guard steht jetzt vor dem Timeout-Block.
+- GitHub Actions Run [39855858835](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39855858835) zeigte den konkreten Compilerfehler in `DocAnizerViewModel.kt:1803`.
+- Der Fix wurde direkt auf `main` committed. Der anschließende CI-Lauf ist noch abzuwarten.
+
+
 ### Scanner: Regelvorschlag, Speicherstatus und Fehlerpfad
 - Regelvorschlag-Dialog ist nicht mehr durch Außenklick oder Zurück verwerfbar; „Verwerfen“ verlangt eine explizite Bestätigung.
 - Der Scanner unterscheidet Aufnahme, Analyse, Regelentscheidung, Speichern und gespeichertes PDF. Der Erfolgshinweis wird erst über den Marker nach PDF-Erzeugung und Datenbankeintrag angezeigt; beim Start eines neuen Scans wird ein alter Erfolgshinweis zurückgesetzt.
