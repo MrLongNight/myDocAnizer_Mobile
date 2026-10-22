@@ -13,7 +13,7 @@
 
 ## Noch offene Punkte aus diesem Arbeitsblock
 
-1. ViewModel-Tests für Analyzing → AwaitingRuleDecision → Saving → Saved sowie Failed (Vault gesperrt, OCR-Timeout, OOM) und bestätigtes Verwerfen hinzufügen.
+1. **Ergänzt:** JVM-Tests für die gemeinsame ScanWorkflowStateMachine (Zustandsfolge, Vault-Lock, OCR-Timeout, Reset/Verwerfen). **Offen:** echte ViewModel-Integrationstests für die durchlaufenen Funktionen und Bitmap-Lebensdauer, insbesondere OOM/Retry.
 2. Alle Scanner-Snackbar-/Toast-/Banner-Erfolgstexte einschließlich Mehrseitenpfad prüfen und nachweisen, dass sie ausschließlich nach Saved erscheinen.
 3. Mehrseiten-Regelvorschlag als explizite Architekturentscheidung klären; nicht stillschweigend in den Einzelbild-Speicherpfad umleiten.
 4. Mit Heap-Profil oder reproduzierbarem Bitmap-Lebenszyklus-Test prüfen, dass nach zehn Scans keine Vollauflösungs-Bitmaps aus vorherigen Scans gehalten werden.
