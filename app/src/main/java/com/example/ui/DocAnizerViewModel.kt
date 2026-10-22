@@ -2337,7 +2337,6 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     details = "ID: $newId | Pfad: ${created.filePath} | Regel: '${rule.name}' | Zusatzfelder: ${rule.targetCustomFields.size}"
                 )
 
-                _lastBulkSavedDoc.value = created
 
                 // Automatischer Cloud-/Off-Site-Sync nach jedem Scan (sofern aktiviert und Ziel vorhanden)
                 if (autoCloudSyncEnabled.value && (cloudSyncConfig.value.enableGoogleDrive || cloudSyncConfig.value.enableWebDavNas) && cloudSyncConfig.value.syncTrigger == "AUTO_AFTER_SCAN") {
@@ -2376,9 +2375,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
                 saveCompleted = true
-                _lastBulkSavedDoc.value = created
                 _scanWorkflowState.value = "Saved"
                 _scanWorkflowError.value = null
+                _lastBulkSavedDoc.value = created
                 dmsManager.clearPendingRuleSuggestion()
                 withContext(Dispatchers.Main) {
                     afterSaved?.invoke()
