@@ -43,6 +43,8 @@ fun PendingRuleSuggestionDialog(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
+    val workflowState = viewModel?.scanWorkflowState?.collectAsStateWithLifecycle()?.value ?: "AwaitingRuleDecision"
+    val workflowError = viewModel?.scanWorkflowError?.collectAsStateWithLifecycle()?.value
 
     var ruleName by remember { mutableStateOf(suggestion.suggestedRule.name) }
     var sender by remember { mutableStateOf(suggestion.suggestedRule.detectedSender) }
@@ -212,6 +214,47 @@ fun PendingRuleSuggestionDialog(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (workflowError != null) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(workflowError, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Button(
+                                onClick = { viewModel?.retryScanSave() },
+                                enabled = viewModel != null && !isRefiningWithAi,
+                                modifier = Modifier.testTag("btn_retry_scan_save")
+                            ) { Text("Erneut versuchen") }
+                            Text(
+                                "Der Scan bleibt bis zu deiner Entscheidung im Speicher.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                } else {
+                    val statusText = when (workflowState) {
+                        "Analyzing" -> "Analyse läuft: Texterkennung (max. 12 Sekunden)…"
+                        "AwaitingRuleDecision" -> "Regelvorschlag: Bitte entscheiden. Noch nichts gespeichert."
+                        "Saving" -> "Speichern läuft: PDF, Verschlüsselung und Datenbank…"
+                        "Saved" -> "Gespeichert."
+                        "Failed" -> "Verarbeitung fehlgeschlagen."
+                        else -> null
+                    }
+                    if (statusText != null) {
+                        Text(
+                            statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 if (suggestion.matchingRules.size > 1) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
