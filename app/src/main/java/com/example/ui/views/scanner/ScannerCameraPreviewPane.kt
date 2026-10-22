@@ -113,7 +113,8 @@ fun ScannerCameraPreviewPane(
                     onFrameAnalysis(analysis)
                 },
                 onImageCaptureCreated = onImageCaptureCreated,
-                onCameraAvailableChanged = onCameraAvailableChanged
+                onCameraAvailableChanged = onCameraAvailableChanged,
+                focusRequestToken = focusRequestToken
             )
         } else {
             Box(
