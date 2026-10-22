@@ -13,6 +13,7 @@
 | 22.10.2026 | `f23786b2` | Heuristischer Fallback wird nicht als gemessener Modellbenchmark ausgegeben; Benchmark-Ergebnis kennzeichnet Messstatus; unbekannte Hardware wird als unbekannt/limitiert behandelt; UI bezeichnet Schätzwerte als Schätzung. | GitHub Actions erfolgreich (Run [39699404634](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39699404634)). |
 | 22.10.2026 | `8ee30cdb` | Extraktionsprompts für kleine Modelle verschlankt: keine ausführliche Chain-of-Thought-Ausgabe; Zusatzfelder nur mit OCR-belegten Werten; keine erfundenen Werte; JSON-Ausgabe klar vorgegeben. | **CI dieses Commits wurde durch den nachfolgenden Push abgebrochen**; der Prompt-Quellstand ist im Dokumentations-Sync-Branch enthalten und dort erneut zu prüfen. |
 | 22.10.2026 | `7fb2776e` / `55a961af` / `8c2cd9a9` | Benchmark übernimmt erzeugte Tokens, Promptzeit, Generierungszeit und TPS aus nativen llama.cpp-Metriken. Textlängen-Schätzung entfernt; fehlende Messwerte ergeben `isMeasured = false`. Status/Metriken werden vor Inferenz und auf frühen Fallback-Pfaden zurückgesetzt. | CI noch ausstehend; nicht als Build-verifiziert markieren. |
+| 22.10.2026 | `468654cc` | Fehlende Pre-Commit-Konfiguration ergänzt (YAML/JSON-Validierung und Merge-Conflict-Prüfung), nachdem `pre-commit.ci` mit `error during ci config` abbrach. | Erneuter Pre-Commit-Lauf noch ausstehend. |
 
 **Wichtig:** „Erledigt“ bedeutet hier Codeänderung committed. Ein CI-Erfolg ist separat vermerkt; echte GGUF-Inferenz auf physischen Geräten ist weiterhin nicht belegt.
 
