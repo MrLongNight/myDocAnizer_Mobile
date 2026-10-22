@@ -1922,119 +1922,43 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         onComplete = onComplete
                     )
                 } else {
-                    analysisReport.append("KEIN REGEL-TREFFER. Starte KI-Klassifizierung...\n")
-                    
-                    // Fall B: Keine passende Regel -> Lokale On-Device KI erzeugt Regel-Vorschlag
-                    val aiClass = llmService.classifyDocumentText(ocrText)
-                    
-                    analysisReport.append("KI-ERGEBNIS:\n")
-                    analysisReport.append("- Sender: ${aiClass.sender}\n")
-                    analysisReport.append("- Typ: ${aiClass.docType}\n")
-                    analysisReport.append("- Konfidenz: ${(aiClass.confidence * 100).toInt()}%\n")
-                    analysisReport.append("- Begründung: ${aiClass.explanation.take(100)}...")
-                    
+                    analysisReport.append("KEIN REGEL-TREFFER. Erstelle schnellen, bearbeitbaren Regelvorschlag.\n")
                     diagnosticService.updateLastAnalysisReport(analysisReport.toString())
-
-                    val smartKeywords = if (aiClass.smartKeywords.isNotEmpty()) {
-                        aiClass.smartKeywords
-                    } else {
-                        ocrText.lowercase()
-                            .replace(Regex("[^a-zäöüß0-9\\s]"), " ")
-                            .split(Regex("\\s+"))
-                            .filter { it.length in 5..20 }
-                            .distinct()
-                            .take(4)
-                            .ifEmpty { listOf(aiClass.sender.lowercase()) }
-                    }
-
-                    val (suggestedIcon, suggestedLogo) = com.example.ui.components.detectSuggestedLogoAndIcon(aiClass.sender, ocrText, aiClass.mainCategoryId)
-
-                    // Maßnahme 2: Kotlin-Logik für Regel-Benennung (Entlastung des LLMs)
-                    val cleanSender = aiClass.sender.trim().takeIf { it.isNotBlank() && it != "null" }
-                    val cleanType = aiClass.docType.trim().takeIf { it.isNotBlank() && it != "null" }
-                    val ruleName = when {
-                        cleanSender != null && cleanType != null -> "$cleanSender $cleanType"
-                        cleanSender != null -> "$cleanSender Dokument"
-                        cleanType != null -> "$cleanType Ablage"
-                        aiClass.title.isNotBlank() -> aiClass.title
-                        else -> "Neues Dokument"
-                    }
-
-                    val targetPath = aiClass.suggestedFolderPath.ifBlank {
-                        val snd = cleanSender ?: "Dokumente"
-                        val typ = cleanType ?: "Allgemein"
-                        when (settingsRepo.folderStrategy.value) {
-                            com.example.model.FolderStrategy.BY_SENDER -> "$snd/$typ"
-                            com.example.model.FolderStrategy.BY_CATEGORY -> "${aiClass.mainCategoryId}/$typ"
-                            com.example.model.FolderStrategy.CHRONOLOGICAL -> "2026/$typ"
-                            com.example.model.FolderStrategy.FLAT -> "Dokumente"
-                        }
-                    }
-
-                    val evaluatedCustomFields = if (aiClass.customFields.isNotEmpty()) {
-                        aiClass.customFields
-                    } else {
-                        val cf = mutableMapOf<String, String>()
-                        val amt = com.example.service.llm.LlmPrompts.extractAmountFromText(ocrText)
-                        val invNo = com.example.service.llm.LlmPrompts.extractInvoiceNumber(ocrText)
-                        val dt = com.example.service.llm.LlmPrompts.extractDocumentDateFromText(ocrText)
-                        if (amt.isNotBlank()) cf["Rechnungsbetrag"] = amt
-                        if (invNo.isNotBlank()) cf["Rechnungsnummer"] = invNo
-                        if (dt.isNotBlank()) cf["Belegdatum"] = dt
-                        cf
-                    }
-
-                    val suggestedRule = com.example.model.DocRule(
-                        name = ruleName,
-                        matchKeywords = smartKeywords,
-                        targetMainCategoryId = aiClass.mainCategoryId,
-                        targetSubCategoryId = aiClass.subCategoryId,
-                        targetDocType = aiClass.docType,
-                        detectedSender = aiClass.sender,
-                        targetFolderPath = targetPath,
-                        targetTags = aiClass.tags,
-                        isEnabled = true,
-                        isAiGenerated = true,
-                        targetIcon = suggestedIcon,
-                        targetLogo = suggestedLogo,
-                        targetCustomFields = evaluatedCustomFields
-                    )
-
+                    val suggestedRule = buildFastRuleSuggestion(ocrText)
                     _isProcessingScan.value = false
-
-                    // Dialog für Nutzer-Entscheidung anzeigen
-                    dmsManager.setPendingRuleSuggestion(com.example.model.PendingRuleSuggestion(
-                        bitmap = processed,
-                        ocrText = ocrText,
-                        suggestedRule = suggestedRule,
-                        matchingRules = matchingRules,
-                        onSingleUseOnly = { finalRule ->
-                            dmsManager.clearPendingRuleSuggestion()
-                            saveProcessedBitmapWithRule(
-                                bitmap = processed,
-                                ocrText = ocrText,
-                                rule = finalRule,
-                                isColor = isColor,
-                                onComplete = onComplete
-                            )
-                        },
-                        onSaveAsPermanentRule = { finalRule ->
-                            dmsManager.clearPendingRuleSuggestion()
-                            // Regel dauerhaft im Repository speichern
-                            addDocRule(finalRule)
-                            saveProcessedBitmapWithRule(
-                                bitmap = processed,
-                                ocrText = ocrText,
-                                rule = finalRule,
-                                isColor = isColor,
-                                onComplete = onComplete
-                            )
-                        },
-                        onDismiss = {
-                            dmsManager.clearPendingRuleSuggestion()
-                            runCatching { processed.recycle() }
-                        }
-                    ))
+                    dmsManager.setPendingRuleSuggestion(
+                        com.example.model.PendingRuleSuggestion(
+                            bitmap = processed,
+                            ocrText = ocrText,
+                            suggestedRule = suggestedRule,
+                            matchingRules = matchingRules,
+                            onSingleUseOnly = { finalRule ->
+                                dmsManager.clearPendingRuleSuggestion()
+                                saveProcessedBitmapWithRule(
+                                    bitmap = processed,
+                                    ocrText = ocrText,
+                                    rule = finalRule,
+                                    isColor = isColor,
+                                    onComplete = onComplete
+                                )
+                            },
+                            onSaveAsPermanentRule = { finalRule ->
+                                dmsManager.clearPendingRuleSuggestion()
+                                addDocRule(finalRule)
+                                saveProcessedBitmapWithRule(
+                                    bitmap = processed,
+                                    ocrText = ocrText,
+                                    rule = finalRule,
+                                    isColor = isColor,
+                                    onComplete = onComplete
+                                )
+                            },
+                            onDismiss = {
+                                dmsManager.clearPendingRuleSuggestion()
+                                runCatching { processed.recycle() }
+                            }
+                        )
+                    )
                 }
             } catch (e: Exception) {
                 Log.e("DocAnizerViewModel", "Fehler in saveSinglePageBulk: ${e.message}", e)
@@ -2156,6 +2080,77 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
      * Finalisiert das Dokument nach Zuschnitt und Optimierung:
      * Greift auf die bereits im Hintergrund berechnete KI-Triage zu (Zero Latency!).
      */
+    /**
+     * Builds an immediate, editable rule draft from OCR evidence.
+     * It intentionally avoids blocking the scan flow on native LLM inference.
+     */
+    private fun buildFastRuleSuggestion(ocrText: String): com.example.model.DocRule {
+        val lower = ocrText.take(15000).lowercase()
+        val detectedSender = com.example.service.llm.LlmPrompts.extractSenderFromHeader(ocrText)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() && it.lowercase() !in setOf("null", "unbekannt", "unknown", "dokument") }
+
+        val (docType, mainCategoryId, subCategoryId) = when {
+            listOf("steuerbescheid", "finanzamt", "einkommensteuer").any { lower.contains(it) } ->
+                Triple("Steuerbescheid", "A03", "B3.04")
+            listOf("gehaltsabrechnung", "lohnabrechnung", "bruttoentgelt", "nettoentgelt").any { lower.contains(it) } ->
+                Triple("Gehaltsabrechnung", "A03", "B3.02")
+            listOf("versicherung", "policennummer", "haftpflicht", "versicherungspolice").any { lower.contains(it) } ->
+                Triple("Versicherung", "A04", "B4.01")
+            listOf("vertrag", "vertragsnummer", "kündigung", "laufzeit").any { lower.contains(it) } ->
+                Triple("Vertrag", "A02", "B2.03")
+            listOf("rechnung", "invoice", "quittung", "kassenbon", "rechnungsnummer", "rechnungsbetrag").any { lower.contains(it) } ->
+                Triple("Rechnung", "A02", "B2.01")
+            else -> Triple("Dokument", "A01", "B1.01")
+        }
+
+        val fields = linkedMapOf<String, String>()
+        val amount = com.example.service.llm.LlmPrompts.extractAmountFromText(ocrText)
+        val invoiceNumber = com.example.service.llm.LlmPrompts.extractInvoiceNumber(ocrText)
+        val documentDate = com.example.service.llm.LlmPrompts.extractDocumentDateFromText(ocrText)
+        val dueDate = com.example.service.llm.LlmPrompts.extractDueDateFromText(ocrText)
+        if (amount.isNotBlank()) fields["Betrag"] = amount
+        if (invoiceNumber.isNotBlank()) fields["Rechnungsnummer"] = invoiceNumber
+        if (documentDate.isNotBlank()) fields["Belegdatum"] = documentDate
+        if (dueDate.isNotBlank()) fields["Fälligkeit"] = dueDate
+
+        val sender = detectedSender ?: "Unbekannter Absender"
+        val typeKeyword = when (docType) {
+            "Steuerbescheid" -> "steuerbescheid"
+            "Gehaltsabrechnung" -> "gehaltsabrechnung"
+            "Versicherung" -> "versicherung"
+            "Vertrag" -> "vertrag"
+            "Rechnung" -> "rechnung"
+            else -> "dokument"
+        }
+        val keywords = listOfNotNull(detectedSender?.lowercase(), typeKeyword).distinct()
+        val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+        val folderPath = when (settingsRepo.folderStrategy.value) {
+            com.example.model.FolderStrategy.BY_SENDER -> "$sender/$docType"
+            com.example.model.FolderStrategy.BY_CATEGORY -> "$mainCategoryId/$docType"
+            com.example.model.FolderStrategy.CHRONOLOGICAL -> "$currentYear/$docType"
+            com.example.model.FolderStrategy.FLAT -> "Dokumente"
+        }
+        val (icon, logo) = com.example.ui.components.detectSuggestedLogoAndIcon(sender, ocrText, mainCategoryId)
+
+        return com.example.model.DocRule(
+            name = "$sender $docType",
+            matchKeywords = keywords.ifEmpty { listOf("dokument") },
+            targetMainCategoryId = mainCategoryId,
+            targetSubCategoryId = subCategoryId,
+            targetDocType = docType,
+            detectedSender = detectedSender.orEmpty(),
+            targetFolderPath = folderPath,
+            targetTags = listOf("#" + docType.lowercase().replace(Regex("[^a-zäöüß0-9]+"), "_")),
+            isEnabled = true,
+            isAiGenerated = false,
+            confidenceScore = 0.35f,
+            targetCustomFields = fields,
+            targetIcon = icon,
+            targetLogo = logo
+        )
+    }
+
     fun finalizeScanWithOptimizedBitmap(
         finalBitmap: Bitmap,
         onComplete: ((DocumentEntity) -> Unit)? = null
@@ -2163,13 +2158,16 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch(Dispatchers.IO) {
             _isProcessingScan.value = true
             try {
-                backgroundTriageJob?.join()
-                val triage = _backgroundTriageResult.value
-
-                val ocrText = triage?.ocrText ?: OcrService.recognizeText(finalBitmap, "", "")
-                val isColor = triage?.isColor ?: true
-                val matchingRules = triage?.matchingRules ?: ruleRepo.matchingRules(ocrText)
-                val matchedRule = triage?.matchedRule ?: matchingRules.singleOrNull()
+                // Never wait for a potentially stuck native inference job here. OCR and
+                // rule matching must use the final, user-confirmed crop.
+                val ocrText = OcrService.recognizeText(finalBitmap, "", "")
+                val isColor = if (scannerSettings.value.scanMode == "AUTO") {
+                    pdfSettings.value.defaultColorMode.equals("COLOR", ignoreCase = true)
+                } else {
+                    _isColorMode.value
+                }
+                val matchingRules = ruleRepo.matchingRules(ocrText)
+                val matchedRule = matchingRules.singleOrNull()
 
                 if (matchedRule != null) {
                     saveProcessedBitmapWithRule(
@@ -2180,34 +2178,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         onComplete = onComplete
                     )
                 } else {
-                    val suggestedRule = triage?.suggestedRule ?: run {
-                        val aiClass = llmService.classifyDocumentText(ocrText)
-                        val cleanSender = aiClass.sender.trim().takeIf { it.isNotBlank() && it != "null" }
-                        val cleanType = aiClass.docType.trim().takeIf { it.isNotBlank() && it != "null" }
-                        val ruleName = when {
-                            cleanSender != null && cleanType != null -> "$cleanSender $cleanType"
-                            cleanSender != null -> "$cleanSender Dokument"
-                            cleanType != null -> "$cleanType Ablage"
-                            else -> "Neues Dokument"
-                        }
-                        val (suggestedIcon, suggestedLogo) = com.example.ui.components.detectSuggestedLogoAndIcon(aiClass.sender, ocrText, aiClass.mainCategoryId)
-                        com.example.model.DocRule(
-                            name = ruleName,
-                            matchKeywords = listOf(cleanSender?.lowercase() ?: "dokument"),
-                            targetMainCategoryId = aiClass.mainCategoryId,
-                            targetSubCategoryId = aiClass.subCategoryId,
-                            targetDocType = aiClass.docType,
-                            detectedSender = aiClass.sender,
-                            targetFolderPath = "Dokumente",
-                            targetTags = aiClass.tags,
-                            isEnabled = true,
-                            isAiGenerated = true,
-                            targetIcon = suggestedIcon,
-                            targetLogo = suggestedLogo,
-                            targetCustomFields = emptyMap()
-                        )
-                    }
-
+                    val suggestedRule = buildFastRuleSuggestion(ocrText)
                     _isProcessingScan.value = false
                     dmsManager.setPendingRuleSuggestion(com.example.model.PendingRuleSuggestion(
                         bitmap = finalBitmap,
@@ -3022,6 +2993,14 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         _chatMessages.value = _chatMessages.value + userMsg
         autoSaveIfPersistent()
 
+        // Resolve simple greetings before loading the document index or constructing RAG context.
+        if (isSimpleGreeting(trimmed)) {
+            val greeting = "Hallo! Ich bin dein myDocAnizer-Assistent. Wobei kann ich dir helfen?"
+            _chatMessages.value = _chatMessages.value + ChatMessage(text = greeting, isUser = false)
+            autoSaveIfPersistent()
+            return LlmRouterResult.Text(greeting)
+        }
+
         val docs = allDocuments.value
         val contextSummary = buildDocumentContextSummary(docs)
         val rawResult = llmService.queryDocumentAssistantWithFollowUps(
@@ -3053,6 +3032,14 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         _chatMessages.value = _chatMessages.value + assistantMsg
         autoSaveIfPersistent()
         return routerResult
+    }
+
+    private fun isSimpleGreeting(text: String): Boolean {
+        val normalized = text.lowercase().replace(Regex("[^a-zäöüß0-9]+"), " ").trim()
+        return normalized in setOf(
+            "hi", "hey", "hello", "hallo", "moin", "servus", "yo",
+            "guten morgen", "guten tag", "guten abend"
+        )
     }
 
     private fun buildDocumentContextSummary(docs: List<DocumentEntity>): String {

@@ -151,5 +151,6 @@ jobs:
         with:
           name: myDocAnizer-Mobile-APK
           path: ${{ steps.apk-check.outputs.apk_path }}
+          compression-level: 0
           if-no-files-found: error
           retention-days: 30

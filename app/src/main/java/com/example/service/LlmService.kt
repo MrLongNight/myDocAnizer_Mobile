@@ -1009,15 +1009,26 @@ class LlmService(private val context: Context) {
 
         val startTime = System.currentTimeMillis()
         val modelFile = getModelFile(model.id)
+        var nativeExtraction: DmsExtractionResponse? = null
         val rawOutput = if (modelFile.exists() && modelFile.length() > 1024 * 1024) {
             try {
-                llamaCppEngine.executeFirstRunExtraction(
+                nativeExtraction = llamaCppEngine.executeFirstRunExtraction(
                     modelFile = modelFile,
                     ocrText = referenceOcrText,
                     whitelistedCustomFields = listOf("Rechnungsbetrag", "Fälligkeit", "IBAN", "Kundennummer"),
-                    params = LlamaCppInferenceEngine.InferenceParams(temperature = 0.1f, maxTokens = 350)
-                ).toJsonString()
-            } catch (_: Throwable) {
+                    params = LlamaCppInferenceEngine.InferenceParams(temperature = 0.1f, maxTokens = 350, grammar = null)
+                )
+                nativeExtraction!!.toJsonString()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                AppAuditLogger.log(
+                    category = LogCategory.AI_INFERENCE,
+                    tag = "ModelBenchmark",
+                    message = "Native Benchmark-Inferenz fehlgeschlagen",
+                    details = error.message ?: error.javaClass.simpleName
+                )
+                nativeExtraction = null
                 llamaCppEngine.executeFallbackInference(
                     ocrText = referenceOcrText,
                     systemPrompt = "Extrahiere Absender, Dokumententyp und Betrag im DMS-Format."
@@ -1030,29 +1041,8 @@ class LlmService(private val context: Context) {
             )
         }
 
-        // Do not present heuristic fallback output as a measured local-model benchmark.
-        if (llamaCppEngine.lastInferenceMode != LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM) {
-            val elapsedMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
-            return@withContext com.example.model.ModelBenchmarkResult(
-                modelId = model.id,
-                modelName = model.name,
-                qualityScore = 0,
-                quantityScore = 0,
-                overallScore = 0,
-                tokensPerSecond = 0f,
-                latencyMs = elapsedMs,
-                generatedTokens = 0,
-                rawOutput = rawOutput,
-                evaluationDetails = "Nicht gemessen: Es lief kein natives lokales LLM. Es wurde nur Fallback-/Regelausgabe erzeugt.",
-                isMeasured = false
-            )
-        }
-
-        // A native response is not enough to claim a measured benchmark: require the
-        // actual llama.cpp timing/token counters. Never estimate tokens from character count.
-        val nativeMetrics = llamaCppEngine.lastInferenceMetrics
-        if (nativeMetrics == null) {
-            return@withContext com.example.model.ModelBenchmarkResult(
+        fun unmeasured(reason: String): com.example.model.ModelBenchmarkResult =
+            com.example.model.ModelBenchmarkResult(
                 modelId = model.id,
                 modelName = model.name,
                 qualityScore = 0,
@@ -1062,28 +1052,38 @@ class LlmService(private val context: Context) {
                 latencyMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1),
                 generatedTokens = 0,
                 rawOutput = rawOutput,
-                evaluationDetails = "Nicht gemessen: llama.cpp lieferte keine vollständigen nativen Token-/Zeitmetriken.",
+                evaluationDetails = reason,
                 isMeasured = false
             )
-        }
-        val generatedTokens = nativeMetrics.generatedTokens
-        val latencyMs = nativeMetrics.promptEvalTimeMs + nativeMetrics.generationTimeMs
-        val safeTps = nativeMetrics.tokensPerSecond
 
-        val lowerOutput = rawOutput.lowercase()
-        val extractedSender = when {
-            lowerOutput.contains("vodafone") -> "Vodafone GmbH"
-            else -> "Unbekannt"
+        // Never report fallback output as a model benchmark, even if stale engine metrics exist.
+        if (llamaCppEngine.lastInferenceMode != LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM) {
+            return@withContext unmeasured("Nicht gemessen: Es lief kein natives lokales LLM, sondern Fallback-/Regelausgabe.")
         }
-        val extractedDocType = when {
-            lowerOutput.contains("rechnung") || lowerOutput.contains("abrechnung") -> "Rechnung"
-            else -> "Dokument"
-        }
-        val extractedAmount = when {
-            lowerOutput.contains("89,95") || lowerOutput.contains("89.95") -> "89,95 €"
-            lowerOutput.contains("75,59") -> "75,59 €"
-            else -> ""
-        }
+        val nativeMetrics = llamaCppEngine.lastInferenceMetrics
+            ?: return@withContext unmeasured("Nicht gemessen: llama.cpp lieferte keine vollständigen nativen Token-/Zeitmetriken.")
+        val extraction = nativeExtraction
+            ?: return@withContext unmeasured("Nicht gemessen: Es liegt keine strukturierte native Extraktionsantwort vor.")
+
+        val generatedTokens = nativeMetrics.generatedTokens
+        val latencyMs = (nativeMetrics.promptEvalTimeMs + nativeMetrics.generationTimeMs).coerceAtLeast(1)
+        val safeTps = nativeMetrics.tokensPerSecond.takeIf { it.isFinite() && it > 0f } ?: 0f
+
+        val extractedSender = extraction.absender?.trim().orEmpty().ifBlank { "Nicht erkannt" }
+        val extractedDocType = extraction.dokumententyp?.trim().orEmpty().ifBlank { "Nicht erkannt" }
+        val amountEntry = extraction.globaleZusatzfelder.entries.firstOrNull { it.key.contains("betrag", ignoreCase = true) }
+        val amountValue = amountEntry?.value.orEmpty().trim()
+        val dueDateValue = extraction.globaleZusatzfelder.entries.firstOrNull {
+            it.key.contains("fälligkeit", ignoreCase = true) ||
+                it.key.contains("faelligkeit", ignoreCase = true) ||
+                it.key.contains("zahlungsziel", ignoreCase = true)
+        }?.value.orEmpty()
+        val ibanValue = extraction.globaleZusatzfelder.entries.firstOrNull {
+            it.key.contains("iban", ignoreCase = true)
+        }?.value.orEmpty()
+        val customerNumberValue = extraction.globaleZusatzfelder.entries.firstOrNull {
+            it.key.contains("kundennummer", ignoreCase = true) || it.key.contains("kunden-nr", ignoreCase = true)
+        }?.value.orEmpty()
 
         var qualityScore = 0
         val evalDetails = mutableListOf<String>()
@@ -1095,32 +1095,38 @@ class LlmService(private val context: Context) {
             evalDetails.add("✗ Absender nicht erkannt (+0%)")
         }
 
-        if (extractedDocType.equals("Rechnung", ignoreCase = true)) {
+        if (extractedDocType.contains("rechnung", ignoreCase = true) || extractedDocType.contains("invoice", ignoreCase = true)) {
             qualityScore += 25
             evalDetails.add("✓ Dokumententyp erkannt: Rechnung (+25%)")
         } else {
             evalDetails.add("✗ Dokumententyp nicht exakt (+0%)")
         }
 
-        if (extractedAmount == "89,95 €") {
+        if (Regex("(?<!\\d)89[,.]95(?!\\d)").containsMatchIn(amountValue)) {
             qualityScore += 20
-            evalDetails.add("✓ Rechnungsbetrag exakt: 89,95 € (+20%)")
+            evalDetails.add("✓ Brutto-Rechnungsbetrag exakt: 89,95 € (+20%)")
         } else {
-            evalDetails.add("✗ Rechnungsbetrag abweichend (+0%)")
+            evalDetails.add("✗ Brutto-Rechnungsbetrag nicht exakt im Betrag-Feld erkannt (+0%)")
         }
 
-        if (lowerOutput.contains("26.04.2026") || lowerOutput.contains("12.04.2026")) {
+        val expectedDueDate = Regex("(?<!\\d)(?:26[./-]04[./-]2026|2026-04-26)(?!\\d)")
+            .containsMatchIn(dueDateValue)
+        if (expectedDueDate) {
             qualityScore += 15
-            evalDetails.add("✓ Datums- & Fristenprüfung (+15%)")
+            evalDetails.add("✓ Fälligkeitsdatum exakt: 26.04.2026 (+15%)")
         } else {
-            evalDetails.add("✗ Datum nicht erfasst (+0%)")
+            evalDetails.add("✗ Fälligkeitsdatum nicht exakt im Fälligkeitsfeld erkannt (+0%)")
         }
 
-        if (lowerOutput.contains("de89370400440532013000") || lowerOutput.contains("iban") || lowerOutput.contains("kundennummer")) {
+        val normalizedIban = ibanValue.uppercase().replace(Regex("[^A-Z0-9]"), "")
+        val normalizedCustomerNumber = customerNumberValue.filter { it.isDigit() }
+        val validIban = normalizedIban.contains("DE89370400440532013000")
+        val validCustomerNumber = normalizedCustomerNumber == "0019283746"
+        if (validIban || validCustomerNumber) {
             qualityScore += 15
-            evalDetails.add("✓ Metadaten & IBAN verifiziert (+15%)")
+            evalDetails.add("✓ IBAN oder Kundennummer wertgenau erkannt (+15%)")
         } else {
-            evalDetails.add("✗ Metadaten unvollständig (+0%)")
+            evalDetails.add("✗ IBAN/Kundennummer nicht wertgenau erkannt (+0%)")
         }
 
         val quantityScore = when {
@@ -1128,9 +1134,9 @@ class LlmService(private val context: Context) {
             safeTps >= 15f -> 85
             safeTps >= 10f -> 70
             safeTps >= 5f -> 55
-            else -> ((safeTps / 10f) * 60).toInt().coerceIn(15, 50)
+            safeTps > 0f -> ((safeTps / 10f) * 60).toInt().coerceIn(1, 50)
+            else -> 0
         }
-
         val overallScore = ((qualityScore * 0.65f) + (quantityScore * 0.35f)).toInt().coerceIn(0, 100)
 
         AppAuditLogger.recordBenchmarkResult(
@@ -1142,7 +1148,6 @@ class LlmService(private val context: Context) {
             tokensPerSecond = safeTps,
             latencyMs = latencyMs
         )
-
         analyticsManager?.logLlmBenchmarkCompleted(
             modelId = model.id,
             qualityScore = qualityScore,
@@ -1164,9 +1169,10 @@ class LlmService(private val context: Context) {
             generatedTokens = generatedTokens,
             extractedSender = extractedSender,
             extractedDocType = extractedDocType,
-            extractedAmount = extractedAmount,
+            extractedAmount = amountValue,
             rawOutput = rawOutput,
-            evaluationDetails = evalDetails.joinToString("\n")
+            evaluationDetails = evalDetails.joinToString("\n"),
+            isMeasured = true
         )
     }
 

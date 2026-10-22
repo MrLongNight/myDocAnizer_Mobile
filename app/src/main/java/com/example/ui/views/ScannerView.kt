@@ -287,7 +287,7 @@ fun ScannerView(
 
     // Trigger-Logik (berücksichtigt Countdown / Sofort & setzt Blattstatus zurück)
     val startCaptureProcess: () -> Unit = {
-        if (!isProcessing && !isCountdownRunning) {
+        if (!isProcessing && !isCountdownRunning && capturedRawBitmap == null && pendingRuleSuggestion == null) {
             hasCapturedCurrentDocument = false
             motionDetectedAfterCapture = false
             if (showFirstStepsTour && currentTourStep == 4) {
@@ -353,12 +353,14 @@ fun ScannerView(
         scannerSettings.toolsInfoOnly,
         isPhoneInWaage,
         isSharpnessOptimal,
-        frameAnalysis.isDocumentDetected
+        frameAnalysis.isDocumentDetected,
+        capturedRawBitmap,
+        pendingRuleSuggestion
     ) {
         val isTripodOrAuto = scannerSettings.scanMode == "AUTO" &&
             (scannerSettings.tripodAutoScan || scannerSettings.triggerMode == "AUTO_DETECT")
 
-        if (isTripodOrAuto && !isPreScanActive && !hasCapturedCurrentDocument && !isProcessing && !isCountdownRunning) {
+        if (isTripodOrAuto && !isPreScanActive && !hasCapturedCurrentDocument && !isProcessing && !isCountdownRunning && capturedRawBitmap == null && pendingRuleSuggestion == null) {
             val isReady = frameAnalysis.isDocumentDetected && (isPhoneInWaage && isSharpnessOptimal)
             if (isReady) {
                 autoDetectProgress = 0.5f
