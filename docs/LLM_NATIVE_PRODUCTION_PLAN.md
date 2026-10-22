@@ -12,6 +12,7 @@
 | 22.10.2026 | `c0aa4553` | Hardware-Fallbacks erfinden keine Geräteleistung mehr; unbekannte Kapazität bleibt unbekannt. | GitHub Actions erfolgreich; Debug-APK gebaut, Instrumentierungstests bestanden, APK hochgeladen. |
 | 22.10.2026 | `f23786b2` | Heuristischer Fallback wird nicht als gemessener Modellbenchmark ausgegeben; Benchmark-Ergebnis kennzeichnet Messstatus; unbekannte Hardware wird als unbekannt/limitiert behandelt; UI bezeichnet Schätzwerte als Schätzung. | GitHub Actions erfolgreich (Run [39699404634](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39699404634)). |
 | 22.10.2026 | `8ee30cdb` | Extraktionsprompts für kleine Modelle verschlankt: keine ausführliche Chain-of-Thought-Ausgabe; Zusatzfelder nur mit OCR-belegten Werten; keine erfundenen Werte; JSON-Ausgabe klar vorgegeben. | **CI dieses Commits wurde durch den nachfolgenden Push abgebrochen**; der Prompt-Quellstand ist im Dokumentations-Sync-Branch enthalten und dort erneut zu prüfen. |
+| 22.10.2026 | `7fb2776e` / `55a961af` / `8c2cd9a9` | Benchmark übernimmt erzeugte Tokens, Promptzeit, Generierungszeit und TPS aus nativen llama.cpp-Metriken. Textlängen-Schätzung entfernt; fehlende Messwerte ergeben `isMeasured = false`. Status/Metriken werden vor Inferenz und auf frühen Fallback-Pfaden zurückgesetzt. | CI noch ausstehend; nicht als Build-verifiziert markieren. |
 
 **Wichtig:** „Erledigt“ bedeutet hier Codeänderung committed. Ein CI-Erfolg ist separat vermerkt; echte GGUF-Inferenz auf physischen Geräten ist weiterhin nicht belegt.
 
@@ -21,8 +22,8 @@ README, LLM-Prozessdokumentation, technische LLM-Kurzdokumentation, Coding-Agent
 
 ## Nächste konkrete Aufgaben
 
-- [ ] Native Benchmark-Ergebnisse aus den echten llama.cpp-Metriken (Promptzeit, Generierungszeit, erzeugte Tokens, TPS) direkt in `ModelBenchmarkResult` übernehmen; keine Zeichenlängen-Näherung als Messwert verwenden.
-- [ ] Vor jedem Inferenzaufruf Messwerte und `lastInferenceMode` zurücksetzen, damit ein vorheriger erfolgreicher Aufruf nicht den Status eines späteren Fallbacks verfälscht.
+- [x] Native Benchmark-Ergebnisse aus den echten llama.cpp-Metriken (Promptzeit, Generierungszeit, erzeugte Tokens, TPS) direkt in `ModelBenchmarkResult` übernehmen; keine Zeichenlängen-Näherung als Messwert verwenden.
+- [x] Vor jedem Inferenzaufruf Messwerte und `lastInferenceMode` zurücksetzen, damit ein vorheriger erfolgreicher Aufruf nicht den Status eines späteren Fallbacks verfälscht.
 - [ ] Modellqualität, Hardware-Empfehlung und „Quality vs Quantity“-Einstellung sauber trennen: gemessene Werte vs. Schätzungen sichtbar machen und die Einstellung wirksam erklären/anwenden.
 - [ ] Nach jedem Commit unmittelbar den zugehörigen GitHub-Actions-Lauf prüfen und diesen Abschnitt aktualisieren; Fehler vor dem nächsten Code-Commit beheben.
 
