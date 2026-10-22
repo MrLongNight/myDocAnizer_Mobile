@@ -66,13 +66,20 @@ class ScanDetectionRegressionTest {
 
             val corners = ImageProcessingService.detectDocumentCorners(bitmap)
             assertEquals(4, corners.size)
-            assertTrue("Top edge should retain perspective", abs(corners[0].y - corners[1].y) > 20f)
+            assertTrue("Top edge should retain perspective; detected corners=$corners", abs(corners[0].y - corners[1].y) > 20f)
             assertTrue("Left edge should retain perspective", abs(corners[0].x - corners[3].x) > 20f)
 
             val warped = ImageProcessingService.cropAndWarpPerspective(bitmap, corners)
             try {
                 assertTrue(warped.width > 250)
                 assertTrue(warped.height > 250)
+                val topLeftPixel = warped.getPixel(10, 10)
+                assertTrue(
+                    "Perspective warp should map white paper into the output corner; pixel=$topLeftPixel",
+                    Color.red(topLeftPixel) > 200 &&
+                        Color.green(topLeftPixel) > 200 &&
+                        Color.blue(topLeftPixel) > 200
+                )
             } finally {
                 if (warped !== bitmap && !warped.isRecycled) warped.recycle()
             }

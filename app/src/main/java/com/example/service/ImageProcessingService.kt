@@ -282,7 +282,9 @@ object ImageProcessingService {
         val height = bitmap.height
         if (width < 160 || height < 160) return null
 
-        val scale = minOf(0.12f, 320f / maxOf(width, height).toFloat())
+        // Preserve enough contour detail for slanted-page corner estimation while
+        // keeping the work bitmap bounded to at most 320 pixels on its longest edge.
+        val scale = minOf(0.35f, 320f / maxOf(width, height).toFloat())
         val smallW = (width * scale).roundToInt().coerceAtLeast(20)
         val smallH = (height * scale).roundToInt().coerceAtLeast(20)
         val small = Bitmap.createScaledBitmap(bitmap, smallW, smallH, false)
