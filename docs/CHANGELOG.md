@@ -4,6 +4,16 @@ All notable changes to **myDocAnizer-Mobile** are documented here.
 
 ## [Unreleased]
 
+### Auto-Scan-Bereitschaft und Live-Quad-Overlay
+- Auto-Scan erfordert weiterhin einen gelockten, stabilen Dokument-Quad; Wasserwaage ist kein allgemeiner Blocker mehr. Im Stativmodus gilt nur eine großzügigere Neigungsschwelle von 8°.
+- Starres Luminanzfenster 125–245 entfernt; Mindesthelligkeit im Dokumentbereich ist 50. Schärfe blockiert nicht mehr dauerhaft: bei mindestens 1,5 s stabiler, aber unscharfer Seite wird einmalig AF/AE am Quad-Mittelpunkt angefordert und nach etwa 1 s auch bei weiterhin niedriger Schärfe ausgelöst.
+- Die 650-ms-Beruhigungszeit mit `collectLatest` bleibt erhalten; der Ablauf wird bei verlorenem Lock oder instabiler Erkennung abgebrochen.
+- Nach Auto-Aufnahme bleibt dasselbe Blatt gesperrt. Wiederfreigabe erfolgt erst nach Lock-Verlust oder einer mittleren Eckverschiebung von mehr als ca. 15 % der normalisierten Bilddiagonale; die eingestellte Nachlaufpause bleibt davor bestehen.
+- Scanner-Overlay zeichnet das erkannte Quad statt eines festen Rahmens. Das Quad wird anhand Rotation und FILL_CENTER-Seitenverhältnis in Preview-Koordinaten abgebildet; ohne Quad bleibt nur eine gestrichelte Platzierungshilfe sichtbar.
+- Debug-Anzeige für Confidence, Ablehnungsgrund, Schärfe und Bewegung ist über Scanner-Einstellungen zuschaltbar und standardmäßig aus.
+- **Die Schwellen und die Koordinatenabbildung sind noch nicht auf realen Geräten validiert.** Reale Kamera-/AF-Tests bleiben offen.
+
+
 ### Live-Dokumenterkennung: Quad-Detektor integriert
 - CameraX-Analyzer nutzt jetzt `DocumentQuadDetector` statt 12×12-Helligkeitsraster, `hasCoherentPaperGrid`, Luma-Fenster und 30-Frame-Zähler.
 - Analyse auf etwa 9 fps gedrosselt; verkleinerte YUV-Luma/Chroma-Frames werden mit wiederverwendbaren Puffern an den Detektor übergeben.
