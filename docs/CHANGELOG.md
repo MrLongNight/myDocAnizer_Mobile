@@ -4,6 +4,12 @@ All notable changes to **myDocAnizer-Mobile** are documented here.
 
 ## [Unreleased]
 
+### CI-Korrektur: flakey Laufzeitassertion im Detektor-Test
+- Nach dem Kotlin-Compilerfix wurde der Build erfolgreich bis zu den JVM-Tests ausgeführt; 229 von 230 Tests bestanden.
+- Der einzige Fehler war die harte 15-ms-Wall-Clock-Assertion für `DocumentQuadDetector` unter Robolectric/Shared CI. Der Test verwendet nun Aufwärm-Runden, Medianmessung und eine großzügige 100-ms-Grenze als Schutz vor groben Performance-Regressionen. 15 ms bleibt Optimierungsziel, aber kein deterministischer Unit-Test-SLA.
+- Commit `40cb1f1f`; CI-Ergebnis für diesen Commit steht noch aus.
+
+
 ### CI-Korrektur: Kotlin-Compilerfehler im Mehrseiten-Scan
 - Der leere-Seiten-Guard in `finishAndSaveMultiPageScan` lag innerhalb des `withTimeout`-Lambdas und verwendete dort ein unzulässiges `return@launch`. Der Guard steht jetzt vor dem Timeout-Block.
 - GitHub Actions Run [39855858835](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39855858835) zeigte den konkreten Compilerfehler in `DocAnizerViewModel.kt:1803`.
