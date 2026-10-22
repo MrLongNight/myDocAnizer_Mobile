@@ -100,7 +100,28 @@ fun DocumentReviewAndCropScreen(
     var warpedOriginalBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var warpedOptimizedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var optimizedFullBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var bitmapHandedOff by remember { mutableStateOf<Bitmap?>(null) }
+    val latestWarpedOriginal = rememberUpdatedState(warpedOriginalBitmap)
+    val latestWarpedOptimized = rememberUpdatedState(warpedOptimizedBitmap)
+    val latestOptimizedFull = rememberUpdatedState(optimizedFullBitmap)
+    val latestBitmapHandedOff = rememberUpdatedState(bitmapHandedOff)
     var isUpdatingBitmaps by remember { mutableStateOf(false) }
+
+    // Release full-resolution preview images when the crop screen closes.
+    // The final image is excluded only after ownership is transferred to the ViewModel.
+    DisposableEffect(capturedBitmap) {
+        onDispose {
+            val keep = latestBitmapHandedOff.value
+            listOfNotNull(
+                latestWarpedOriginal.value,
+                latestWarpedOptimized.value,
+                latestOptimizedFull.value,
+                capturedBitmap
+            ).distinct().forEach { bitmap ->
+                if (bitmap !== keep && !bitmap.isRecycled) runCatching { bitmap.recycle() }
+            }
+        }
+    }
     var bitmapUpdateVersion by remember { mutableIntStateOf(0) }
 
     // Vollbild-Optimierung für die Live-Gegenüberstellung (Original vs. Optimiert)
@@ -826,6 +847,7 @@ fun DocumentReviewAndCropScreen(
                             } else {
                                 warpedOriginalBitmap ?: capturedBitmap
                             }
+                            bitmapHandedOff = finalToUse
                             onConfirmFinalDocument(finalToUse)
                         },
                         enabled = !isUpdatingBitmaps,
