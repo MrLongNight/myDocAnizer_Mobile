@@ -1048,11 +1048,27 @@ class LlmService(private val context: Context) {
             )
         }
 
-        val endTime = System.currentTimeMillis()
-        val latencyMs = (endTime - startTime).coerceAtLeast(1)
-        val generatedTokens = (rawOutput.length / 3.6f).toInt().coerceAtLeast(1)
-        val tokensPerSecond = ((generatedTokens / (latencyMs / 1000f)) * 10).toInt() / 10f
-        val safeTps = tokensPerSecond.coerceAtLeast(0.1f)
+        // A native response is not enough to claim a measured benchmark: require the
+        // actual llama.cpp timing/token counters. Never estimate tokens from character count.
+        val nativeMetrics = llamaCppEngine.lastInferenceMetrics
+        if (nativeMetrics == null) {
+            return@withContext com.example.model.ModelBenchmarkResult(
+                modelId = model.id,
+                modelName = model.name,
+                qualityScore = 0,
+                quantityScore = 0,
+                overallScore = 0,
+                tokensPerSecond = 0f,
+                latencyMs = (System.currentTimeMillis() - startTime).coerceAtLeast(1),
+                generatedTokens = 0,
+                rawOutput = rawOutput,
+                evaluationDetails = "Nicht gemessen: llama.cpp lieferte keine vollständigen nativen Token-/Zeitmetriken.",
+                isMeasured = false
+            )
+        }
+        val generatedTokens = nativeMetrics.generatedTokens
+        val latencyMs = nativeMetrics.promptEvalTimeMs + nativeMetrics.generationTimeMs
+        val safeTps = nativeMetrics.tokensPerSecond
 
         val lowerOutput = rawOutput.lowercase()
         val extractedSender = when {
@@ -1143,6 +1159,8 @@ class LlmService(private val context: Context) {
             overallScore = overallScore,
             tokensPerSecond = safeTps,
             latencyMs = latencyMs,
+            promptEvalTimeMs = nativeMetrics.promptEvalTimeMs,
+            generationTimeMs = nativeMetrics.generationTimeMs,
             generatedTokens = generatedTokens,
             extractedSender = extractedSender,
             extractedDocType = extractedDocType,
