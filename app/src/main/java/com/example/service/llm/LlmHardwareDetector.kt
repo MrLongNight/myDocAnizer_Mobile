@@ -25,9 +25,9 @@ object LlmHardwareDetector {
             val cores = Runtime.getRuntime().availableProcessors()
             val isLowRam = memoryInfo.lowMemory || totalGb < 3.0f
 
-            val roundedTotal = ((totalGb * 10).toInt() / 10f).coerceAtLeast(1.0f)
-            val roundedAvail = ((availGb * 10).toInt() / 10f).coerceAtLeast(0.5f)
-            val roundedUsed = ((usedGb * 10).toInt() / 10f).coerceAtLeast(0.5f)
+            val roundedTotal = ((totalGb * 10).toInt() / 10f).coerceAtLeast(0f)
+            val roundedAvail = ((availGb * 10).toInt() / 10f).coerceAtLeast(0f)
+            val roundedUsed = ((usedGb * 10).toInt() / 10f).coerceAtLeast(0f)
 
             val soc = detectSocModel()
             val maxFreq = detectMaxCpuFreqMhz()
@@ -39,8 +39,8 @@ object LlmHardwareDetector {
                 totalRamGb = roundedTotal,
                 availableRamGb = roundedAvail,
                 usedRamGb = roundedUsed,
-                ramUsagePercent = usagePct.coerceIn(5, 95),
-                cpuCores = cores.coerceAtLeast(4),
+                ramUsagePercent = usagePct.coerceIn(0, 100),
+                cpuCores = cores.coerceAtLeast(1),
                 isLowRamDevice = isLowRam,
                 socModel = soc,
                 maxCpuFreqMhz = maxFreq,
@@ -50,17 +50,17 @@ object LlmHardwareDetector {
             )
         } catch (e: Exception) {
             DeviceHardwareInfo(
-                totalRamGb = 6.0f,
-                availableRamGb = 3.5f,
-                usedRamGb = 2.5f,
-                ramUsagePercent = 42,
-                cpuCores = 8,
-                isLowRamDevice = false,
+                totalRamGb = 0f,
+                availableRamGb = 0f,
+                usedRamGb = 0f,
+                ramUsagePercent = 0,
+                cpuCores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
+                isLowRamDevice = true,
                 socModel = detectSocModel(),
-                maxCpuFreqMhz = 2000,
-                supportsArmDotProd = true,
-                hasVulkanGpu = true,
-                cpuBenchmarkScore = 75
+                maxCpuFreqMhz = 0,
+                supportsArmDotProd = false,
+                hasVulkanGpu = false,
+                cpuBenchmarkScore = 0
             )
         }
     }
@@ -75,7 +75,7 @@ object LlmHardwareDetector {
             if (!hw.isNullOrBlank() && hw != Build.UNKNOWN) return hw
             val board = Build.BOARD
             if (!board.isNullOrBlank() && board != Build.UNKNOWN) return board
-            "Standard ARMv8"
+            "Unknown SoC"
         } catch (_: Throwable) {
             "Standard ARMv8"
         }
@@ -97,9 +97,9 @@ object LlmHardwareDetector {
                     }
                 }
             }
-            if (maxKhz > 100000) maxKhz / 1000 else 2000
+            if (maxKhz > 100000) maxKhz / 1000 else 0
         } catch (_: Throwable) {
-            2000
+            0
         }
     }
 
@@ -112,20 +112,17 @@ object LlmHardwareDetector {
                     return true
                 }
             }
-            Build.SUPPORTED_ABIS.any { it.contains("arm64") || it.contains("v8a") }
+            false
         } catch (_: Throwable) {
-            true
+            false
         }
     }
 
     fun detectVulkanGpu(context: Context): Boolean {
         return try {
-            val hasFeature = context.packageManager.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_LEVEL)
-            val hw = Build.HARDWARE.lowercase()
-            hasFeature || hw.contains("qcom") || hw.contains("mali") || hw.contains("exynos") ||
-                hw.contains("tensor") || hw.contains("kirin") || hw.contains("mediatek")
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_LEVEL)
         } catch (_: Throwable) {
-            true
+            false
         }
     }
 
@@ -140,10 +137,10 @@ object LlmHardwareDetector {
                 }
                 ops += 5000
             }
-            val score = (ops / 25000L).toInt().coerceIn(25, 100)
+            val score = (ops / 25000L).toInt().coerceIn(0, 100)
             score
         } catch (_: Throwable) {
-            75
+            0
         }
     }
 
@@ -214,9 +211,9 @@ object LlmHardwareDetector {
             fitMultiplier < 0.5f ->
                 "Geringer Score ($finalScore/100): Modell benötigt ${model.ramBadge}, übersteigt jedoch die verbauten ${hw.totalRamGb} GB RAM deines Geräts."
             preference == LlmPreferenceMode.SPEED_FOCUS ->
-                "Score $finalScore/100 (Geschwindigkeits-Fokus): ca. $estimatedTps TPS bei ${qualityScore}% Extraktionsgüte. Sehr schnelle Reaktionszeit."
+                "Vorläufiger Vergleichsscore $finalScore/100 (Geschwindigkeits-Fokus): geschätzte ${estimatedTps} TPS; die tatsächliche Geschwindigkeit muss mit dem Modell auf dem Gerät gemessen werden. Qualitätswert ist eine Modell-Vorbewertung, keine gemessene Trefferquote."
             else ->
-                "Score $finalScore/100 (Qualitäts-Fokus): ${qualityScore}% Sprach- & Extraktionspräzision bei stabilen $estimatedTps TPS optimal abgestimmt auf ${hw.totalRamGb} GB RAM."
+                "Vorläufiger Vergleichsscore $finalScore/100 (Qualitäts-Fokus): Modell-Vorbewertung $qualityScore/100; geschätzte ${estimatedTps} TPS bei ${hw.totalRamGb} GB erkanntem RAM. Beides ist keine gemessene Extraktionsquote bzw. Laufzeit."
         }
 
         return Pair(finalScore, reason)
