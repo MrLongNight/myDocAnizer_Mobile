@@ -5,10 +5,9 @@
 ## Aktueller Stand und Nachweise
 
 - **Branch:** `main`
-- **Aktueller Code-Commit:** [`c593d26d`](https://github.com/MrLongNight/myDocAnizer_Mobile/commit/c593d26d4b52ab43e12436bdcf9876baf55bc8c2) – Auto-Scan-Wartezeit wird abgebrochen, wenn die Qualitätsbedingungen während des Countdowns wegbrechen.
-- **Aktueller CI-Lauf:** [39766676859](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39766676859) – **erfolgreich**. APK-Build/Verifikation/Upload, Unit-Tests und Instrumentierungstest-Schritt melden Erfolg. Das ist kein physischer Kameratest.
-- **APK-Artefakt:** `myDocAnizer-Mobile-APK`, ca. 93 MB, Artefakt-ID `12420377803`, Ablaufdatum 21.11.2026. Download über den oben verlinkten Actions-Lauf.
-- **CI-Hinweis:** In den Logs gibt es Emulator-/ADB-Warnungen während des Instrumentierungsschritts, der Schritt und der Job endeten trotzdem erfolgreich. Eine veraltete `Undo`-Icon-API erzeugt außerdem eine Deprecation-Warnung.
+- **Letzter Code-Commit für den aktuellen Scan-Arbeitsblock:** [`158dbf69`](https://github.com/MrLongNight/myDocAnizer_Mobile/commit/158dbf695a9dba37d1f7943aa79b895ac1d615f4) – Live-Quad-Overlay, Auto-Scan-Bereitschaft und Autofokus-Wiederholung.
+- **CI:** Der frühere Lauf `39766676859` gehört zu einem älteren Commit und ist kein Nachweis für die aktuellen Änderungen. Der Workflow für den aktuellen Stand ist nach dem Push separat zu prüfen.
+- **Physischer Gerätetest:** Für Quad-Overlay, FILL_CENTER-Ausrichtung, Autofokus und Wiederfreigabe nach Blattwechsel noch offen.
 - **Wichtig zur Perspektive:** Ein früherer Lauf (`39749143472`) scheiterte weiterhin am Test der schrägen Dokumentecken. Danach wurde die Test-Fixture und schließlich die Pixel-Assertion angepasst. Der aktuelle grüne Lauf bestätigt, dass die aktuelle Test-Suite besteht; er beweist nicht allein die Perspektivqualität echter Fotos.
 
 ## Letzte Änderungen auf `main`
@@ -31,6 +30,14 @@
 - Benchmark-Ausgabe begrenzt auf 160 Tokens, weil der feste Extraktionsfall keine 350 Tokens benötigt. Chat entfernt versteckte `<think>`-Blöcke aus sichtbaren Antworten.
 - **Noch kein Gerätetest:** Die Raster-/Konturheuristik ist ein messbarer Zwischenschritt, keine Zusicherung zuverlässiger Erkennung in allen Szenen. Positiv-/Negativ-Fotos und echte Kamera-Tests bleiben erforderlich. Die 280-ms-Vorschau-Neuberechnung und Drag-Latenz sind noch offen.
 - **CI für Commit `3891ab8` wird durch diesen Folgeschritt ersetzt; das Ergebnis ist erst nach Abschluss des neuen Workflows gültig.**
+
+## Arbeitsblock 22.10.2026 – Auto-Scan-Bereitschaft und Quad-Overlay
+
+- Auto-Scan-Pflichtbedingungen: gelocktes und stabiles Quad sowie Mindesthelligkeit 50 im Quad-Bereich. Die Wasserwaage blockiert Handscans nicht; nur bei aktiviertem Stativscan gilt die großzügigere Grenze von 8°.
+- 650-ms-Beruhigungsfenster mit `collectLatest` bleibt bestehen. Bei einem stabilen, aber unscharfen Dokument wartet der Ablauf bis 1,5 s Stabilität, fordert einmal AF/AE am Quad-Mittelpunkt an und löst nach ca. 1 s trotzdem aus, sofern Lock/Stabilität bestehen bleiben.
+- Nach Auto-Aufnahme wird dasselbe Blatt nicht erneut ausgelöst. Nach der konfigurierten Nachlaufpause wird erst bei verlorenem Lock oder einer mittleren Eckverschiebung von >15 % der normalisierten Bilddiagonale wieder freigegeben.
+- Preview-Overlay zeichnet das Quad in auf PreviewView normierten Koordinaten, inklusive Rotation und FILL_CENTER-Zuschnitt; die gestrichelte Platzierungshilfe bleibt nur ohne Quad sichtbar. Debugwerte sind über Scanner-Einstellungen zuschaltbar (Default aus).
+- **Noch offen:** tatsächliche Kamera-Transform-Validierung, AF-Verhalten, Hand-/Stativtests und Prüfung, dass das gleiche Blatt nicht erneut ausgelöst wird. Die verwendeten Schwellen sind nicht auf realen Geräten validiert.
 
 ## Offene Fehler und konkrete Abnahmekriterien
 
