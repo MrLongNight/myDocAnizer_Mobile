@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -177,134 +178,82 @@ fun ScannerCameraPreviewPane(
                 }
             }
         }
-        // Overlay: Dokumenten-Rahmen und Laser
+        // Live-Quad: previewQuad ist bereits in PreviewView-Koordinaten (Rotation + FILL_CENTER).
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = 120.dp)
         ) {
-            val padH = size.width * 0.08f
-            val padV = size.height * 0.12f
-            val boxWidth = size.width - (padH * 2)
-            val boxHeight = size.height - (padV * 2) - 40f
-            val cornerRadius = 28f
-            val cornerColor = if (isDocumentDetected && isPhoneInWaage) Color(0xFF10B981) else if (isDocumentDetected) Color(0xFF38BDF8) else Color(0xFF64748B)
-            val strokeW = if (isDocumentDetected) 3.5f else 2.5f
-
-            // Dokumentenrahmen mit abgerundeten Bézier-Ecken
-            val docFramePath = Path().apply {
-                // Top edge
-                moveTo(padH + cornerRadius, padV)
-                lineTo(padH + boxWidth - cornerRadius, padV)
-                // Top-Right Bézier corner
-                quadraticTo(padH + boxWidth, padV, padH + boxWidth, padV + cornerRadius)
-                // Right edge
-                lineTo(padH + boxWidth, padV + boxHeight - cornerRadius)
-                // Bottom-Right Bézier corner
-                quadraticTo(padH + boxWidth, padV + boxHeight, padH + boxWidth - cornerRadius, padV + boxHeight)
-                // Bottom edge
-                lineTo(padH + cornerRadius, padV + boxHeight)
-                // Bottom-Left Bézier corner
-                quadraticTo(padH, padV + boxHeight, padH, padV + boxHeight - cornerRadius)
-                // Left edge
-                lineTo(padH, padV + cornerRadius)
-                // Top-Left Bézier corner
-                quadraticTo(padH, padV, padH + cornerRadius, padV)
-                close()
+            val quad = frameAnalysis.previewQuad
+            val hasQuad = quad?.size == 4
+            val scanStarting = isDocumentDetected && frameAnalysis.isDocumentStable && autoDetectProgress > 0f
+            val quadColor = when {
+                scanStarting -> Color(0xFF10B981)
+                isDocumentDetected || hasQuad -> Color(0xFF38BDF8)
+                else -> Color(0xFF94A3B8)
+            }
+            if (hasQuad) {
+                val quadPath = Path().apply {
+                    moveTo(quad!![0].x * size.width, quad[0].y * size.height)
+                    for (i in 1..3) lineTo(quad[i].x * size.width, quad[i].y * size.height)
+                    close()
+                }
+                drawPath(quadPath, quadColor.copy(alpha = if (scanStarting) 0.12f else 0.06f))
+                drawPath(quadPath, quadColor.copy(alpha = 0.28f), style = Stroke(width = 7f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawPath(quadPath, quadColor, style = Stroke(width = 3f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                quad.forEach { point ->
+                    drawCircle(quadColor, radius = 5f, center = Offset(point.x * size.width, point.y * size.height))
+                }
+            } else {
+                // Gestrichelte Platzierungshilfe nur solange kein Quad vorliegt.
+                val padH = size.width * 0.08f
+                val padV = size.height * 0.12f
+                val boxWidth = size.width - 2f * padH
+                val boxHeight = size.height - 2f * padV - 40f
+                val guide = Path().apply {
+                    moveTo(padH, padV)
+                    lineTo(padH + boxWidth, padV)
+                    lineTo(padH + boxWidth, padV + boxHeight)
+                    lineTo(padH, padV + boxHeight)
+                    close()
+                }
+                drawPath(guide, Color(0xFF94A3B8), style = Stroke(width = 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 9f))))
             }
 
-            // Subtile Flächenfüllung bei erkanntem Dokument
-            if (isDocumentDetected) {
-                drawPath(
-                    path = docFramePath,
-                    color = cornerColor.copy(alpha = 0.08f)
-                )
-            }
-
-            // Äußerer Glüh-Effekt
-            drawPath(
-                path = docFramePath,
-                color = cornerColor.copy(alpha = 0.35f),
-                style = Stroke(width = strokeW + 4f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-            )
-
-            // Haupt-Rahmenlinie
-            drawPath(
-                path = docFramePath,
-                color = cornerColor,
-                style = Stroke(width = strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round)
-            )
-
-            // 4 Bézier-Eckpunkte mit visuellen Ankerpunkten hervorheben
-            val corners = listOf(
-                Offset(padH, padV),
-                Offset(padH + boxWidth, padV),
-                Offset(padH + boxWidth, padV + boxHeight),
-                Offset(padH, padV + boxHeight)
-            )
-            corners.forEach { pt ->
-                drawCircle(
-                    color = cornerColor.copy(alpha = 0.4f),
-                    radius = 9f,
-                    center = pt
-                )
-                drawCircle(
-                    color = Color.White,
-                    radius = 5.5f,
-                    center = pt
-                )
-                drawCircle(
-                    color = cornerColor,
-                    radius = 3.5f,
-                    center = pt
-                )
-            }
-            // Laser
-            val currentLaserY = padV + (boxHeight * laserProgress)
-            drawLine(
-                color = Color(0xFF06B6D4).copy(alpha = 0.85f),
-                start = Offset(padH + 4f, currentLaserY),
-                end = Offset(padH + boxWidth - 4f, currentLaserY),
-                strokeWidth = 3f
-            )
-            // Wasserwaage / Bullseye
+            // Wasserwaage bleibt eine Orientierungshilfe und blockiert den Handscan nicht.
             val centerX = size.width / 2f
-            val centerY = padV + (boxHeight / 2f)
+            val centerY = size.height * 0.52f
             val outerRadius = 42f
             val targetRadius = 15f
             val waageColor = if (isPhoneInWaage) Color(0xFF10B981) else Color(0xFFF59E0B)
-            drawCircle(
-                color = waageColor.copy(alpha = 0.5f),
-                radius = outerRadius,
-                center = Offset(centerX, centerY),
-                style = Stroke(width = 2.5f)
-            )
-            drawCircle(
-                color = waageColor.copy(alpha = 0.85f),
-                radius = targetRadius,
-                center = Offset(centerX, centerY),
-                style = Stroke(width = 2.5f)
-            )
-            drawLine(
-                color = waageColor.copy(alpha = 0.4f),
-                start = Offset(centerX - outerRadius - 12f, centerY),
-                end = Offset(centerX + outerRadius + 12f, centerY),
-                strokeWidth = 2f
-            )
-            drawLine(
-                color = waageColor.copy(alpha = 0.4f),
-                start = Offset(centerX, centerY - outerRadius - 12f),
-                end = Offset(centerX, centerY + outerRadius + 12f),
-                strokeWidth = 2f
-            )
+            drawCircle(waageColor.copy(alpha = 0.5f), outerRadius, Offset(centerX, centerY), style = Stroke(width = 2.5f))
+            drawCircle(waageColor.copy(alpha = 0.85f), targetRadius, Offset(centerX, centerY), style = Stroke(width = 2.5f))
+            drawLine(waageColor.copy(alpha = 0.4f), Offset(centerX - outerRadius - 12f, centerY), Offset(centerX + outerRadius + 12f, centerY), strokeWidth = 2f)
+            drawLine(waageColor.copy(alpha = 0.4f), Offset(centerX, centerY - outerRadius - 12f), Offset(centerX, centerY + outerRadius + 12f), strokeWidth = 2f)
             val maxOffset = outerRadius - 8f
-            val bubbleX = (sensorTiltX * 14f).coerceIn(-maxOffset, maxOffset)
-            val bubbleY = (sensorTiltY * 14f).coerceIn(-maxOffset, maxOffset)
             drawCircle(
-                color = if (isPhoneInWaage) Color(0xFF10B981) else Color(0xFFFBBF24),
+                if (isPhoneInWaage) Color(0xFF10B981) else Color(0xFFFBBF24),
                 radius = 8f,
-                center = Offset(centerX + bubbleX, centerY + bubbleY)
+                center = Offset(
+                    centerX + (sensorTiltX * 14f).coerceIn(-maxOffset, maxOffset),
+                    centerY + (sensorTiltY * 14f).coerceIn(-maxOffset, maxOffset)
+                )
             )
+        }
+        if (scannerSettings.debugDocumentDetection) {
+            Surface(
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 66.dp),
+                color = Color(0xDD0F172A),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(
+                    text = "conf " + frameAnalysis.documentConfidence + " • reject " + (frameAnalysis.rejectReason ?: "–") +
+                        "\nsharp " + frameAnalysis.sharpnessScore + " • motion " + frameAnalysis.motionScore,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                )
+            }
         }
         // OBERE LEISTE
         Row(
