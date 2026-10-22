@@ -1,7 +1,26 @@
 # Lokale LLM-Funktionen – Live-Todo
 
-**Stand:** 21.10.2026 · **Branch:** `main` · **Prüfbasis:** vollständige Repository-Dateiinventur plus gezielter Code-/Dokumenten-Audit; kein APK-/Gerätetest.
+**Stand:** 22.10.2026 · **Branch:** `main` · **Pflegepflicht:** Nach jedem Arbeitsblock Aufgabenstatus, Commit und CI-Nachweis hier aktualisieren. Ein grüner CI-Build belegt keinen realen Gerätetest.
 **Statusbegriffe:** ✅ belegt/erledigt · 🟡 teilweise belegt · ⛔ blockiert/offen
+
+## Arbeitsprotokoll – erledigte Änderungen und Nachweise
+
+| Datum (UTC) | Commit | Erledigt | CI-Nachweis |
+|---|---|---|---|
+| 21.10.2026 | `cc372dc3` | Mehrdeutige Regel-Treffer werden an die Auswahlentscheidung weitergereicht, statt still eine Regel zu bevorzugen. | Dieser Lauf wurde durch einen nachfolgenden Commit abgebrochen; kein eigener grüner Nachweis. |
+| 21.10.2026 | `c0f0376d` | Warnhinweise vor dem Speichern überlappender Regeldefinitionen ergänzt. | GitHub Actions erfolgreich. |
+| 22.10.2026 | `c0aa4553` | Hardware-Fallbacks erfinden keine Geräteleistung mehr; unbekannte Kapazität bleibt unbekannt. | GitHub Actions erfolgreich; Debug-APK gebaut, Instrumentierungstests bestanden, APK hochgeladen. |
+| 22.10.2026 | `f23786b2` | Heuristischer Fallback wird nicht als gemessener Modellbenchmark ausgegeben; Benchmark-Ergebnis kennzeichnet Messstatus; unbekannte Hardware wird als unbekannt/limitiert behandelt; UI bezeichnet Schätzwerte als Schätzung. | GitHub Actions erfolgreich (Run [39699404634](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39699404634)). |
+| 22.10.2026 | `8ee30cdb` | Extraktionsprompts für kleine Modelle verschlankt: keine ausführliche Chain-of-Thought-Ausgabe; Zusatzfelder nur mit OCR-belegten Werten; keine erfundenen Werte; JSON-Ausgabe klar vorgegeben. | **CI für diesen Commit noch zu bestätigen**; Run [39709087914](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39709087914) wurde gestartet. |
+
+**Wichtig:** „Erledigt“ bedeutet hier Codeänderung committed. Ein CI-Erfolg ist separat vermerkt; echte GGUF-Inferenz auf physischen Geräten ist weiterhin nicht belegt.
+
+## Nächste konkrete Aufgaben
+
+- [ ] Native Benchmark-Ergebnisse aus den echten llama.cpp-Metriken (Promptzeit, Generierungszeit, erzeugte Tokens, TPS) direkt in `ModelBenchmarkResult` übernehmen; keine Zeichenlängen-Näherung als Messwert verwenden.
+- [ ] Vor jedem Inferenzaufruf Messwerte und `lastInferenceMode` zurücksetzen, damit ein vorheriger erfolgreicher Aufruf nicht den Status eines späteren Fallbacks verfälscht.
+- [ ] Modellqualität, Hardware-Empfehlung und „Quality vs Quantity“-Einstellung sauber trennen: gemessene Werte vs. Schätzungen sichtbar machen und die Einstellung wirksam erklären/anwenden.
+- [ ] Nach jedem Commit unmittelbar den zugehörigen GitHub-Actions-Lauf prüfen und diesen Abschnitt aktualisieren; Fehler vor dem nächsten Code-Commit beheben.
 
 ## Zielzustand
 
