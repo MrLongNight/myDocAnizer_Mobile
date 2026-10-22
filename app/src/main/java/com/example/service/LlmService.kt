@@ -1159,6 +1159,8 @@ class LlmService(private val context: Context) {
             overallScore = overallScore,
             tokensPerSecond = safeTps,
             latencyMs = latencyMs,
+            promptEvalTimeMs = nativeMetrics.promptEvalTimeMs,
+            generationTimeMs = nativeMetrics.generationTimeMs,
             generatedTokens = generatedTokens,
             extractedSender = extractedSender,
             extractedDocType = extractedDocType,
