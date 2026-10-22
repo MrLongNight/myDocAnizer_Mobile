@@ -100,18 +100,17 @@ fun DocumentReviewAndCropScreen(
     var warpedOriginalBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var warpedOptimizedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var optimizedFullBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var bitmapHandedOff by remember { mutableStateOf<Bitmap?>(null) }
+    val bitmapHandedOff = remember { arrayOfNulls<Bitmap>(1) }
     val latestWarpedOriginal = rememberUpdatedState(warpedOriginalBitmap)
     val latestWarpedOptimized = rememberUpdatedState(warpedOptimizedBitmap)
     val latestOptimizedFull = rememberUpdatedState(optimizedFullBitmap)
-    val latestBitmapHandedOff = rememberUpdatedState(bitmapHandedOff)
     var isUpdatingBitmaps by remember { mutableStateOf(false) }
 
     // Release full-resolution preview images when the crop screen closes.
     // The final image is excluded only after ownership is transferred to the ViewModel.
     DisposableEffect(capturedBitmap) {
         onDispose {
-            val keep = latestBitmapHandedOff.value
+            val keep = bitmapHandedOff[0]
             listOfNotNull(
                 latestWarpedOriginal.value,
                 latestWarpedOptimized.value,
@@ -847,7 +846,7 @@ fun DocumentReviewAndCropScreen(
                             } else {
                                 warpedOriginalBitmap ?: capturedBitmap
                             }
-                            bitmapHandedOff = finalToUse
+                            bitmapHandedOff[0] = finalToUse
                             onConfirmFinalDocument(finalToUse)
                         },
                         enabled = !isUpdatingBitmaps,
