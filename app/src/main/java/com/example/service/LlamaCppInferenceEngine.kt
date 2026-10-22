@@ -715,6 +715,7 @@ ws ::= [ \t\n\r]*
             )
         } catch (e: Exception) {
             safeLogW(TAG, "JSON-Parsing fehlgeschlagen: ${e.message}, erzeuge Heuristik-Antwort")
+            lastInferenceMetrics = null
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return createHeuristicFallbackResponse(fallbackOcrText, folderStrategy)
         }
