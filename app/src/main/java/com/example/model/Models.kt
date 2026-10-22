@@ -540,7 +540,8 @@ data class ScannerSettings(
     val sheetChangeSensitivity: String = "MEDIUM", // "LOW", "MEDIUM", "HIGH"
     val soundProfile: String = "SUCCESS_BEEP", // "CLICK", "SUCCESS_BEEP", "CHIME", "MUTE"
     val enableVibration: Boolean = false, // Optionales haptisches Feedback, standardmäßig AUS
-    val enableCropPreview: Boolean = true // Interaktive Eckpunkt-Korrektur & Optimierungsvorschau nach Aufnahme
+    val enableCropPreview: Boolean = true, // Interaktive Eckpunkt-Korrektur & Optimierungsvorschau nach Aufnahme
+    val debugDocumentDetection: Boolean = false // Diagnosewerte im Live-Preview anzeigen (standardmäßig aus)
 )
 
 data class PendingRuleSuggestion(
