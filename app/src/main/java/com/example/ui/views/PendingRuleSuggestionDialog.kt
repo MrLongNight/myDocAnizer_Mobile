@@ -45,6 +45,7 @@ fun PendingRuleSuggestionDialog(
     val clipboardManager = LocalClipboardManager.current
     val workflowState = viewModel?.scanWorkflowState?.collectAsStateWithLifecycle()?.value ?: "AwaitingRuleDecision"
     val workflowError = viewModel?.scanWorkflowError?.collectAsStateWithLifecycle()?.value
+    val isScanProcessing = viewModel?.isProcessingScan?.collectAsStateWithLifecycle()?.value ?: false
 
     var ruleName by remember { mutableStateOf(suggestion.suggestedRule.name) }
     var sender by remember { mutableStateOf(suggestion.suggestedRule.detectedSender) }
@@ -227,7 +228,7 @@ fun PendingRuleSuggestionDialog(
                             Text(workflowError, color = MaterialTheme.colorScheme.onErrorContainer)
                             Button(
                                 onClick = { viewModel?.retryScanSave() },
-                                enabled = viewModel != null && !isRefiningWithAi,
+                                enabled = viewModel != null && !isRefiningWithAi && !isScanProcessing,
                                 modifier = Modifier.testTag("btn_retry_scan_save")
                             ) { Text("Erneut versuchen") }
                             Text(
@@ -1158,6 +1159,7 @@ fun PendingRuleSuggestionDialog(
                             suggestion.onSingleUseOnly(updatedRule)
                         },
                         shape = RoundedCornerShape(12.dp),
+                        enabled = !isScanProcessing,
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
@@ -1191,6 +1193,7 @@ fun PendingRuleSuggestionDialog(
                             }
                         },
                         shape = RoundedCornerShape(12.dp),
+                        enabled = !isScanProcessing,
                         modifier = Modifier
                             .weight(1.3f)
                             .height(48.dp)
