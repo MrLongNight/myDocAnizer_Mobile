@@ -30,6 +30,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.service.DocumentQuadDetector
+import com.example.service.DocumentTracker
+import com.example.service.LumaChromaFrame
+import com.example.service.toLumaChromaFrame
 import java.nio.ByteBuffer
 
 enum class FlashOption(val label: String) {
@@ -40,108 +44,79 @@ enum class FlashOption(val label: String) {
 
 data class CameraFrameAnalysis(
     val isDocumentDetected: Boolean = false,
-    val motionScore: Float = 0f, // 0f = komplett still, > 15f = Bewegung / Blattwechsel
+    // Motion scale: 0 = no corner movement; 3.0 = average corners moved ~3% of image diagonal.
+    val motionScore: Float = 0f,
     val averageLuminance: Float = 128f,
-    val sharpnessScore: Float = 0f
+    val sharpnessScore: Float = 0f,
+    val documentQuad: List<android.graphics.PointF>? = null, // normalized to source ImageProxy buffer, TL/TR/BR/BL
+    val documentConfidence: Float = 0f,
+    val isDocumentStable: Boolean = false,
+    val rejectReason: String? = null,
+    val rotationDegrees: Int = 0,
+    val sourceWidth: Int = 0,
+    val sourceHeight: Int = 0,
+    val sourceCropRect: android.graphics.Rect? = null
 )
 
-/**
- * Rejects bright objects that only match by average luminance. A sheet should span
- * most interior rows and columns, unlike a circular candle or scattered plant leaves.
- */
-internal fun hasCoherentPaperGrid(
-    lumaGrid: IntArray,
-    gridSize: Int = 8,
-    threshold: Int = 135,
-    frameAspectRatio: Float = 1f
-): Boolean {
-    if (gridSize < 5 || lumaGrid.size != gridSize * gridSize || !frameAspectRatio.isFinite()) return false
-    val bright = BooleanArray(lumaGrid.size) { lumaGrid[it] >= threshold }
-    val visited = BooleanArray(lumaGrid.size)
-    val total = lumaGrid.size
+private data class FrameQuality(val averageLuminance: Float, val sharpnessScore: Float)
 
-    fun insideConvexQuad(x: Float, y: Float, corners: List<Pair<Float, Float>>): Boolean {
-        var positive = false
-        var negative = false
-        for (i in corners.indices) {
-            val a = corners[i]
-            val b = corners[(i + 1) % corners.size]
-            val cross = (b.first - a.first) * (y - a.second) -
-                (b.second - a.second) * (x - a.first)
-            if (cross > 0.01f) positive = true
-            if (cross < -0.01f) negative = true
-            if (positive && negative) return false
-        }
-        return true
-    }
-
-    for (start in 0 until total) {
-        if (!bright[start] || visited[start]) continue
-        val queue = IntArray(total)
-        val component = IntArray(total)
-        var head = 0
-        var tail = 0
-        queue[tail++] = start
-        visited[start] = true
-        var minX = gridSize
-        var maxX = -1
-        var minY = gridSize
-        var maxY = -1
-        while (head < tail) {
-            val index = queue[head++]
-            component[head - 1] = index
-            val x = index % gridSize
-            val y = index / gridSize
-            minX = minOf(minX, x)
-            maxX = maxOf(maxX, x)
-            minY = minOf(minY, y)
-            maxY = maxOf(maxY, y)
-            for (dy in -1..1) for (dx in -1..1) {
-                if (dx == 0 && dy == 0) continue
-                val nx = x + dx
-                val ny = y + dy
-                if (nx !in 0 until gridSize || ny !in 0 until gridSize) continue
-                val next = ny * gridSize + nx
-                if (bright[next] && !visited[next]) {
-                    visited[next] = true
-                    queue[tail++] = next
-                }
+private fun measureFrameQuality(
+    frame: com.example.service.LumaChromaFrame,
+    quad: List<android.graphics.PointF>?
+): FrameQuality {
+    val width = frame.width
+    val height = frame.height
+    var luminanceSum = 0L
+    var laplacianSum = 0L
+    var count = 0
+    for (y in 1 until height - 1) {
+        for (x in 1 until width - 1) {
+            val nx = (x + 0.5f) / width
+            val ny = (y + 0.5f) / height
+            val inRegion = if (quad != null && quad.size == 4) {
+                pointInsideQuad(nx, ny, quad)
+            } else {
+                nx in 0.20f..0.80f && ny in 0.20f..0.80f
             }
+            if (!inRegion) continue
+            val i = y * width + x
+            val center = frame.y[i].toInt() and 0xff
+            val left = frame.y[i - 1].toInt() and 0xff
+            val right = frame.y[i + 1].toInt() and 0xff
+            val top = frame.y[i - width].toInt() and 0xff
+            val bottom = frame.y[i + width].toInt() and 0xff
+            luminanceSum += center
+            laplacianSum += kotlin.math.abs(4 * center - left - right - top - bottom).toLong()
+            count++
         }
-
-        val boxW = maxX - minX + 1
-        val boxH = maxY - minY + 1
-        if (tail < total * 0.10f ||
-            boxW < gridSize * 0.35f || boxH < gridSize * 0.35f ||
-            (boxW * boxH).toFloat() / total !in 0.12f..0.58f
-        ) continue
-
-        val aspect = boxW.toFloat() / boxH.toFloat() * frameAspectRatio
-        if (aspect !in 0.45f..2.10f) continue
-
-        val points = component.copyOf(tail).map { index ->
-            (index % gridSize).toFloat() to (index / gridSize).toFloat()
-        }
-        val topLeft = points.minByOrNull { it.first + it.second } ?: continue
-        val topRight = points.maxByOrNull { it.first - it.second } ?: continue
-        val bottomRight = points.maxByOrNull { it.first + it.second } ?: continue
-        val bottomLeft = points.minByOrNull { it.first - it.second } ?: continue
-        val corners = listOf(topLeft, topRight, bottomRight, bottomLeft)
-        var twiceArea = 0f
-        for (i in corners.indices) {
-            val a = corners[i]
-            val b = corners[(i + 1) % corners.size]
-            twiceArea += a.first * b.second - b.first * a.second
-        }
-        if (kotlin.math.abs(twiceArea) / 2f < total * 0.10f) continue
-
-        // Rounded/elongated objects have many bright samples outside their inferred diamond;
-        // a paper-like quadrilateral should contain nearly all samples in its component.
-        val insideCount = points.count { insideConvexQuad(it.first, it.second, corners) }
-        if (insideCount.toFloat() / points.size.toFloat() >= 0.82f) return true
     }
-    return false
+    if (count == 0) return FrameQuality(128f, 0f)
+    val average = luminanceSum.toFloat() / count
+    val averageLaplacian = laplacianSum.toFloat() / count
+    return FrameQuality(average, (averageLaplacian / 12f * 100f).coerceIn(0f, 100f))
 }
+
+private fun pointInsideQuad(x: Float, y: Float, quad: List<android.graphics.PointF>): Boolean {
+    var inside = false
+    var j = quad.lastIndex
+    for (i in quad.indices) {
+        val a = quad[i]
+        val b = quad[j]
+        if ((a.y > y) != (b.y > y) &&
+            x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x
+        ) inside = !inside
+        j = i
+    }
+    return inside
+}
+
+private fun normalizedToPreviewPoint(x: Float, y: Float, rotationDegrees: Int): Pair<Float, Float> =
+    when (((rotationDegrees % 360) + 360) % 360) {
+        90 -> (1f - y) to x
+        180 -> (1f - x) to (1f - y)
+        270 -> y to (1f - x)
+        else -> x to y
+    }
 
 @Composable
 fun CameraPreview(
@@ -200,10 +175,10 @@ fun CameraPreview(
 
     val analysisExecutor = remember { java.util.concurrent.Executors.newSingleThreadExecutor() }
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
-    val previousSamplesRef = remember { arrayOfNulls<ByteArray>(1) }
-    // A plausible-looking single frame is not enough for automatic capture.
-    // Require a continuous run of valid detections before exposing the document as detected.
-    val consecutiveDocumentFrames = remember { longArrayOf(0L) }
+    val detector = remember { DocumentQuadDetector() }
+    val documentTracker = remember { DocumentTracker() }
+    val frameBuffer = remember { arrayOfNulls<LumaChromaFrame>(1) }
+    val lastAnalyzedAt = remember { longArrayOf(0L) }
     val lastAutoFocusAt = remember { longArrayOf(0L) }
 
     DisposableEffect(lifecycleOwner) {
@@ -267,178 +242,69 @@ fun CameraPreview(
 
                         imageAnalysis.setAnalyzer(analysisExecutor) { imageProxy ->
                             try {
-                                val plane = imageProxy.planes.firstOrNull()
-                                if (plane != null) {
-                                    val buffer = plane.buffer
-                                    val width = imageProxy.width
-                                    val height = imageProxy.height
-                                    val rowStride = plane.rowStride
-                                    val pixelStride = plane.pixelStride
+                                // Analyze at ~9 fps. ImageAnalysis uses KEEP_ONLY_LATEST, so skipped
+                                // frames are cheap and never build up a queue.
+                                val now = android.os.SystemClock.elapsedRealtime()
+                                if (now - lastAnalyzedAt[0] < 110L) return@setAnalyzer
+                                lastAnalyzedAt[0] = now
 
-                                    // Schnelle 8x8-Abtastung. Ein Dokument muss eine große,
-                                    // helle zusammenhängend wirkende Fläche mit Randkontrast haben.
-                                    val gridSize = 12
-                                    var innerSum = 0L
-                                    var innerCount = 0
-                                    var outerSum = 0L
-                                    var outerCount = 0
-                                    val innerLumas = mutableListOf<Int>()
-                                    val currentSamples = ByteArray(gridSize * gridSize)
-                                    val lumaGrid = IntArray(gridSize * gridSize)
+                                val frame = imageProxy.toLumaChromaFrame(
+                                    reuse = frameBuffer[0],
+                                    targetLongEdge = 160
+                                )
+                                frameBuffer[0] = frame
+                                val detection = detector.detect(frame)
+                                val tracking = documentTracker.update(detection, now)
+                                val quad = tracking.quadSmoothed
+                                val quality = measureFrameQuality(frame, quad)
 
-                                    for (gy in 1..gridSize) {
-                                        val y = (height * gy / (gridSize + 1)).coerceIn(0, height - 1)
-                                        val isEdgeY = (gy == 1 || gy == gridSize)
-                                        for (gx in 1..gridSize) {
-                                            val x = (width * gx / (gridSize + 1)).coerceIn(0, width - 1)
-                                            val isEdgeX = (gx == 1 || gx == gridSize)
-                                            val index = (y * rowStride) + (x * pixelStride)
-                                            if (index in 0 until buffer.capacity()) {
-                                                val luma = buffer.get(index).toInt() and 0xFF
-                                                val sampleIndex = (gy - 1) * gridSize + (gx - 1)
-                                                lumaGrid[sampleIndex] = luma
-                                                currentSamples[sampleIndex] = luma.toByte()
-
-                                                if (isEdgeX || isEdgeY) {
-                                                    outerSum += luma
-                                                    outerCount++
-                                                } else {
-                                                    innerSum += luma
-                                                    innerCount++
-                                                    innerLumas.add(luma)
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    val safeInnerCount = innerCount.coerceAtLeast(1)
-                                    val safeOuterCount = outerCount.coerceAtLeast(1)
-                                    val avgInnerLuma = (innerSum / safeInnerCount).toFloat()
-                                    val avgOuterLuma = (outerSum / safeOuterCount).toFloat()
-
-                                    // Varianz im inneren Bereich (Dokument-Textur / Schriftzeilen)
-                                    var varianceSum = 0.0
-                                    for (luma in innerLumas) {
-                                        val diff = luma - avgInnerLuma
-                                        varianceSum += (diff * diff)
-                                    }
-                                    val innerStdDev = Math.sqrt(varianceSum / safeInnerCount).toFloat()
-                                    val brightInnerRatio =
-                                        innerLumas.count { it >= 135 }.toFloat() / safeInnerCount.toFloat()
-
-                                    // Tatsächliche Bildschärfe aus lokalen Luma-Kanten messen.
-                                    // Das ist unabhängig von der Neigung/Bewegung des Smartphones.
-                                    // Measure focus only where the document is expected to be.
-                                    // Sharp table edges, plants, or candle edges outside this region must
-                                    // not make an out-of-focus page pass the automatic scan gate.
-                                    val focusGridSize = 80
-                                    val focusMargin = focusGridSize / 5
-                                    val focusRange = (focusMargin + 1)..(focusGridSize - focusMargin)
-                                    var laplacianSum = 0L
-                                    var laplacianCount = 0
-                                    for (fy in focusRange) {
-                                        val y = (height * fy / (focusGridSize + 1)).coerceIn(1, height - 2)
-                                        for (fx in focusRange) {
-                                            val x = (width * fx / (focusGridSize + 1)).coerceIn(1, width - 2)
-                                            val centerIndex = y * rowStride + x * pixelStride
-                                            val leftIndex = y * rowStride + (x - 1) * pixelStride
-                                            val rightIndex = y * rowStride + (x + 1) * pixelStride
-                                            val topIndex = (y - 1) * rowStride + x * pixelStride
-                                            val bottomIndex = (y + 1) * rowStride + x * pixelStride
-                                            if (centerIndex in 0 until buffer.capacity() &&
-                                                leftIndex in 0 until buffer.capacity() &&
-                                                rightIndex in 0 until buffer.capacity() &&
-                                                topIndex in 0 until buffer.capacity() &&
-                                                bottomIndex in 0 until buffer.capacity()
-                                            ) {
-                                                val center = buffer.get(centerIndex).toInt() and 0xFF
-                                                val left = buffer.get(leftIndex).toInt() and 0xFF
-                                                val right = buffer.get(rightIndex).toInt() and 0xFF
-                                                val top = buffer.get(topIndex).toInt() and 0xFF
-                                                val bottom = buffer.get(bottomIndex).toInt() and 0xFF
-                                                laplacianSum += kotlin.math.abs(4 * center - left - right - top - bottom).toLong()
-                                                laplacianCount++
-                                            }
-                                        }
-                                    }
-                                    val averageLaplacian = if (laplacianCount > 0) {
-                                        laplacianSum.toFloat() / laplacianCount.toFloat()
-                                    } else 0f
-                                    val sharpnessScore = (averageLaplacian / 12f * 100f).coerceIn(0f, 100f)
-
-                                    // Refocus when the document area is still soft; throttle AF
-                                    // requests so they do not restart on every camera frame.
-                                    val focusNow = android.os.SystemClock.elapsedRealtime()
-                                    if (sharpnessScore < 30f && focusNow - lastAutoFocusAt[0] > 1500L) {
-                                        lastAutoFocusAt[0] = focusNow
-                                        mainHandler.post {
-                                            try {
-                                                if (previewView.width > 0 && previewView.height > 0) {
-                                                    val point = previewView.meteringPointFactory.createPoint(
-                                                        previewView.width / 2f, previewView.height / 2f
-                                                    )
-                                                    val action = androidx.camera.core.FocusMeteringAction.Builder(
-                                                        point,
-                                                        androidx.camera.core.FocusMeteringAction.FLAG_AF or androidx.camera.core.FocusMeteringAction.FLAG_AE
-                                                    ).build()
-                                                    cameraControl?.startFocusAndMetering(action)
-                                                }
-                                            } catch (_: Exception) {
-                                                // Camera may be detaching during navigation.
-                                            }
-                                        }
-                                    }
-
-                                    // Bewegung / Blattwechsel ermitteln
-                                    val prev = previousSamplesRef[0]
-                                    var motionDiff = 0f
-                                    if (prev != null && prev.size == currentSamples.size) {
-                                        var diffSum = 0f
-                                        for (i in prev.indices) {
-                                            val d = Math.abs((currentSamples[i].toInt() and 0xFF) - (prev[i].toInt() and 0xFF))
-                                            diffSum += d
-                                        }
-                                        motionDiff = diffSum / prev.size
-                                    }
-                                    previousSamplesRef[0] = currentSamples
-
-                                    // Pflanzen/Kerzen bestehen die alte Prüfung oft allein wegen Textur.
-                                    // Papier muss den Innenbereich mehrheitlich aufhellen und zum Außenrand passen.
-                                    val hasPaperContrast =
-                                        (avgInnerLuma - avgOuterLuma) >= 10f &&
-                                        brightInnerRatio >= 0.72f &&
-                                        innerStdDev in 4f..58f &&
-                                        hasCoherentPaperGrid(
-                                            lumaGrid,
-                                            gridSize,
-                                            frameAspectRatio = width.toFloat() / height.toFloat()
-                                        )
-                                    val isDocCandidate =
-                                        avgInnerLuma in 125f..245f &&
-                                        hasPaperContrast &&
-                                        motionDiff < 6.0f &&
-                                        sharpnessScore >= 26f
-                                    if (isDocCandidate) {
-                                        consecutiveDocumentFrames[0]++
-                                    } else {
-                                        consecutiveDocumentFrames[0] = 0L
-                                    }
-                                    // At ~30 fps this adds about one second of stable evidence.
-                                    // Large bright fields covering most of the frame are rejected above.
-                                    val isDoc = isDocCandidate && consecutiveDocumentFrames[0] >= 30L
+                                // Focus only when a temporal lock is newly acquired, and throttle
+                                // requests so AF/AE does not restart continuously.
+                                if (tracking.lockJustAcquired && now - lastAutoFocusAt[0] >= 1500L) {
+                                    lastAutoFocusAt[0] = now
+                                    val centerX = quad?.map { it.x }?.average()?.toFloat() ?: 0.5f
+                                    val centerY = quad?.map { it.y }?.average()?.toFloat() ?: 0.5f
+                                    val (previewX, previewY) = normalizedToPreviewPoint(
+                                        centerX, centerY, imageProxy.imageInfo.rotationDegrees
+                                    )
                                     mainHandler.post {
-                                        onFrameAnalysis(
-                                            CameraFrameAnalysis(
-                                                isDocumentDetected = isDoc,
-                                                motionScore = motionDiff,
-                                                averageLuminance = avgInnerLuma,
-                                                sharpnessScore = sharpnessScore
-                                            )
-                                        )
+                                        try {
+                                            if (previewView.width > 0 && previewView.height > 0) {
+                                                val point = previewView.meteringPointFactory.createPoint(
+                                                    (previewX * previewView.width).coerceIn(0f, previewView.width.toFloat()),
+                                                    (previewY * previewView.height).coerceIn(0f, previewView.height.toFloat())
+                                                )
+                                                val action = androidx.camera.core.FocusMeteringAction.Builder(
+                                                    point,
+                                                    androidx.camera.core.FocusMeteringAction.FLAG_AF or androidx.camera.core.FocusMeteringAction.FLAG_AE
+                                                ).setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS).build()
+                                                cameraControl?.startFocusAndMetering(action)
+                                            }
+                                        } catch (_: Exception) {
+                                            // Camera may be detaching during navigation.
+                                        }
                                     }
                                 }
+
+                                val result = CameraFrameAnalysis(
+                                    isDocumentDetected = tracking.isLocked,
+                                    motionScore = tracking.cornerMotion * 100f,
+                                    averageLuminance = quality.averageLuminance,
+                                    sharpnessScore = quality.sharpnessScore,
+                                    documentQuad = quad?.map { android.graphics.PointF(it.x, it.y) },
+                                    documentConfidence = detection.confidence,
+                                    isDocumentStable = tracking.isStable,
+                                    rejectReason = if (tracking.isLocked) null else if (detection.quad != null) {
+                                        "Dokument wird stabilisiert"
+                                    } else detection.rejectReason,
+                                    rotationDegrees = imageProxy.imageInfo.rotationDegrees,
+                                    sourceWidth = imageProxy.width,
+                                    sourceHeight = imageProxy.height,
+                                    sourceCropRect = android.graphics.Rect(imageProxy.cropRect)
+                                )
+                                mainHandler.post { onFrameAnalysis(result) }
                             } catch (e: Exception) {
-                                // Ignorieren bei Puffer-Race-Conditions
+                                Log.w("CameraPreview", "Frame-Analyse fehlgeschlagen: ${e.message}")
                             } finally {
                                 imageProxy.close()
                             }
