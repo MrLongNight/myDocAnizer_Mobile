@@ -1,10 +1,7 @@
 package com.example
 
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Path
 import com.example.service.ImageProcessingService
 import com.example.ui.components.hasCoherentPaperGrid
 import org.junit.Assert.assertEquals
@@ -47,22 +44,34 @@ class ScanDetectionRegressionTest {
     fun `automatic crop corners follow a skewed page instead of its axis aligned bounds`() {
         val bitmap = Bitmap.createBitmap(600, 600, Bitmap.Config.ARGB_8888)
         try {
-            val canvas = Canvas(bitmap)
-            canvas.drawColor(Color.rgb(25, 25, 25))
-            val page = Path().apply {
-                moveTo(140f, 90f)
-                lineTo(460f, 150f)
-                lineTo(390f, 510f)
-                lineTo(80f, 430f)
-                close()
-            }
-            canvas.drawPath(
-                page,
-                Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.WHITE
-                    style = Paint.Style.FILL
-                }
+            // Fill the synthetic page directly in pixels. This avoids relying on
+            // Robolectric's Canvas Path rasterizer, while keeping the skewed geometry real.
+            val page = listOf(
+                android.graphics.PointF(140f, 90f),
+                android.graphics.PointF(460f, 150f),
+                android.graphics.PointF(390f, 510f),
+                android.graphics.PointF(80f, 430f)
             )
+            val pixels = IntArray(600 * 600) { Color.rgb(25, 25, 25) }
+            for (y in 0 until 600) {
+                for (x in 0 until 600) {
+                    val px = x + 0.5f
+                    val py = y + 0.5f
+                    var inside = false
+                    var previous = page.last()
+                    for (current in page) {
+                        if ((current.y > py) != (previous.y > py) &&
+                            px < (previous.x - current.x) * (py - current.y) /
+                                (previous.y - current.y) + current.x
+                        ) {
+                            inside = !inside
+                        }
+                        previous = current
+                    }
+                    if (inside) pixels[y * 600 + x] = Color.WHITE
+                }
+            }
+            bitmap.setPixels(pixels, 0, 600, 0, 0, 600, 600)
 
             val corners = ImageProcessingService.detectDocumentCorners(bitmap)
             assertEquals(4, corners.size)
