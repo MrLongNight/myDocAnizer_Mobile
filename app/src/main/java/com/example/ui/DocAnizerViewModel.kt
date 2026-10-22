@@ -1223,6 +1223,12 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val scanWorkflowState: StateFlow<String> = _scanWorkflowState.asStateFlow()
     private val _scanWorkflowError = MutableStateFlow<String?>(null)
     val scanWorkflowError: StateFlow<String?> = _scanWorkflowError.asStateFlow()
+    // Retains the selected rule and bitmap for an explicit retry after save failure.
+    private var scanRetryAction: (() -> Unit)? = null
+
+    fun retryScanSave() {
+        scanRetryAction?.invoke()
+    }
 
     private val _filter = MutableStateFlow(ExplorerFilter())
     val filter: StateFlow<ExplorerFilter> = _filter.asStateFlow()
@@ -1915,6 +1921,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 },
                 onDismiss = {
                     dmsManager.clearPendingRuleSuggestion()
+                    scanRetryAction = null
                     runCatching { bitmap.recycle() }
                 }
             )
@@ -2216,6 +2223,9 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         onComplete: ((DocumentEntity) -> Unit)? = null,
         afterSaved: (() -> Unit)? = null
     ) {
+        scanRetryAction = {
+            saveProcessedBitmapWithRule(bitmap, ocrText, rule, isColor, onComplete, afterSaved)
+        }
         viewModelScope.launch(Dispatchers.IO) {
             _isProcessingScan.value = true
             _scanWorkflowState.value = "Saving"
@@ -2377,6 +2387,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 saveCompleted = true
                 _scanWorkflowState.value = "Saved"
                 _scanWorkflowError.value = null
+                scanRetryAction = null
                 _lastBulkSavedDoc.value = created
                 dmsManager.clearPendingRuleSuggestion()
                 withContext(Dispatchers.Main) {
