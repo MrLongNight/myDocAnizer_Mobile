@@ -1,5 +1,24 @@
 # Aktueller IST-/SOLL-Status – Stabilisierung (22.10.2026)
 
+## Scan-Speicherfluss – aktueller Arbeitsstand
+
+- **Regelvorschlag-Dialog:** Außenklick und Zurück verwerfen den Scan nicht mehr. Verwerfen erfolgt über eine eigene Schaltfläche mit Rückfrage.
+- **Status-/Erfolgstexte:** Der Banner „PDF gespeichert“ hängt am lastBulkSavedDoc-Marker; ein neuer Scan löscht den alten Marker zuerst. Vor dem Marker liegen PDF-Erzeugung und Datenbankeintrag. Zwischenaufnahme wird ausdrücklich als noch nicht gespeichert bezeichnet.
+- **OCR:** Einzel-/Bulk-Scan und bestätigter Zuschnitt verwenden ein sichtbares Fehler-State und ein 12-s-OCR-Timeout. Fehlgeschlagene Scans bleiben für einen erneuten Versuch erhalten.
+- **Speichern:** saveProcessedBitmapWithRule hat ein 60-s-Timeout. Bei Vault-Lock, Timeout, OOM oder anderem Fehler wird Failed samt Meldung gesetzt; der Vorschlagsdialog bleibt offen und bietet „Erneut versuchen“. Das Bitmap wird nur nach erfolgreichem Speichern recycelt oder nach bestätigtem Verwerfen.
+- **Mehrseitenmodus – offene Entscheidung:** finishAndSaveMultiPageScan umgeht weiterhin den Regelvorschlag und speichert anhand des ausgewählten Templates. Der gemeinsame Dialog ist derzeit auf ein einzelnes Bitmap ausgelegt und der Speichercallback erzeugt eine einseitige PDF. Vor einer Änderung muss entschieden werden, ob der Vorschlag auf Basis der ersten Seite die Regel auf das gesamte mehrseitige PDF anwenden soll; bis dahin bleibt der bestehende Mehrseitenpfad unverändert.
+- **Bitmap-Lebensdauer:** Beim Schließen der Zuschnittansicht werden die dort erzeugten Vorschau-Bitmaps freigegeben; das final übergebene Bitmap wird ausgenommen. Ein Heap-/10-Scans-Test ist noch offen; eine tatsächliche Speicherfreigabe auf einem Gerät ist nicht belegt.
+- **Tests/CI:** Die angeforderten ViewModel-Tests für Zustandsfolge, Vault-Lock, OCR-Timeout, Verwerfen und „keine Erfolgsmeldung vor Saved“ sind noch offen. pre-commit.ci war für die früheren Änderungen erfolgreich; für den neuesten Stand ist der Android-Build-/Unit-Test-Lauf noch nicht als grün bestätigt.
+- **Gerätetest:** Nicht durchgeführt. Detektor-Schwellen und Koordinaten-/Kamera-Verhalten bleiben **nicht am Gerät validiert**.
+
+## Noch offene Punkte aus diesem Arbeitsblock
+
+1. ViewModel-Tests für Analyzing → AwaitingRuleDecision → Saving → Saved sowie Failed (Vault gesperrt, OCR-Timeout, OOM) und bestätigtes Verwerfen hinzufügen.
+2. Alle Scanner-Snackbar-/Toast-/Banner-Erfolgstexte einschließlich Mehrseitenpfad prüfen und nachweisen, dass sie ausschließlich nach Saved erscheinen.
+3. Mehrseiten-Regelvorschlag als explizite Architekturentscheidung klären; nicht stillschweigend in den Einzelbild-Speicherpfad umleiten.
+4. Mit Heap-Profil oder reproduzierbarem Bitmap-Lebenszyklus-Test prüfen, dass nach zehn Scans keine Vollauflösungs-Bitmaps aus vorherigen Scans gehalten werden.
+
+
 > Verbindliche Arbeitsliste. Codeänderung, grüner CI-Lauf und erfolgreicher Test auf einem physischen Gerät sind getrennte Nachweise. **Die Entscheidung über einen Wechsel der Scan-Engine liegt ausschließlich beim Nutzer. Es wird keine alternative Engine eingebaut, bevor dieser Wechsel ausdrücklich freigegeben wurde.**
 
 ## Aktueller Stand und Nachweise
