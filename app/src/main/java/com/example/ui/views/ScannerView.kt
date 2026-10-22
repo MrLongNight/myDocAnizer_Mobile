@@ -206,8 +206,9 @@ fun ScannerView(
                 // Vorab-Qualitätsprüfung anzeigen
                 pendingCheckBitmap = bmp
             } else if (scannerSettings.enableCropPreview && !isBatchModeActive) {
-                // Parallele Hintergrund-KI-Verarbeitung sofort starten (Zero Latency)
-                viewModel.startBackgroundScanTriage(bmp)
+                // Do not start native LLM work before the user confirms the crop.
+                // Classification runs once on the final bitmap, so it cannot block the
+                // crop preview or reuse OCR text from the uncropped camera image.
                 capturedRawBitmap = bmp
             } else {
                 if (isBatchModeActive) {
