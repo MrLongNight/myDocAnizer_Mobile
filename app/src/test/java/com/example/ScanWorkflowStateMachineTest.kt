@@ -64,6 +64,18 @@ class ScanWorkflowStateMachineTest {
     }
 
     @Test
+    fun outOfMemoryProducesRetryableFailureMessage() {
+        val message = ScanWorkflowStateMachine.failureMessage(
+            OutOfMemoryError("allocation failed"),
+            "Speichern"
+        )
+
+        assertTrue(message.contains("Arbeitsspeicher"))
+        assertTrue(message.contains("Scan bleibt erhalten"))
+        assertTrue(message.contains("erneut versuchen"))
+    }
+
+    @Test
     fun discardResetsFailureWithoutClaimingSuccess() {
         val workflow = ScanWorkflowStateMachine()
         workflow.fail("Vault gesperrt")
