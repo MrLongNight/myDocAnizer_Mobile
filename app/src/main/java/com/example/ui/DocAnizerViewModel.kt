@@ -1532,13 +1532,20 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     fun removePage(index: Int) {
         val current = _capturedPages.value.toMutableList()
         if (index in current.indices) {
-            current.removeAt(index)
+            val removed = current.removeAt(index)
             _capturedPages.value = current
+            if (current.none { it === removed } && !removed.isRecycled) {
+                runCatching { removed.recycle() }
+            }
         }
     }
 
     fun clearPages() {
+        val pages = _capturedPages.value
         _capturedPages.value = emptyList()
+        pages.distinct().forEach { page ->
+            if (!page.isRecycled) runCatching { page.recycle() }
+        }
     }
 
     fun setSearchQuery(query: String) {
