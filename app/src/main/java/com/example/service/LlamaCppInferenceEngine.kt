@@ -102,6 +102,18 @@ class LlamaCppInferenceEngine(private val context: Context) {
     var lastInferenceMode: InferenceMode = InferenceMode.NOT_RUN
         private set
 
+    data class InferenceMetrics(
+        val generatedTokens: Int,
+        val promptEvalTimeMs: Long,
+        val generationTimeMs: Long,
+        val tokensPerSecond: Float
+    )
+
+    /** Last call's native metrics only; null means no trustworthy native measurements. */
+    @Volatile
+    var lastInferenceMetrics: InferenceMetrics? = null
+        private set
+
     companion object {
         private const val TAG = "LlamaCppEngine"
         private val inferenceMutex = kotlinx.coroutines.sync.Mutex()
@@ -430,6 +442,8 @@ ws ::= [ \t\n\r]*
         useStrictTriage: Boolean = true,
         params: InferenceParams = InferenceParams(maxTokens = 350, grammar = DMS_JSON_GBNF)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
+        lastInferenceMode = InferenceMode.NOT_RUN
+        lastInferenceMetrics = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText)
@@ -462,6 +476,8 @@ ws ::= [ \t\n\r]*
         department: DepartmentTeam? = null,
         params: InferenceParams = InferenceParams(maxTokens = 600, grammar = DMS_JSON_GBNF)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
+        lastInferenceMode = InferenceMode.NOT_RUN
+        lastInferenceMetrics = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText, folderStrategy)
@@ -499,6 +515,8 @@ ws ::= [ \t\n\r]*
         systemPrompt: String = BASE_SYSTEM_PROMPT,
         params: InferenceParams = InferenceParams()
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
+        lastInferenceMode = InferenceMode.NOT_RUN
+        lastInferenceMetrics = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText)
@@ -521,6 +539,9 @@ ws ::= [ \t\n\r]*
         systemPrompt: String = BASE_SYSTEM_PROMPT,
         params: InferenceParams = InferenceParams()
     ): String = withContext(Dispatchers.Default) {
+        // Clear previous-call state first: a fallback must never inherit stale LLM status/metrics.
+        lastInferenceMode = InferenceMode.NOT_RUN
+        lastInferenceMetrics = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext executeFallbackInference(prompt, systemPrompt)
@@ -558,6 +579,18 @@ ws ::= [ \t\n\r]*
             val promptMs = result.optLong("promptEvalTimeMs", 0L)
             val generationMs = result.optLong("generateTimeMs", 0L)
             val tokensPerSecond = result.optDouble("tokensPerSecond", 0.0)
+            lastInferenceMetrics = if (
+                generatedTokens > 0 && generationMs > 0L && tokensPerSecond > 0.0
+            ) {
+                InferenceMetrics(
+                    generatedTokens = generatedTokens,
+                    promptEvalTimeMs = promptMs,
+                    generationTimeMs = generationMs,
+                    tokensPerSecond = tokensPerSecond.toFloat()
+                )
+            } else {
+                null
+            }
             AppAuditLogger.log(
                 category = LogCategory.AI_INFERENCE,
                 tag = TAG,
@@ -569,10 +602,12 @@ ws ::= [ \t\n\r]*
             )
             output
         } catch (e: LinkageError) {
+            lastInferenceMetrics = null
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             safeLogW(TAG, "Native llama.cpp-Laufzeit nicht verfügbar: ${e.message}")
             executeFallbackInference(prompt, systemPrompt)
         } catch (e: Exception) {
+            lastInferenceMetrics = null
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             AppAuditLogger.log(
                 category = LogCategory.AI_INFERENCE,
@@ -589,6 +624,7 @@ ws ::= [ \t\n\r]*
         Build.SUPPORTED_ABIS.any { it == "arm64-v8a" || it == "x86_64" }
 
     fun executeFallbackInference(ocrText: String, systemPrompt: String): String {
+        lastInferenceMetrics = null
         lastInferenceMode = InferenceMode.RULE_FALLBACK
         return createHeuristicFallbackResponse(ocrText).toJsonString()
     }
@@ -679,6 +715,7 @@ ws ::= [ \t\n\r]*
             )
         } catch (e: Exception) {
             safeLogW(TAG, "JSON-Parsing fehlgeschlagen: ${e.message}, erzeuge Heuristik-Antwort")
+            lastInferenceMetrics = null
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return createHeuristicFallbackResponse(fallbackOcrText, folderStrategy)
         }
@@ -696,7 +733,10 @@ ws ::= [ \t\n\r]*
         systemPrompt: String = LlmToolPromptBuilder.buildInjectedSystemPrompt(tools = tools, documentContextSummary = documentContextSummary),
         params: InferenceParams = InferenceParams(temperature = 0.2f, grammar = null)
     ): String = withContext(Dispatchers.Default) {
+        lastInferenceMode = InferenceMode.NOT_RUN
+        lastInferenceMetrics = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
+            lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext executeFallbackToolInference(userMessage)
         }
         executeInference(
