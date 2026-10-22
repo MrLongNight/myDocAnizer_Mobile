@@ -186,7 +186,7 @@ fun ScannerCameraPreviewPane(
                 .padding(bottom = 120.dp)
         ) {
             val quad = frameAnalysis.previewQuad
-            val hasQuad = quad?.size == 4
+            val hasQuad = quad != null && quad.size == 4
             val scanStarting = isDocumentDetected && frameAnalysis.isDocumentStable && autoDetectProgress > 0f
             val quadColor = when {
                 scanStarting -> Color(0xFF10B981)
@@ -194,15 +194,16 @@ fun ScannerCameraPreviewPane(
                 else -> Color(0xFF94A3B8)
             }
             if (hasQuad) {
+                val points = quad!!
                 val quadPath = Path().apply {
-                    moveTo(quad!![0].x * size.width, quad[0].y * size.height)
-                    for (i in 1..3) lineTo(quad[i].x * size.width, quad[i].y * size.height)
+                    moveTo(points[0].x * size.width, points[0].y * size.height)
+                    for (i in 1..3) lineTo(points[i].x * size.width, points[i].y * size.height)
                     close()
                 }
                 drawPath(quadPath, quadColor.copy(alpha = if (scanStarting) 0.12f else 0.06f))
                 drawPath(quadPath, quadColor.copy(alpha = 0.28f), style = Stroke(width = 7f, cap = StrokeCap.Round, join = StrokeJoin.Round))
                 drawPath(quadPath, quadColor, style = Stroke(width = 3f, cap = StrokeCap.Round, join = StrokeJoin.Round))
-                quad.forEach { point ->
+                points.forEach { point ->
                     drawCircle(quadColor, radius = 5f, center = Offset(point.x * size.width, point.y * size.height))
                 }
             } else {
