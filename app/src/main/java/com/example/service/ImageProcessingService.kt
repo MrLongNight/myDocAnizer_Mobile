@@ -207,6 +207,15 @@ object ImageProcessingService {
     fun cropAndWarpPerspective(src: Bitmap, corners: List<PointF>): Bitmap {
         val workingSrc = ensureSoftwareBitmap(src)
         if (corners.size != 4) return autoCropDocument(workingSrc)
+        val cornersInBounds = corners.all { point ->
+            point.x.isFinite() && point.y.isFinite() &&
+                point.x in 0f..workingSrc.width.toFloat() &&
+                point.y in 0f..workingSrc.height.toFloat()
+        }
+        if (!cornersInBounds ||
+            !isValidConvexQuadrilateral(corners) ||
+            quadrilateralArea(corners) < workingSrc.width.toFloat() * workingSrc.height.toFloat() * 0.08f
+        ) return autoCropDocument(workingSrc)
         return try {
             val tl = corners[0]
             val tr = corners[1]
@@ -235,7 +244,11 @@ object ImageProcessingService {
             )
 
             val matrix = Matrix()
-            matrix.setPolyToPoly(srcPoints, 0, dstPoints, 0, 4)
+            // setPolyToPoly returns false when it cannot construct the homography.
+            // Drawing with the unchanged identity matrix would silently skip perspective correction.
+            if (!matrix.setPolyToPoly(srcPoints, 0, dstPoints, 0, 4)) {
+                return autoCropDocument(workingSrc)
+            }
 
             val resultBitmap = Bitmap.createBitmap(targetW, targetH, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(resultBitmap)
