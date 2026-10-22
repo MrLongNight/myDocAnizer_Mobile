@@ -219,6 +219,8 @@ fun ScannerView(
 
         val capture = imageCaptureInstance
         val onBmpReady: (android.graphics.Bitmap) -> Unit = { bmp ->
+            // A previous scan's success banner must never carry over to this new capture.
+            viewModel.clearLastBulkSavedDoc()
             hasCapturedCurrentDocument = true
             motionDetectedAfterCapture = false
             autoDetectProgress = 0f
