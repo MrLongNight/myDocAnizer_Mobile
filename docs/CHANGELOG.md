@@ -9,7 +9,7 @@ All notable changes to **myDocAnizer-Mobile** are documented here.
 - Der Scanner unterscheidet Aufnahme, Analyse, Regelentscheidung, Speichern und gespeichertes PDF. Der Erfolgshinweis wird erst über den Marker nach PDF-Erzeugung und Datenbankeintrag angezeigt; beim Start eines neuen Scans wird ein alter Erfolgshinweis zurückgesetzt.
 - OCR im Einzel-/Bulk-Pfad und nach bestätigtem Zuschnitt hat ein 12-s-Timeout. Speicheroperationen im Regelpfad haben ein 60-s-Timeout. Fehler (einschließlich Vault gesperrt und OutOfMemoryError) werden als Failed angezeigt und halten den Scan für Retry bzw. explizites Verwerfen vor.
 - Beim Schließen der Zuschnittansicht werden die Vorschau-Bitmaps freigegeben; das an den ViewModel-Speicherpfad übergebene Bitmap bleibt erhalten.
-- **Noch offen:** ViewModel-Tests der vollständigen Zustandsfolge und Fehlerfälle, Prüfung aller Scanner-Erfolgstexte, Heap-/10-Scans-Test und Entscheidung zum Regelvorschlag im Mehrseitenmodus. Der Mehrseitenpfad umgeht den Regelvorschlag weiterhin.
+- JVM-Tests für die gemeinsame ScanWorkflowStateMachine decken die Zustandsfolge, Vault-Lock, OCR-Timeout und Reset/Verwerfen ab. **Noch offen:** echte ViewModel-Integrationstests der Speicherpfade, Prüfung aller Scanner-Erfolgstexte, Heap-/10-Scans-Test und Entscheidung zum Regelvorschlag im Mehrseitenmodus. Der Mehrseitenpfad umgeht den Regelvorschlag weiterhin.
 - **Nicht am Gerät validiert:** Detektor-Schwellen, Kamera-/Koordinatenverhalten und die tatsächliche Bitmap-Freigabe unter realer Speichernutzung.
 
 
