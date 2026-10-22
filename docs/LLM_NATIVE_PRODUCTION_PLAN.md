@@ -17,6 +17,21 @@
 
 **Wichtig:** „Erledigt“ bedeutet hier Codeänderung committed. Ein CI-Erfolg ist separat vermerkt; echte GGUF-Inferenz auf physischen Geräten ist weiterhin nicht belegt.
 
+
+## Scan-/Chat-Stabilisierung – Arbeitsprotokoll (22.10.2026)
+
+Diese Scan- und Chat-Aufgaben sind im selben Repository offen, auch wenn der Dateiname dieses Dokuments auf LLM verweist. Die verbindliche kompakte IST/SOLL-Liste liegt in [open_tasks.md](open_tasks.md).
+
+| Commit | Änderung | CI-Status / Grenze |
+|---|---|---|
+| `643c0be6` | Einzelne Scan-Regeltreffer müssen bestätigt werden; manueller Eckpunkt-Drag stabilisiert; schneller „Hi“-Smoke-Test; Testbericht-Upload bei CI-Fehler. | Gesamt-CI fehlgeschlagen. |
+| `2eb2f62c` | OCR-Callback auf 12 s begrenzt und APK vor Unit-Tests veröffentlicht. | APK gebaut/verifiziert/hochgeladen; 187/188 Tests bestanden, Perspektivtest fehlgeschlagen. |
+| `635cad62` | Synthetische schräge Dokumentseite pixelweise erzeugt, um Canvas-Rasterisierungsabhängigkeit zu vermeiden. | CI durch nachfolgenden Push abgebrochen; Verifikation offen. |
+| `8d5ef909` | Auto-Scan prüft zusätzlich Bewegung und plausible Helligkeit und stabilisiert länger. | Separater Lauf abgebrochen; nicht verifiziert. |
+| `e1448cab` | Drosselte AF/AE-Messung am Bildzentrum bei unscharfer Vorschau. | CI-Verifikation offen. |
+
+**Scanner-Architekturentscheidung:** Googles ML Kit Document Scanner ist die Qualitätsreferenz, weil der Nutzer damit zuverlässige Massendigitalisierung erlebt hat. Zuerst Vergleich/Proof of Concept mit realen Seiten und Negativbeispielen; die API bringt einen eigenen Scanner-Flow mit und ist nicht automatisch ein Drop-in-Ersatz für die bestehende Live-Kamera. Erreicht der vorhandene Live-Scanner die Abnahmekriterien nicht, soll die Scan-Logik ausgetauscht werden, statt fragile Heuristiken unbegrenzt zu erweitern. Keine Qualitätsbehauptung ohne physischen Gerätetest.
+
 ## Dokumentations-Synchronisierung
 
 README, LLM-Prozessdokumentation, technische LLM-Kurzdokumentation, Coding-Agent-Regeln und Dokumentationsindex müssen bei relevanten Änderungen gemeinsam aktualisiert werden. Veraltete Aussagen zu „vollständig verifiziert“, Vulkan/GPU, Modellqualität, Laufzeit und nativem Function-Calling wurden korrigiert. Diese Änderungen beschreiben die bestätigten Grenzen und verweisen auf offene Abnahmen. Den CI-Status dieser Synchronisierung erst nach Abschluss des zugehörigen Runs als erfolgreich markieren.
