@@ -442,6 +442,8 @@ ws ::= [ \t\n\r]*
         useStrictTriage: Boolean = true,
         params: InferenceParams = InferenceParams(maxTokens = 350, grammar = DMS_JSON_GBNF)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
+        lastInferenceMode = InferenceMode.NOT_RUN
+        lastInferenceMetrics = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText)
@@ -474,6 +476,8 @@ ws ::= [ \t\n\r]*
         department: DepartmentTeam? = null,
         params: InferenceParams = InferenceParams(maxTokens = 600, grammar = DMS_JSON_GBNF)
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
+        lastInferenceMode = InferenceMode.NOT_RUN
+        lastInferenceMetrics = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText, folderStrategy)
@@ -511,6 +515,8 @@ ws ::= [ \t\n\r]*
         systemPrompt: String = BASE_SYSTEM_PROMPT,
         params: InferenceParams = InferenceParams()
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
+        lastInferenceMode = InferenceMode.NOT_RUN
+        lastInferenceMetrics = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText)
@@ -726,7 +732,10 @@ ws ::= [ \t\n\r]*
         systemPrompt: String = LlmToolPromptBuilder.buildInjectedSystemPrompt(tools = tools, documentContextSummary = documentContextSummary),
         params: InferenceParams = InferenceParams(temperature = 0.2f, grammar = null)
     ): String = withContext(Dispatchers.Default) {
+        lastInferenceMode = InferenceMode.NOT_RUN
+        lastInferenceMetrics = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
+            lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext executeFallbackToolInference(userMessage)
         }
         executeInference(
