@@ -2,6 +2,15 @@
 
 All notable changes to **myDocAnizer-Mobile** are documented here.
 
+## [Unreleased] - 2026-10-22 (Scan-/Chat-Stabilisierung – noch nicht vollständig verifiziert)
+- Chat: zeitbegrenzter Smoke-Test für die einfache Begrüßung ergänzt; der Test bestand im letzten protokollierten Lauf in 0,1 s. Das beweist noch keine zuverlässige physische Geräte-/LLM-Inferenz.
+- Scan-Regeln: Vorschlag/Bestätigung wird auch bei einem einzelnen bestehenden Treffer angefordert; endgültiger Speichervorgang soll erst nach Nutzerentscheidung erfolgen. Sequenz und UI auf Gerät noch nachzuprüfen.
+- OCR: ML-Kit-Callback mit 12-s-Timeout abgesichert; Timeout-Fallback und Bitmap-Lebensdauer angepasst.
+- Auto-Scan: Aufnahmebedingungen zusätzlich um Bewegungs- und Helligkeitsprüfung erweitert; Stabilisierung auf 650 ms verlängert; bei weicher Vorschau wird gedrosselt AF/AE-Messung am Bildzentrum angefordert. Die Schwellenwerte und Kamera-Wirkung sind noch nicht auf realen Geräten validiert.
+- Regressionstest: schräges synthetisches Dokument wird direkt als Pixelbild gerastert, um Robolectric-Canvas-Abhängigkeit zu vermeiden.
+- CI-Nachweis: Run [39745388026](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39745388026) baute und veröffentlichte eine Debug-APK, aber nur 187/188 Unit-Tests bestanden; der Perspektivtest scheiterte. Neuere Läufe wurden durch weitere Pushes abgebrochen/neu gestartet; kein grüner Gesamtstatus ist bestätigt.
+- Offen: Fehlalarme auf Nicht-Dokumente, automatische Perspektivkorrektur, präziser/manuell stabiler Crop, korrekte Scan-/Regelvorschlag-/Speicherreihenfolge, vollständiger Chat-/Benchmark-Test und physische Gerätetests. Googles ML Kit Document Scanner wird als Qualitäts-Baseline evaluiert; falls der Live-Scanner nicht gleichwertig wird, ist ein Austausch der Scan-Logik ausdrücklich vorgesehen.
+
 ## [Unreleased] - 2026-10-18 (Sicherheits-Härtung)
 - Security: Entfernt pauschale Android-Geräteübertragungs-Includes für Dateien, Datenbanken und SharedPreferences; sensible Speicherbereiche werden explizit ausgeschlossen.
 - Security tests: Erweitert `BackupRulesSecurityTest` um Prüfungen gegen pauschale Includes und für externe/temporäre Speicherbereiche.
