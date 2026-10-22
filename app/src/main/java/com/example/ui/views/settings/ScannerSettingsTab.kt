@@ -29,8 +29,9 @@ fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
     var isFlashExpanded by remember { mutableStateOf(false) }
     var isFeedbackExpanded by remember { mutableStateOf(false) }
     var isCropPreviewExpanded by remember { mutableStateOf(false) }
+    var isDebugExpanded by remember { mutableStateOf(false) }
 
-    val allExpanded = isModeExpanded && isTripodExpanded && isTriggerExpanded && isHardwareExpanded && isFlashExpanded && isFeedbackExpanded && isCropPreviewExpanded
+    val allExpanded = isModeExpanded && isTripodExpanded && isTriggerExpanded && isHardwareExpanded && isFlashExpanded && isFeedbackExpanded && isCropPreviewExpanded && isDebugExpanded
 
     Column(
         modifier = Modifier
@@ -54,6 +55,7 @@ fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
                     isFlashExpanded = nextState
                     isFeedbackExpanded = nextState
                     isCropPreviewExpanded = nextState
+                    isDebugExpanded = nextState
                 }
             ) {
                 Text(
@@ -426,6 +428,34 @@ fun ScannerSettingsTab(viewModel: DocAnizerViewModel) {
                         )
                     }
                 }
+            }
+        }
+
+        // Diagnose der Live-Dokumentenerkennung (standardmäßig deaktiviert)
+        CollapsibleSettingsCard(
+            title = "Dokumentenerkennung – Debug",
+            subtitle = if (scannerSettings.debugDocumentDetection) "Diagnosewerte im Preview sichtbar" else "Aus",
+            icon = Icons.Default.BugReport,
+            isExpanded = isDebugExpanded,
+            onToggle = { isDebugExpanded = !isDebugExpanded }
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Erkennungswerte im Kamerabild", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Zeigt Confidence, Ablehnungsgrund, Schärfe und Bewegung direkt in der Scan-Vorschau.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = scannerSettings.debugDocumentDetection,
+                    onCheckedChange = { viewModel.updateScannerSettings(scannerSettings.copy(debugDocumentDetection = it)) }
+                )
             }
         }
 
