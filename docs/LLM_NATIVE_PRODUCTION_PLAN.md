@@ -11,9 +11,13 @@
 | 21.10.2026 | `c0f0376d` | Warnhinweise vor dem Speichern überlappender Regeldefinitionen ergänzt. | GitHub Actions erfolgreich. |
 | 22.10.2026 | `c0aa4553` | Hardware-Fallbacks erfinden keine Geräteleistung mehr; unbekannte Kapazität bleibt unbekannt. | GitHub Actions erfolgreich; Debug-APK gebaut, Instrumentierungstests bestanden, APK hochgeladen. |
 | 22.10.2026 | `f23786b2` | Heuristischer Fallback wird nicht als gemessener Modellbenchmark ausgegeben; Benchmark-Ergebnis kennzeichnet Messstatus; unbekannte Hardware wird als unbekannt/limitiert behandelt; UI bezeichnet Schätzwerte als Schätzung. | GitHub Actions erfolgreich (Run [39699404634](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39699404634)). |
-| 22.10.2026 | `8ee30cdb` | Extraktionsprompts für kleine Modelle verschlankt: keine ausführliche Chain-of-Thought-Ausgabe; Zusatzfelder nur mit OCR-belegten Werten; keine erfundenen Werte; JSON-Ausgabe klar vorgegeben. | **CI für diesen Commit noch zu bestätigen**; Run [39709087914](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39709087914) wurde gestartet. |
+| 22.10.2026 | `8ee30cdb` | Extraktionsprompts für kleine Modelle verschlankt: keine ausführliche Chain-of-Thought-Ausgabe; Zusatzfelder nur mit OCR-belegten Werten; keine erfundenen Werte; JSON-Ausgabe klar vorgegeben. | **CI dieses Commits wurde durch den nachfolgenden Push abgebrochen**; der Prompt-Quellstand ist im Dokumentations-Sync-Branch enthalten und dort erneut zu prüfen. |
 
 **Wichtig:** „Erledigt“ bedeutet hier Codeänderung committed. Ein CI-Erfolg ist separat vermerkt; echte GGUF-Inferenz auf physischen Geräten ist weiterhin nicht belegt.
+
+## Dokumentations-Synchronisierung
+
+README, LLM-Prozessdokumentation, technische LLM-Kurzdokumentation, Coding-Agent-Regeln und Dokumentationsindex müssen bei relevanten Änderungen gemeinsam aktualisiert werden. Veraltete Aussagen zu „vollständig verifiziert“, Vulkan/GPU, Modellqualität, Laufzeit und nativem Function-Calling wurden korrigiert. Diese Änderungen beschreiben die bestätigten Grenzen und verweisen auf offene Abnahmen. Den CI-Status dieser Synchronisierung erst nach Abschluss des zugehörigen Runs als erfolgreich markieren.
 
 ## Nächste konkrete Aufgaben
 
@@ -52,4 +56,4 @@ Alle vorgesehenen KI-Funktionen laufen wirklich lokal über das ausgewählte `.g
 
 Eine Funktion gilt erst als echte LLM-Funktion, wenn der Test belegt, dass das gewählte GGUF-Modell über die paketierte native llama.cpp-Laufzeit die Antwort erzeugt hat. Tests, die nur JSON, Regex, Schlüsselwörter oder Fallback-Ergebnisse prüfen, zählen dafür nicht. Der deterministische Backup-Pfad muss auch ohne Modell weiterarbeiten und darf nie als KI-Inferenz erscheinen.
 
-**Aktueller Nachweis:** Native CMake/JNI-Quellen und ein auf Commit `2da668617612d2df773f966e3b0ee22dc2beef7b` gepinntes llama.cpp-Submodul sind eingecheckt. GitHub Actions, APK-Inhalt, ABI-Installierbarkeit und echte Geräte-Inferenz sind noch nicht verifiziert. Die aktuelle native Konfiguration ist CPU-only; GPU/Vulkan wird nicht behauptet.
+**Aktueller Nachweis:** Native CMake/JNI-Quellen und ein auf Commit `2da668617612d2df773f966e3b0ee22dc2beef7b` gepinntes llama.cpp-Submodul sind eingecheckt. GitHub Actions bestätigte für Commit `f23786b2` einen erfolgreichen Debug-APK-Build samt Instrumentierungstests und APK-Upload. Der Prompt-Commit `8ee30cdb` wurde durch einen Folge-Push abgebrochen und muss im Dokumentations-Sync-Branch erneut geprüft werden. Diese CI-Ergebnisse belegen keine echte GGUF-Inferenz auf einem physischen Gerät; ABI-Installierbarkeit und Gerätelaufzeit bleiben offen. Die native Konfiguration ist CPU-only; GPU/Vulkan wird nicht behauptet.

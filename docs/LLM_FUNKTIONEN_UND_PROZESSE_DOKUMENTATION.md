@@ -4,7 +4,9 @@
 **Modul:** On-Device LLM & KI-Subsystem  
 **Autoren:** Senior Android Software Engineering Team  
 **Stand:** Oktober 2026  
-**Status:** Vollständig implementiert, getestet & verifiziert  
+**Status:** Teilweise implementiert; siehe Live-Plan für bestätigte Funktionen und offene Abnahmen  
+
+> **Verifikationshinweis (22.10.2026):** Diese Dokumentation beschreibt vorhandene Komponenten und den Zielablauf, nicht die bestätigte Funktionsfähigkeit jedes End-to-End-Pfads. Der CI-Build belegt nur die tatsächlich ausgeführten Checks; echte GGUF-Inferenz auf einem physischen Gerät ist noch nicht nachgewiesen. llama.cpp ist aktuell CPU-only konfiguriert (Vulkan deaktiviert) und wird nativ für `arm64-v8a` und `x86_64` gebaut; andere ABIs fallen auf einen Stub-/Fallback-Pfad zurück. Modellgrößen, RAM-Bedarfe, Geschwindigkeiten und Qualität sind nicht automatisch gemessene Werte. Heuristik-Fallbacks dürfen nicht als LLM-Ausgabe oder als gemessener Benchmark gelten. Modellgestützte Regelgenerierung und end-to-end Tool-Calling bleiben offen; maßgeblich ist die [Live-Aufgabenliste](LLM_NATIVE_PRODUCTION_PLAN.md).
 
 ---
 
@@ -45,7 +47,7 @@ myDocAnizer-Mobile setzt auf ein kompromissloses **100% On-Device KI-Konzept**. 
 +===================================================================================+
 |                        INFERENZ- & HARDWARE-SCHICHT (NDK)                         |
 |  - llama.cpp On-Device Engine (GGUF Q4_K_M Quantisierung)                         |
-|  - Hardware-Beschleunigung: ARM NEON, Vulkan, Multi-Core CPU-Threading            |
+|  - Native Inferenz: CPU-only llama.cpp / Multi-Core-CPU-Threading; Vulkan ist deaktiviert            |
 |  - Lokaler Gerätespeicher: Scoped App Storage & GGUF-Validierung                  |
 +===================================================================================+
 ```
@@ -54,24 +56,26 @@ myDocAnizer-Mobile setzt auf ein kompromissloses **100% On-Device KI-Konzept**. 
 
 ## 2. Der HuggingFace Modellkatalog & Hardware-Empfehlungs-Matrix
 
-Die App enthält einen vorab kuratierten Katalog aus **12 hochoptimierten On-Device GGUF-Modellen (Q4_K_M)**.
+Die App enthält einen konfigurierten Katalog aus **12 GGUF-Modell-Einträgen**; Modellformat, Herkunft, Qualität und Performance müssen pro Datei verifiziert werden.
 
 ### 2.1 Modellkatalog-Übersicht
 
+> Die Größen- und RAM-Angaben in der folgenden Übersicht sind Katalog-/Planungswerte. Sie belegen weder gemessene Laufzeit noch Extraktionsgenauigkeit oder Eignung auf einem bestimmten Gerät.
+
 | Modell-ID | Name | Größe | RAM-Bedarf | Ziel-Kategorie | Kernstärken & Anwendungsbereich |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `smollm2-135m-instruct` | **SmolLM2 135M** | 105 MB | 1.5–2 GB | DMS & Rechnungen | Ultraschnell (< 150 ms), extrem akkuschonend, optimiert für Low-End/Entry-Geräte. |
-| `smollm2-360m-instruct` | **SmolLM2 360M** | 270 MB | 2–3 GB | DMS & Rechnungen | Perfekte Balance aus Schnelligkeit (< 250 ms) und Beleg-Präzision. |
-| `distil-qwen-0.8b-invoice` | **Distil-Qwen 0.8B** | 580 MB | 2.5–4 GB | DMS & Rechnungen | Spezialisiert auf Rechnungen, Kassenbelege und Absender-Extraktion (< 180 ms). |
-| `qwen2.5-0.5b-instruct` | **Qwen 2.5 0.5B** | 491 MB | 3–4 GB | DMS & Rechnungen | Exzellente deutsche Sprachverarbeitung auch bei verrauschtem/schrägem OCR-Rohtext. |
-| `llama-3.2-1b-instruct` | **Llama 3.2 1B** | 807 MB | 4–6 GB | Reasoning & Logik | Metas On-Device Modell für mehrstufige Klassifikation und intelligentes Tagging. |
-| `qwen2.5-1.5b-instruct` | **Qwen 2.5 1.5B** | 1117 MB | 4–6 GB | Verträge & Jura | Hohe semantische Zuverlässigkeit für Versicherungspolicen, Kündigungsfristen & AGBs. |
-| `deepseek-r1-distill-1.5b` | **DeepSeek-R1 Distill** | 1117 MB | 4–6 GB | Reasoning & Logik | Kettendenken (Chain-of-Thought) für anspruchsvolle Steuer-, Lohn- und Nachweisdokumente. |
-| `qwen2.5-coder-1.5b` | **Qwen 2.5 Coder** | 1117 MB | 4–6 GB | Finanzen & Tabellen | Spezialisiert auf tabellarische Belege, CSVs, Positionslisten und Saldenabgleiche. |
-| `nuextract-2-2b-gguf` | **NuExtract 2.0 2B** | 1450 MB | 4–6 GB | DMS & Rechnungen | Hochspezialisiertes JSON-Schema-Extraktionsmodell mit minimaler Halluzinationsrate. |
-| `ministral-3b-instruct` | **Ministral 3B** | 1950 MB | 6–8 GB | Mehrsprachig | Nativ mehrsprachig (DE, EN, FR, ES, IT) für Hotelbelege, Flugtickets und Auslandsrechnungen. |
-| `phi-3.5-mini-instruct` | **Phi-3.5 Mini** | 2393 MB | 6–8 GB | Verträge & Jura | Höchste logische Schärfe bei vielseitigen juristischen Verträgen und Behördenschreiben. |
-| `lift-4b-structured-gguf` | **LIFT 4B PDF Extractor** | 2393 MB | 6–8 GB | Tabellen & PDF | Maximale Detailtreue für komplexe PDF-Berichte auf Flaggschiff-Smartphones (8GB+ RAM). |
+| `smollm2-135m-instruct` | **SmolLM2 135M** | 105 MB | 1.5–2 GB | DMS & Rechnungen | Für kleine Aufgaben vorgesehen; Laufzeit und Qualität nicht auf Geräten gemessen. |
+| `smollm2-360m-instruct` | **SmolLM2 360M** | 270 MB | 2–3 GB | DMS & Rechnungen | Kompaktes Modell; Geschwindigkeit und Belegqualität nicht benchmark-geprüft. |
+| `distil-qwen-0.8b-invoice` | **Distil-Qwen 0.8B** | 580 MB | 2.5–4 GB | DMS & Rechnungen | Für Rechnungs-/Belegaufgaben vorgesehen; Laufzeit und Extraktionsqualität nicht verifiziert. |
+| `qwen2.5-0.5b-instruct` | **Qwen 2.5 0.5B** | 491 MB | 3–4 GB | DMS & Rechnungen | Für deutsche Klassifikation vorgesehen; Robustheit bei OCR-Fehlern nicht verifiziert. |
+| `llama-3.2-1b-instruct` | **Llama 3.2 1B** | 807 MB | 4–6 GB | Reasoning & Logik | Für Klassifikation und Tagging vorgesehen; Qualität nicht verifiziert. |
+| `qwen2.5-1.5b-instruct` | **Qwen 2.5 1.5B** | 1117 MB | 4–6 GB | Verträge & Jura | Für Vertragsdokumente vorgesehen; Zuverlässigkeit bei Fristen nicht gemessen. |
+| `deepseek-r1-distill-1.5b` | **DeepSeek-R1 Distill** | 1117 MB | 4–6 GB | Reasoning & Logik | Für strukturierte Auswertung vorgesehen; die Extraktionsprompts vermeiden ausführliche Chain-of-Thought-Ausgaben. |
+| `qwen2.5-coder-1.5b` | **Qwen 2.5 Coder** | 1117 MB | 4–6 GB | Finanzen & Tabellen | Für strukturierte Tabellenaufgaben vorgesehen; Qualität nicht verifiziert. |
+| `nuextract-2-2b-gguf` | **NuExtract 2.0 2B** | 1450 MB | 4–6 GB | DMS & Rechnungen | Für JSON-Extraktion vorgesehen; eine Halluzinationsrate ist nicht belegt. |
+| `ministral-3b-instruct` | **Ministral 3B** | 1950 MB | 6–8 GB | Mehrsprachig | Für mehrsprachige Dokumente vorgesehen; Qualität pro Sprache nicht gemessen. |
+| `phi-3.5-mini-instruct` | **Phi-3.5 Mini** | 2393 MB | 6–8 GB | Verträge & Jura | Für Vertrags-/Behördentexte vorgesehen; Qualität nicht verifiziert. |
+| `lift-4b-structured-gguf` | **LIFT 4B PDF Extractor** | 2393 MB | 6–8 GB | Tabellen & PDF | Für strukturierte Extraktion vorgesehen; Detailtreue und RAM-Bedarf sind nicht auf Geräten gemessen. |
 
 ### 2.2 Live-Hardware-Telemetrie & Empfehlungslogik
 
@@ -132,7 +136,7 @@ Jedes gescannte oder importierte Dokument durchläuft eine strikte, deterministi
 │ STUFE 0: Deterministische Schlagwort-Regeln            │
 │ (DocRuleRepository)                                    │
 │ - Exakter Match auf Absender, IBAN, Schlüsselwörter    │
-│ - Latenz < 5 ms | 0% Halluzination                     │
+│ - regelbasierte Ergebnisse; Laufzeit nicht pauschal gemessen                     │
 └────────────────────────────────────────────────────────┘
                          │ (Falls keine Regel greift)
                          ▼
@@ -164,7 +168,7 @@ Jedes gescannte oder importierte Dokument durchläuft eine strikte, deterministi
 │ - Text-Anchor Cross-Check gegen OCR-Rohtext            │
 │ - Datums- & Betrags-Normalisierung                     │
 │ - Plausibilitätsprüfungen (Fälligkeit > Belegdatum)    │
-│ - Confidence-Score (0-100%) & Revisionshinweise        │
+│ - Heuristischer Prüfscore (0-100) & Revisionshinweise   │
 └────────────────────────────────────────────────────────┘
                          │
                          ▼
@@ -175,8 +179,8 @@ Jedes gescannte oder importierte Dokument durchläuft eine strikte, deterministi
 
 ### 4.1 Stufe 0: Deterministische Schlagwort-Regeln (`DocRuleRepository`)
 * Vor jedem LLM-Aufruf wird der OCR-Text gegen gespeicherte `DocRule`-Einträge geprüft.
-* Trifft ein Regex- oder Schlagwort-Muster zu (z.B. `"Telekom Deutschland"` + `"Rechnung"`), wird das Dokument sofort (< 5 ms) ohne LLM-Inferenz zugeordnet.
-* Garantiert maximale Geschwindigkeit und Null-Fehlerraten bei bekannten Belegen.
+* Trifft ein Regex- oder Schlagwort-Muster zu (z.B. `"Telekom Deutschland"` + `"Rechnung"`), wird das Dokument deterministisch ohne LLM-Inferenz zugeordnet; die konkrete Laufzeit ist nicht benchmark-geprüft.
+* Deterministische Regeln vermeiden Modellaufrufe; Regeln können dennoch unvollständig oder mehrdeutig sein.
 
 ### 4.2 Stufe 1 & 2: Posteingangs-Triage & Fachabteilungs-Teams (`LlamaCppInferenceEngine`)
 Die Engine nutzt spezialisierte System-Prompts mit striktem JSON-Schema (`DmsExtractionResponse`):
@@ -197,10 +201,10 @@ Basierend auf der konfigurierten `FolderStrategy`:
 * `DIN_AKTENPLAN`: Zuordnung nach deutschem Einheitsaktenplan (z.B. `04_Finanzen/042_Rechnungen`)
 * `CUSTOM_HIERARCHY`: Frei definierte Ordnerstrukturen
 
-Zusätzlich wird ein generierter Regelvorschlag (`suggestedRulePattern`) formuliert, den der Anwender als permanente Regel speichern kann.
+Die App kann einen Regelvorschlag (`suggestedRulePattern`) anbieten, den der Anwender speichern kann. Der vorhandene Freitext-Regelgenerator ist nicht durchgehend modellgetrieben; echte LLM-gestützte Erstellung und Verfeinerung bleiben offene Aufgaben.
 
 ### 4.4 Stufe 4: Quality Gatekeeper & Revisions-Prüfung (`QualityGatekeeper.kt`)
-Ein deterministisches Kotlin-Prüfmodul verhindert Halluzinationen und bereinigt Formate:
+Ein deterministisches Kotlin-Prüfmodul prüft definierte OCR-Textanker, Plausibilität und Formate; es kann nicht alle Halluzinationen erkennen oder verhindern:
 
 1. **Text-Anchor Cross-Check (`checkTextAnchors`):**
    * Verifiziert, ob extrahierte Zahlenwerte (Betrag, IBAN, Rechnungsnummer, Datum) wortwörtlich oder in transformierter Form im OCR-Rohtext existieren.
@@ -213,14 +217,14 @@ Ein deterministisches Kotlin-Prüfmodul verhindert Halluzinationen und bereinigt
    * Prüft, dass Beträge positiv sind.
    * Schließt Verwechslungen von Geburtsdaten mit Rechnungsdaten aus.
 5. **Confidence-Score Berechnung:**
-   * Vergibt einen Vertrauenswert von 0 bis 100 %.
+   * Erzeugt einen heuristischen Score von 0 bis 100. Dieser Wert ist keine kalibrierte Wahrscheinlichkeit und beweist nicht, dass das Ergebnis korrekt ist.
    * Generiert transparente `QualityWarning`-Objekte für den Nutzer.
 
 ---
 
-## 5. Natives LLM Function-Calling (`LlmToolRouter`)
+## 5. Tool-Router und noch nicht end-to-end verifiziertes Function-Calling (`LlmToolRouter`)
 
-myDocAnizer-Mobile unterstützt natives On-Device Function-Calling nach dem OpenAI-kompatiblen Tool-Schema.
+Tool-Router, Tool-Schemas und Kotlin-Executor sind vorhanden. Ein durchgehend vom nativen GGUF-Modell erzeugter, validierter und ausgeführter Tool-Call ist derzeit nicht end-to-end nachgewiesen. Der Dokumenten-Assistent nutzt teilweise heuristische Kotlin-Logik; das folgende Diagramm zeigt den Zielablauf, keinen Abnahmenachweis.
 
 ```
 [Benutzer-Prompt / Chat / Sprachbefehl]
@@ -281,7 +285,7 @@ Der `DeadlineDetectionService` analysiert extrahierte Dokumenten-Metadaten auf r
 Um unter allen Umständen einen stabilen Betrieb und Null-Abstürze zu gewährleisten, greifen mehrstufige Fallback-Mechanismen:
 
 1. **Kein Modell geladen oder Download ausstehend:**
-   * Automatischer Fallback auf den schnellen Regex-/Heuristik-Parser (`FallbackHeuristicExtractor`).
+   * Automatischer Fallback auf den regel-/heuristikbasierten Parser (`FallbackHeuristicExtractor`).
    * Alle Basisfelder (Betrag, Datum, IBAN) werden rein regelbasiert extrahiert.
 2. **Unerwartetes Inferenz-Format (Malformed JSON):**
    * Robuster Regex-Cleaner isoliert JSON-Payloads aus Freitext oder Markdown-Blöcken.
@@ -344,18 +348,8 @@ suspend fun routeLlmOutput(
 
 ---
 
-## 9. Qualitätssicherung & Test-Matrix
+## 9. Qualitätssicherung & Testgrenzen
 
-Das gesamte On-Device LLM-Subsystem ist über die automatisierte Robolectric-Testsuite abgesichert:
-
-* **`verify AP-1 Two-Stage Pipeline and Fallback`**:
-  * Testet Stufe 1 Triage, Stufe 2 Fachabteilungsanalyse und den fehlerfreien Heuristik-Fallback.
-* **`verify AP-2 Department Teams FolderStrategy and rule repository integration`**:
-  * Testet alle 4 Fachabteilungen, Ordner-Routing-Strategien und die Erstellung permanenter Regeln.
-* **`verify AP-3 Quality Gatekeeper text anchors, normalization and confidence audit`**:
-  * Validiert Text-Anchor-Cross-Checks, Datums-/Betrags-Normalisierungen, Plausibilitätswarnungen und Audit-Logging.
-* **`verify Hardware check and model catalog sync`**:
-  * Validiert die Hardware-Erkennung und Katalog-Konsistenz aller 12 GGUF-Modelle.
-
+GitHub Actions führt die in `.github/workflows/build-apk.yml` definierten Build- und Testschritte aus. Der jeweils konkrete Run ist maßgeblich; ein erfolgreicher APK-Build oder Unit-/Instrumentierungstest beweist für sich genommen nicht, dass auf einem physischen Gerät eine GGUF-Datei geladen und tatsächlich ausgeführt wurde. Tests mit Heuristik-/Regel-Fallback gelten nicht als Nachweis für echte Modellinferenz. Den aktuellen CI-Stand, bestätigte Commits und offene Abnahmekriterien führt die [Live-Aufgabenliste](LLM_NATIVE_PRODUCTION_PLAN.md).
 ---
-*myDocAnizer-Mobile – 100% On-Device Intelligenz, maximale Privatsphäre und verlässliche Dokumenten-Organisation.*
+*myDocAnizer-Mobile – lokale Dokumenten-KI mit transparenten Grenzen und nachvollziehbarer Qualitätssicherung.*

@@ -12,20 +12,20 @@
 **myDocAnizer-Mobile** ist ein 100% datenschutzkonformes, cloudfreies Dokumenten-Management-System (DMS) und intelligenter Dokumenten-Scanner für Android.
 
 ### Kernprinzipien für Entwickler & Coding-Agents:
-1. **100% On-Device & Zero-Cloud-AI:** Sämtliche OCR- und LLM-Inferenzprozesse laufen lokal auf dem Endgerät (Google ML Kit + Llama.cpp / GGUF). Keine Daten verlassen das Smartphone unverschlüsselt.
+1. **Lokaler KI-Pfad mit klaren Grenzen:** OCR läuft mit Google ML Kit; native llama.cpp/GGUF-Inferenz ist CPU-only und für `arm64-v8a`/`x86_64` gebaut. Auf anderen ABIs läuft ein Stub-/Fallback-Pfad. Vor jeder Behauptung prüfen, ob ein konkreter Feature-Aufrufer wirklich `LOCAL_LLM` erreicht oder heuristisch zurückfällt.
 2. **0 € Tokenkosten:** Keine externen API-Abhängigkeiten (OpenAI, Gemini REST, Anthropic) im Produktivbetrieb.
 3. **Deterministische Sicherheit vor KI:** Die KI liefert Vorschläge und Vorfilterungen; die finale Namensgebung, Regelzuweisung, Dateiablage und Revisionsprüfung erfolgen durch deterministischen Kotlin-Code.
-4. **Zwingendes Mandatory Test Gate:** Nach jeder Code-Änderung müssen `compile_applet` und `gradle :app:testDebugUnitTest` fehlerfrei durchlaufen.
+4. **Zwingendes Test-Gate:** Nach jedem Commit den passenden GitHub-Actions-Run für genau diesen Commit prüfen. Lokale Gradle-Tests ausführen, wenn die Umgebung sie unterstützt; keine nicht vorhandenen Jobs/Tasks erfinden. Ein grüner CI-Lauf ist kein physischer Gerätetest.
 
 ---
 
 ## 2. On-Device 4-Team KI-Pipeline
 
-Die KI-Architektur ist in 4 spezialisierte "Teams" unterteilt, die sich gegenseitig entlasten und Halluzinationen deterministisch abfangen:
+Die folgende Darstellung beschreibt die vorgesehenen Komponenten und deren Zusammenarbeit. Sie ist kein Beweis, dass jeder Aufrufer aktuell eine vollständig modellgetriebene End-to-End-Pipeline ausführt. Der deterministische Gatekeeper prüft definierte Plausibilitäts- und OCR-Anker, kann aber nicht sämtliche Halluzinationen ausschließen.
 
 ```
 +---------------------------------------------------------------------------------------+
-|                                4-TEAM ON-DEVICE PIPELINE                              |
+|                   4-TEAM ON-DEVICE PIPELINE (Ziel-/Komponentenübersicht)               |
 +---------------------------------------------------------------------------------------+
 | 1. Team 1: Poststelle & Eingangstriage                                                |
 |    • OcrPreFilterMatrix: Schneidet Volltext auf Kopfzeilen & Signalzeilen (max 900ch) |
@@ -125,13 +125,30 @@ Die App verwendet ein automatisiertes Regelwerk (`DocRuleRepository.kt`), um bek
 - **Konfliktbehandlung:** 3-Way Snapshot-Vergleich mit optischer Gegenüberstellung im UI.
 
 ---
+## Dokumentationspflicht für Coding-Agents
+
+Nach Änderungen die folgenden Dateien synchronisieren, sobald der jeweilige Inhalt betroffen ist:
+
+- `docs/LLM_NATIVE_PRODUCTION_PLAN.md`: immer nach jedem Arbeitsblock; erledigte Aufgaben, genaue Commit-SHA, CI-Status/Run-Link und offene Folgearbeiten.
+- `README.md`: öffentliche Architektur, Build-/Nutzerhinweise oder reale Funktionsgrenzen ändern.
+- `docs/LLM_FUNKTIONEN_UND_PROZESSE_DOKUMENTATION.md` und `docs/LLM_INTEGRATION_DOCUMENTATION.md`: LLM-Prompts, Inferenzpfad, Modellkatalog, Benchmarks, Fallbacks oder Tool-Calling ändern.
+- `docs/coding-agent_documentation.md`: Build-/Agent-Prozess, Architektur oder verbindliche Entwicklerregeln ändern.
+- `docs/README.md`: Dokumente hinzufügen, umbenennen oder ihre Rolle ändern.
+
+**Arbeitsregeln:**
+1. Vor Änderungen den Code und die vorhandenen Dokumente lesen; Dokumente nie aus Annahmen aktualisieren.
+2. Keine Geschwindigkeit, Genauigkeit, GPU-Unterstützung, Tool-Funktion oder End-to-End-Lokalinferenz als verifiziert bezeichnen, wenn es dafür keinen Nachweis gibt.
+3. Einen Fallback nie als Modellantwort kennzeichnen. Einen Benchmark nur als gemessen markieren, wenn `lastInferenceMode == LOCAL_LLM` und echte native Messwerte vorliegen.
+4. Nach jedem Commit die Actions für genau dessen SHA prüfen. Keinen zweiten Commit auf `main` pushen, während der zugehörige Build läuft, wenn dadurch der Run abgebrochen würde; erst bei Abschluss Status und Doku aktualisieren.
+5. Ein Gerätetest ist erst erledigt, wenn eine tatsächliche GGUF-Inferenz auf dem Zielgerät belegt ist. CI-Kompilierung allein genügt nicht.
+
 
 ## 7. Mandatory Test Gate & Entwickler-Richtlinien
 
 Jeder Entwickler und Coding-Agent muss vor Abschluss jeder Aufgabe folgenden Zyklus einhalten:
 
-1. **Kompilierung:** `compile_applet` (muss fehlerfrei sein).
-2. **Robolectric JVM Test Suite:**
+1. **GitHub Actions zuerst prüfen:** Öffne den neuesten Run in `.github/workflows/build-apk.yml`, prüfe `head_sha`, Jobstatus und Fazit. Nur `completed/success` gilt als grüner Lauf. Bei `in_progress` oder `queued` ist das Ergebnis offen; bei `cancelled`/failure darf Erfolg nicht behauptet werden.
+2. **Lokale Gradle-Tests, sofern ausführbar:**
    ```bash
    gradle :app:testDebugUnitTest
    ```
