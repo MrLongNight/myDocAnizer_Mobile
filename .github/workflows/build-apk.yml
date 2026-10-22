@@ -95,38 +95,7 @@ jobs:
       - name: Build Debug APK
         run: |
           cd "${{ env.PROJECT_DIR }}"
-          ./gradlew assembleDebug testDebugUnitTest --stacktrace --no-daemon
-
-      # AndroidKeyStore-backed SecretStore and PDF behavior require a real Android runtime.
-      - name: Upload unit-test reports on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-report-${{ github.run_id }}
-          path: |
-            ${{ env.PROJECT_DIR }}/app/build/reports/tests/testDebugUnitTest/
-            ${{ env.PROJECT_DIR }}/app/build/test-results/testDebugUnitTest/
-          if-no-files-found: warn
-          retention-days: 7
-
-      - name: Enable KVM for Android emulator
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Run Android instrumentation tests
-        uses: reactivecircus/android-emulator-runner@v2.38.0
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_7_pro
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: |
-            cd "${{ env.PROJECT_DIR }}"
-            ./gradlew connectedDebugAndroidTest --stacktrace --no-daemon
+          ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Find and Verify APK
         id: apk-check
@@ -165,3 +134,39 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           retention-days: 30
+      - name: Run Android unit tests
+        run: |
+          cd "${{ env.PROJECT_DIR }}"
+          ./gradlew testDebugUnitTest --stacktrace --no-daemon
+
+      - name: Upload unit-test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report-${{ github.run_id }}
+          path: |
+            ${{ env.PROJECT_DIR }}/app/build/reports/tests/testDebugUnitTest/
+            ${{ env.PROJECT_DIR }}/app/build/test-results/testDebugUnitTest/
+          if-no-files-found: warn
+          retention-days: 7
+
+      # AndroidKeyStore-backed SecretStore and PDF behavior require a real Android runtime.
+      - name: Enable KVM for Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Android instrumentation tests
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7_pro
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            cd "${{ env.PROJECT_DIR }}"
+            ./gradlew connectedDebugAndroidTest --stacktrace --no-daemon
+
