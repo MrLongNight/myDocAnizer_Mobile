@@ -303,7 +303,11 @@ fun ScanQualityCheckDialog(
                                         PointF(cornerBL.x * bw, cornerBL.y * bh)
                                     )
                                     val warped = ImageProcessingService.cropAndWarpPerspective(rawBitmap, corners)
-                                    val (opt, _) = ImageProcessingService.processDocumentAdaptive(warped, if (isColorMode) "COLOR" else "BW")
+                                    val (opt, _) = ImageProcessingService.processDocumentAdaptive(
+                                        warped,
+                                        if (isColorMode) "COLOR" else "BW",
+                                        alreadyCropped = true
+                                    )
                                     opt
                                 } else {
                                     optimizedBitmap ?: rawBitmap

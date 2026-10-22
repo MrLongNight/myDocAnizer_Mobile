@@ -43,6 +43,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     val ruleRepo = DocRuleRepository(application)
     val ruleRepository: DocRuleRepository get() = ruleRepo
     val llmService = LlmService(application)
+    /** Live native llama.cpp phase/progress for chat and benchmark diagnostics. */
+    val llmInferenceProgress = llmService.llamaCppEngine.inferenceProgress
     val biometricAuthManager = BiometricAuthManager(application)
     val passkeyAuthManager = PasskeyAuthManager(application)
     val p2pSyncManager = P2pSyncManager(application, db)
@@ -2013,7 +2015,8 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 val (processed, isColor) = ImageProcessingService.processDocumentAdaptive(
                     src = snapshotBmp,
-                    preferredMode = preferredMode
+                    preferredMode = preferredMode,
+                    alreadyCropped = true
                 )
                 val ocrText = OcrService.recognizeText(processed, "", "")
                 val matchingRules = ruleRepo.matchingRules(ocrText)

@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -84,6 +85,7 @@ fun AiDocumentChatDrawer(
     val context = LocalContext.current
     val chatMessages by viewModel.chatMessages.collectAsStateWithLifecycle()
     val isGenerating by viewModel.isChatGenerating.collectAsStateWithLifecycle()
+    val inferenceProgress by viewModel.llmInferenceProgress.collectAsStateWithLifecycle()
     val selectedDoc by viewModel.selectedChatDocument.collectAsStateWithLifecycle()
     val allDocs by viewModel.allDocuments.collectAsStateWithLifecycle()
 
@@ -127,13 +129,16 @@ fun AiDocumentChatDrawer(
         )
 
         var isFullscreen by remember { mutableStateOf(false) }
+        val density = LocalDensity.current
+        val keyboardVisible = WindowInsets.ime.getBottom(density) > 0
 
+        // Beim Öffnen der Tastatur automatisch maximieren, damit Verlauf und Eingabe sichtbar bleiben.
         // 2. Minimalistisches Bottom-Sheet Panel vom unteren Bildschirmrand (ca. 42% Bildschirmhöhe als Default, auf Vollbild maximierbar)
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .then(if (isFullscreen) Modifier.fillMaxHeight(0.92f) else Modifier.fillMaxHeight(0.42f))
+                .then(if (isFullscreen || keyboardVisible) Modifier.fillMaxHeight(0.92f) else Modifier.fillMaxHeight(0.42f))
         ) {
             Surface(
                 shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
@@ -327,6 +332,7 @@ fun AiDocumentChatDrawer(
                         com.example.ui.chat.ChatMessageListPane(
                             chatMessages = chatMessages,
                             isGenerating = isGenerating,
+                            inferenceProgress = inferenceProgress,
                             listState = listState,
                             onExecuteAction = { actionType ->
                                 onExecuteAction(actionType)

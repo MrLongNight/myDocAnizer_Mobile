@@ -38,6 +38,7 @@ import java.util.Locale
 fun ChatMessageListPane(
     chatMessages: List<ChatMessage>,
     isGenerating: Boolean,
+    inferenceProgress: Int = -1,
     listState: LazyListState,
     onExecuteAction: (String) -> Unit,
     onCopyText: (String) -> Unit,
@@ -61,7 +62,7 @@ fun ChatMessageListPane(
 
         if (isGenerating) {
             item(key = "thinking_indicator") {
-                DrawerThinkingIndicator()
+                DrawerThinkingIndicator(inferenceProgress)
             }
         }
     }
@@ -275,7 +276,7 @@ private fun DrawerAnnotatedText(text: String, isUser: Boolean) {
 }
 
 @Composable
-private fun DrawerThinkingIndicator() {
+private fun DrawerThinkingIndicator(inferenceProgress: Int) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse_anim")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.2f,
@@ -298,8 +299,24 @@ private fun DrawerThinkingIndicator() {
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             LocalAiAgentIcon(modifier = Modifier.size(20.dp), tint = Color(0xFFA855F7))
-            Text("Assistent denkt nach...", style = MaterialTheme.typography.labelSmall)
-            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF00E5FF).copy(alpha = alpha)))
+            val status = when {
+                inferenceProgress < 0 -> "Kontext / Werkzeuge werden verarbeitet …"
+                inferenceProgress < 15 -> "Lokales Modell wird geladen …"
+                inferenceProgress < 25 -> "Prompt wird vorbereitet …"
+                inferenceProgress < 45 -> "Prompt wird vom Modell verarbeitet …"
+                inferenceProgress < 100 -> "Antwort wird generiert · ${inferenceProgress}%"
+                else -> "Antwort wird fertiggestellt …"
+            }
+            Text(status, style = MaterialTheme.typography.labelSmall)
+            if (inferenceProgress in 0..99) {
+                CircularProgressIndicator(
+                    progress = { inferenceProgress / 100f },
+                    modifier = Modifier.size(12.dp),
+                    strokeWidth = 1.5.dp
+                )
+            } else {
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF00E5FF).copy(alpha = alpha)))
+            }
         }
     }
 }

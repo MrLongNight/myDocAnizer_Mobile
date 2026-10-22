@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <android/log.h>
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <mutex>
 #include <string>
@@ -23,6 +24,7 @@ struct Engine {
 };
 
 std::mutex g_mutex;
+std::atomic<int> g_inference_progress{-1};
 Engine * g_engine = nullptr;
 bool g_backend_ready = false;
 
@@ -216,12 +218,18 @@ std::string run_inference(
         int max_tokens,
         const std::string & grammar) {
     std::lock_guard<std::mutex> lock(g_mutex);
+    g_inference_progress.store(5, std::memory_order_relaxed);
     std::string error;
     threads = std::max(1, std::min(threads, 8));
-    if (!ensure_engine(model_path, threads, error)) return error_json(error);
+    if (!ensure_engine(model_path, threads, error)) {
+        g_inference_progress.store(-1, std::memory_order_relaxed);
+        return error_json(error);
+    }
+    g_inference_progress.store(15, std::memory_order_relaxed);
 
     const llama_vocab * vocab = llama_model_get_vocab(g_engine->model);
     std::string prompt = build_prompt(g_engine->model, system_prompt, user_prompt);
+    g_inference_progress.store(20, std::memory_order_relaxed);
     const int generation_limit = std::max(1, std::min(max_tokens, 1024));
     const size_t prompt_limit = kContextSize > static_cast<uint32_t>(generation_limit + 16)
         ? static_cast<size_t>(kContextSize - generation_limit - 16) : 128;
@@ -235,16 +243,21 @@ std::string run_inference(
     if (!sampler) return error_json("The supplied GBNF grammar is invalid");
 
     const int64_t start_us = llama_time_us();
+    g_inference_progress.store(25, std::memory_order_relaxed);
     llama_batch batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
     if (llama_decode(g_engine->context, batch) != 0) {
         llama_sampler_free(sampler);
+        g_inference_progress.store(-1, std::memory_order_relaxed);
         return error_json("llama.cpp failed while evaluating the OCR prompt");
     }
     const int64_t prompt_end_us = llama_time_us();
+    g_inference_progress.store(45, std::memory_order_relaxed);
 
     std::string output;
     int generated = 0;
     for (; generated < generation_limit; ++generated) {
+        const int progress = 45 + static_cast<int>((static_cast<int64_t>(generated) * 54) / generation_limit);
+        g_inference_progress.store(progress, std::memory_order_relaxed);
         llama_token token = llama_sampler_sample(sampler, g_engine->context, -1);
         if (llama_vocab_is_eog(vocab, token)) break;
         llama_sampler_accept(sampler, token);
@@ -256,6 +269,7 @@ std::string run_inference(
     }
     const int64_t end_us = llama_time_us();
     llama_sampler_free(sampler);
+    g_inference_progress.store(100, std::memory_order_relaxed);
 
     const int64_t prompt_ms = (prompt_end_us - start_us) / 1000;
     const int64_t generation_ms = (end_us - prompt_end_us) / 1000;
@@ -270,6 +284,11 @@ std::string run_inference(
 }
 
 } // namespace
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_example_service_LlamaCppInferenceEngine_nativeGetInferenceProgress(JNIEnv *, jobject) {
+    return static_cast<jint>(g_inference_progress.load(std::memory_order_relaxed));
+}
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_example_service_LlamaCppInferenceEngine_nativeExecuteLlamaWithGrammar(

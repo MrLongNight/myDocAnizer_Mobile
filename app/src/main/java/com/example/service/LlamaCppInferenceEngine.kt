@@ -4,7 +4,14 @@ import android.content.Context
 import android.util.Log
 import android.os.Build
 import com.example.model.FolderStrategy
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -113,6 +120,11 @@ class LlamaCppInferenceEngine(private val context: Context) {
     @Volatile
     var lastInferenceMetrics: InferenceMetrics? = null
         private set
+
+    private val progressScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val _inferenceProgress = MutableStateFlow(-1)
+    /** -1 = no native inference; 0..100 = native phase/progress. */
+    val inferenceProgress = _inferenceProgress.asStateFlow()
 
     companion object {
         private const val TAG = "LlamaCppEngine"
@@ -561,9 +573,18 @@ ws ::= [ \t\n\r]*
         }
 
         try {
+            _inferenceProgress.value = 0
             val resultJson = inferenceMutex.withLock {
                 System.loadLibrary("llama_android")
-                nativeExecuteLlamaWithGrammar(
+                val poller = progressScope.launch {
+                    while (isActive) {
+                        val value = runCatching { nativeGetInferenceProgress() }.getOrDefault(-1)
+                        if (value >= 0) _inferenceProgress.value = value
+                        delay(200L)
+                    }
+                }
+                try {
+                    nativeExecuteLlamaWithGrammar(
                     modelPath = modelFile.absolutePath,
                     prompt = prompt,
                     systemPrompt = systemPrompt,
@@ -573,7 +594,10 @@ ws ::= [ \t\n\r]*
                     topP = params.topP,
                     maxTokens = params.maxTokens,
                     grammar = params.grammar ?: ""
-                )
+                    )
+                } finally {
+                    poller.cancel()
+                }
             }
             val result = JSONObject(resultJson)
             if (result.has("error")) {
@@ -583,6 +607,7 @@ ws ::= [ \t\n\r]*
             if (output.isBlank()) throw IllegalStateException("Native inference returned an empty response")
 
             lastInferenceMode = InferenceMode.LOCAL_LLM
+            _inferenceProgress.value = 100
             val generatedTokens = result.optInt("tokensGenerated", 0)
             val promptMs = result.optLong("promptEvalTimeMs", 0L)
             val generationMs = result.optLong("generateTimeMs", 0L)
@@ -610,11 +635,13 @@ ws ::= [ \t\n\r]*
             )
             output
         } catch (e: LinkageError) {
+            _inferenceProgress.value = -1
             lastInferenceMetrics = null
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             safeLogW(TAG, "Native llama.cpp-Laufzeit nicht verfügbar: ${e.message}")
             executeFallbackInference(prompt, systemPrompt)
         } catch (e: Exception) {
+            _inferenceProgress.value = -1
             lastInferenceMetrics = null
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             AppAuditLogger.log(
@@ -957,6 +984,8 @@ ws ::= [ \t\n\r]*
         // Default normale Antwort
         return "Ich bin dein persönlicher myDocAnizer Assistent. Womit kann ich dir behilflich sein?"
     }
+
+    private external fun nativeGetInferenceProgress(): Int
 
     private external fun nativeExecuteLlamaWithGrammar(
         modelPath: String,

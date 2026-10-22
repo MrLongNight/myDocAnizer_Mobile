@@ -662,7 +662,17 @@ fun ModelCardHorizontal(
     val compatibility = hardwareInfo.getCompatibility(model.recommendedRamGb)
     var isBenchmarking by remember { mutableStateOf(false) }
     var benchmarkResult by remember { mutableStateOf<com.example.model.ModelBenchmarkResult?>(null) }
+    var benchmarkElapsedSeconds by remember { mutableIntStateOf(0) }
+    val inferenceProgress by viewModel.llmInferenceProgress.collectAsState()
     val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(isBenchmarking) {
+        benchmarkElapsedSeconds = 0
+        while (isBenchmarking) {
+            kotlinx.coroutines.delay(1_000L)
+            benchmarkElapsedSeconds++
+        }
+    }
 
     if (benchmarkResult != null) {
         val bench = benchmarkResult!!
@@ -706,6 +716,45 @@ fun ModelCardHorizontal(
                     Text("Schließen")
                 }
             }
+        )
+    }
+
+    if (isBenchmarking) {
+        val phase = when {
+            inferenceProgress < 0 -> "Inferenz wird vorbereitet …"
+            inferenceProgress < 15 -> "Modell wird geladen / initialisiert …"
+            inferenceProgress < 25 -> "Prompt wird vorbereitet …"
+            inferenceProgress < 45 -> "Prompt-Auswertung läuft …"
+            inferenceProgress < 100 -> "Token-Generierung läuft · ${inferenceProgress}%"
+            else -> "Ergebnis wird ausgewertet …"
+        }
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("LLM-Benchmark läuft") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (inferenceProgress in 0..99) {
+                            CircularProgressIndicator(
+                                progress = { inferenceProgress / 100f },
+                                modifier = Modifier.size(28.dp),
+                                strokeWidth = 3.dp
+                            )
+                        } else {
+                            CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+                        }
+                        Column {
+                            Text(phase, style = MaterialTheme.typography.bodyMedium)
+                            Text("Laufzeit: ${benchmarkElapsedSeconds}s", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    Text(
+                        "Die Anzeige nutzt den nativen Inferenzstatus. Bleibt eine Phase stehen, arbeitet oder blockiert genau dieser Schritt; es wird kein künstlicher Fortschritt angezeigt.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {}
         )
     }
 
@@ -897,10 +946,22 @@ fun ModelCardHorizontal(
                     ) {
                         FilledTonalButton(
                             onClick = {
-                                coroutineScope.launch {
-                                    isBenchmarking = true
-                                    benchmarkResult = viewModel.runModelBenchmark(model.id)
-                                    isBenchmarking = false
+                                if (!isBenchmarking) {
+                                    coroutineScope.launch {
+                                        isBenchmarking = true
+                                        benchmarkResult = null
+                                        try {
+                                            benchmarkResult = viewModel.runModelBenchmark(model.id)
+                                        } catch (error: Exception) {
+                                            Toast.makeText(
+                                                context,
+                                                "Benchmark fehlgeschlagen: ${error.message ?: error.javaClass.simpleName}",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        } finally {
+                                            isBenchmarking = false
+                                        }
+                                    }
                                 }
                             },
                             shape = RoundedCornerShape(4.dp),
@@ -945,10 +1006,22 @@ fun ModelCardHorizontal(
 
                         FilledTonalButton(
                             onClick = {
-                                coroutineScope.launch {
-                                    isBenchmarking = true
-                                    benchmarkResult = viewModel.runModelBenchmark(model.id)
-                                    isBenchmarking = false
+                                if (!isBenchmarking) {
+                                    coroutineScope.launch {
+                                        isBenchmarking = true
+                                        benchmarkResult = null
+                                        try {
+                                            benchmarkResult = viewModel.runModelBenchmark(model.id)
+                                        } catch (error: Exception) {
+                                            Toast.makeText(
+                                                context,
+                                                "Benchmark fehlgeschlagen: ${error.message ?: error.javaClass.simpleName}",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        } finally {
+                                            isBenchmarking = false
+                                        }
+                                    }
                                 }
                             },
                             shape = RoundedCornerShape(4.dp),

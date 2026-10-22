@@ -37,6 +37,7 @@ object ImageProcessingService {
 
         var totalLuminance = 0.0
         var colorDiffTotal = 0.0
+        var clearlyColoredPixels = 0
         var pixelCount = 0
 
         for (i in 0 until sampleSize * sampleSize) {
@@ -52,7 +53,9 @@ object ImageProcessingService {
             // Color saturation indicator (difference between RGB channels)
             val maxC = maxOf(r, maxOf(g, b))
             val minC = minOf(r, minOf(g, b))
-            colorDiffTotal += (maxC - minC)
+            val chroma = maxC - minC
+            colorDiffTotal += chroma
+            if (chroma >= 32 && maxC >= 70) clearlyColoredPixels++
 
             pixelCount++
         }
@@ -64,8 +67,9 @@ object ImageProcessingService {
         val avgLuminance = if (pixelCount > 0) (totalLuminance / pixelCount) / 255.0 else 0.5
         val avgColorDiff = if (pixelCount > 0) colorDiffTotal / pixelCount else 0.0
 
-        // If color differences are very low (< 25), it is predominantly monochrome/printed document
-        val isRecommendedBw = avgColorDiff < 25.0
+        val coloredPixelRatio = if (pixelCount > 0) clearlyColoredPixels.toFloat() / pixelCount else 0f
+        // Prefer preserving uncertain/color pages over destructive B&W thresholding.
+        val isRecommendedBw = avgColorDiff < 12.0 && coloredPixelRatio < 0.015f
         val isWellLit = avgLuminance in 0.35..0.90
 
         ImageAnalysisResult(
@@ -351,8 +355,9 @@ object ImageProcessingService {
                 val aspectRatio = boxW.toFloat() / boxH.toFloat()
                 val hasMargins = minX > smallW * 0.01f && minY > smallH * 0.01f &&
                     maxX < smallW * 0.99f && maxY < smallH * 0.99f
-                if (fillRatio < 0.42f || frameRatio !in 0.12f..0.92f ||
-                    aspectRatio !in 0.32f..3.1f || !hasMargins
+                // Broad bounds alone admit elongated shoes and other non-document objects.
+                if (fillRatio < 0.58f || frameRatio !in 0.12f..0.92f ||
+                    aspectRatio !in 0.48f..2.05f || !hasMargins
                 ) continue
 
                 val component = queue.copyOf(tail)
@@ -381,7 +386,7 @@ object ImageProcessingService {
                     )
                 }
                 val containmentRatio = insideCount.toFloat() / component.size.toFloat()
-                if (containmentRatio < 0.72f) continue
+                if (containmentRatio < 0.88f) continue
 
                 val score = tail.toDouble() * fillRatio.toDouble() * containmentRatio.toDouble()
                 if (score > bestScore) {
@@ -629,10 +634,11 @@ object ImageProcessingService {
      */
     suspend fun processDocumentAdaptive(
         src: Bitmap,
-        preferredMode: String = "AUTO"
+        preferredMode: String = "AUTO",
+        alreadyCropped: Boolean = false
     ): Pair<Bitmap, Boolean> = withContext(Dispatchers.Default) {
-        // 1. Perspektiven-Zuschnitt (Auto-Crop) - Rotation entfernt für Performance
-        val cropped = autoCropDocument(src)
+        // Preserve explicit user-selected corners; don't run a second heuristic crop.
+        val cropped = if (alreadyCropped) src else autoCropDocument(src)
 
         val shouldUseColor = when (preferredMode.uppercase()) {
             "COLOR" -> true
@@ -644,11 +650,9 @@ object ImageProcessingService {
             }
         }
 
-        val processedBitmap = if (shouldUseColor) {
-            enhanceColor(cropped)
-        } else {
-            convertToOptimizedBw(cropped)
-        }
+        // Auto-enhancement can clip highlights and oversaturate stamps/logos.
+        // In COLOR mode preserve the source pixels; enhancement stays an explicit user choice.
+        val processedBitmap = if (shouldUseColor) cropped else convertToOptimizedBw(cropped)
 
         // Speicherbereinigung
         if (cropped != src && cropped != processedBitmap) runCatching { cropped.recycle() }
