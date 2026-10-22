@@ -49,6 +49,17 @@ import kotlin.math.roundToInt
  * 3. Nur ein Bestätigungs-Button ("Dokument übernehmen")
  * 4. FAB-Button zur individuellen Anpassung oder Deaktivierung der Dokumenten-Optimierung
  */
+private fun isValidCornerQuadrilateral(points: List<PointF>): Boolean {
+    if (points.size != 4) return false
+    val crosses = points.indices.map { index ->
+        val a = points[index]
+        val b = points[(index + 1) % points.size]
+        val c = points[(index + 2) % points.size]
+        (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+    }
+    return crosses.all { it > 0.01f } || crosses.all { it < -0.01f }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DocumentReviewAndCropScreen(
@@ -90,6 +101,7 @@ fun DocumentReviewAndCropScreen(
     var warpedOptimizedBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var optimizedFullBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isUpdatingBitmaps by remember { mutableStateOf(false) }
+    var bitmapUpdateVersion by remember { mutableIntStateOf(0) }
 
     // Vollbild-Optimierung für die Live-Gegenüberstellung (Original vs. Optimiert)
     LaunchedEffect(
@@ -98,23 +110,41 @@ fun DocumentReviewAndCropScreen(
         contrastValue,
         brightnessOffsetValue
     ) {
-        val fullOpt = withContext(Dispatchers.Default) {
-            if (isOptimizationEnabled) {
-                ImageProcessingService.applyCustomDocumentOptimization(
-                    bitmap = capturedBitmap,
-                    config = ImageProcessingService.DocumentOptimizationConfig(
-                        isEnabled = true,
-                        contrast = contrastValue,
-                        brightnessOffset = brightnessOffsetValue,
-                        cleanBackgroundWhite = true,
-                        rotationAngle = 0f
+        var candidateFull: Bitmap? = null
+        var previousFull: Bitmap? = null
+        try {
+            candidateFull = withContext(Dispatchers.Default) {
+                if (isOptimizationEnabled) {
+                    ImageProcessingService.applyCustomDocumentOptimization(
+                        bitmap = capturedBitmap,
+                        config = ImageProcessingService.DocumentOptimizationConfig(
+                            isEnabled = true,
+                            contrast = contrastValue,
+                            brightnessOffset = brightnessOffsetValue,
+                            cleanBackgroundWhite = true,
+                            rotationAngle = 0f
+                        )
                     )
-                )
-            } else {
-                null
+                } else {
+                    null
+                }
+            }
+            previousFull = optimizedFullBitmap
+            optimizedFullBitmap = candidateFull
+            candidateFull = null
+            withContext(NonCancellable) { kotlinx.coroutines.delay(48L) }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            android.util.Log.e("DocumentReviewCrop", "Vollbild-Vorschau konnte nicht aktualisiert werden", error)
+        } finally {
+            val currentFull = optimizedFullBitmap
+            listOfNotNull(previousFull, candidateFull).distinct().forEach { bitmap ->
+                if (bitmap !== currentFull && bitmap !== capturedBitmap && !bitmap.isRecycled) {
+                    runCatching { bitmap.recycle() }
+                }
             }
         }
-        optimizedFullBitmap = fullOpt
     }
 
     // Neuberechnung bei Eckpunkt- oder Einstellungsänderung
@@ -125,6 +155,8 @@ fun DocumentReviewAndCropScreen(
         brightnessOffsetValue,
         rotationAngle
     ) {
+        val thisUpdateVersion = bitmapUpdateVersion + 1
+        bitmapUpdateVersion = thisUpdateVersion
         isUpdatingBitmaps = true
         var candidateWarped: Bitmap? = null
         var candidateOptimized: Bitmap? = null
@@ -136,7 +168,9 @@ fun DocumentReviewAndCropScreen(
             candidateWarped = withContext(Dispatchers.Default) {
                 val cropped = ImageProcessingService.cropAndWarpPerspective(capturedBitmap, cornersInBitmap)
                 if (Math.abs(rotationAngle) > 0.1f) {
-                    ImageProcessingService.rotateBitmap(cropped, rotationAngle)
+                    val rotated = ImageProcessingService.rotateBitmap(cropped, rotationAngle)
+                    if (rotated !== cropped && !cropped.isRecycled) runCatching { cropped.recycle() }
+                    rotated
                 } else {
                     cropped
                 }
@@ -180,7 +214,7 @@ fun DocumentReviewAndCropScreen(
                         runCatching { bitmap.recycle() }
                     }
                 }
-            isUpdatingBitmaps = false
+            if (bitmapUpdateVersion == thisUpdateVersion) isUpdatingBitmaps = false
         }
     }
 
@@ -284,7 +318,7 @@ fun DocumentReviewAndCropScreen(
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 var initialTwoFingerDist: Float? = null
-                                val touchThresholdPx = with(density) { 48.dp.toPx() }
+                                val touchThresholdPx = with(density) { 64.dp.toPx() }
 
                                 fun currentBitmapToScreen(pt: PointF): Offset {
                                     val rect = latestDisplayedImageRect.value
@@ -372,7 +406,9 @@ fun DocumentReviewAndCropScreen(
                                                 val newBitmapPt = currentScreenToBitmap(change.position)
                                                 val updated = currentCorners.toMutableList()
                                                 updated[currentIndex] = newBitmapPt
-                                                cornersInBitmap = updated
+                                                if (isValidCornerQuadrilateral(updated)) {
+                                                    cornersInBitmap = updated
+                                                }
                                             } else if (isDraggingSplitter && rect.width > 0f) {
                                                 val relX = (change.position.x - rect.left) / rect.width
                                                 splitPosition = relX.coerceIn(0.05f, 0.95f)
@@ -786,6 +822,7 @@ fun DocumentReviewAndCropScreen(
                             }
                             onConfirmFinalDocument(finalToUse)
                         },
+                        enabled = !isUpdatingBitmaps,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF10B981),
                             contentColor = Color.White
@@ -796,14 +833,22 @@ fun DocumentReviewAndCropScreen(
                             .height(52.dp)
                             .testTag("btn_review_confirm_document")
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        if (isUpdatingBitmaps) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Dokument übernehmen",
+                            text = if (isUpdatingBitmaps) "Vorschau wird aktualisiert" else "Dokument übernehmen",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )

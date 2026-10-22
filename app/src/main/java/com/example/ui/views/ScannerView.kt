@@ -172,7 +172,7 @@ fun ScannerView(
     val isPhoneInWaage = tiltAngleDegrees <= 3.2f
 
     // Bildschärfe anhand echter Kanten im Kamera-Lumakanal (nicht aus Telefonbewegung schätzen).
-    val isSharpnessOptimal = frameAnalysis.sharpnessScore >= 18f
+    val isSharpnessOptimal = frameAnalysis.sharpnessScore >= 26f
 
     val isAutoMode = scannerSettings.scanMode == "AUTO"
 

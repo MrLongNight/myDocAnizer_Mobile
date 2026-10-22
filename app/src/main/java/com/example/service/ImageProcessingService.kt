@@ -255,12 +255,16 @@ object ImageProcessingService {
         ORIGINAL("Original")
     }
 
+    private data class BrightPaperRegion(
+        val bounds: Rect,
+        val corners: List<PointF>
+    )
+
     /**
-     * Detects a dominant paper-like bright component in a downscaled image.
-     * Separate bright objects (plant leaves, candle wax, lamps) are not unioned into one huge box.
-     * Rectangular corners are only an initial estimate; the review screen allows manual correction.
+     * Finds a connected paper-like component and estimates its actual four corners.
+     * The component must fill its inferred quadrilateral; round objects are rejected.
      */
-    private fun detectBrightPaperBounds(bitmap: Bitmap): Rect? {
+    private fun detectBrightPaperRegion(bitmap: Bitmap): BrightPaperRegion? {
         val width = bitmap.width
         val height = bitmap.height
         if (width < 160 || height < 160) return null
@@ -286,6 +290,7 @@ object ImageProcessingService {
             val queue = IntArray(total)
             var bestScore = 0.0
             var bestBounds: IntArray? = null
+            var bestCorners: List<PointF>? = null
             for (start in 0 until total) {
                 if (!bright[start] || visited[start]) continue
                 var head = 0
@@ -334,25 +339,112 @@ object ImageProcessingService {
                     aspectRatio !in 0.32f..3.1f || !hasMargins
                 ) continue
 
-                val score = tail.toDouble() * fillRatio.toDouble()
+                val component = queue.copyOf(tail)
+                val topLeftIndex = component.minByOrNull { (it % smallW) + (it / smallW) } ?: continue
+                val topRightIndex = component.maxByOrNull { (it % smallW) - (it / smallW) } ?: continue
+                val bottomRightIndex = component.maxByOrNull { (it % smallW) + (it / smallW) } ?: continue
+                val bottomLeftIndex = component.minByOrNull { (it % smallW) - (it / smallW) } ?: continue
+                fun pointFor(index: Int) = PointF(
+                    (index % smallW).toFloat() + 0.5f,
+                    (index / smallW).toFloat() + 0.5f
+                )
+                val candidateCorners = listOf(
+                    pointFor(topLeftIndex),
+                    pointFor(topRightIndex),
+                    pointFor(bottomRightIndex),
+                    pointFor(bottomLeftIndex)
+                )
+                if (!isValidConvexQuadrilateral(candidateCorners)) continue
+
+                // Circular objects have many bright pixels outside their inferred diamond.
+                val insideCount = component.count { index ->
+                    isPointInsideConvexQuadrilateral(
+                        (index % smallW).toFloat() + 0.5f,
+                        (index / smallW).toFloat() + 0.5f,
+                        candidateCorners
+                    )
+                }
+                val containmentRatio = insideCount.toFloat() / component.size.toFloat()
+                if (containmentRatio < 0.72f) continue
+
+                val score = tail.toDouble() * fillRatio.toDouble() * containmentRatio.toDouble()
                 if (score > bestScore) {
                     bestScore = score
                     bestBounds = intArrayOf(minX, minY, maxX + 1, maxY + 1)
+                    bestCorners = candidateCorners
                 }
             }
 
             val bounds = bestBounds ?: return null
+            val corners = bestCorners ?: return null
             val sx = width.toFloat() / smallW.toFloat()
             val sy = height.toFloat() / smallH.toFloat()
-            return Rect(
+            val scaledBounds = Rect(
                 (bounds[0] * sx).toInt().coerceIn(0, width - 1),
                 (bounds[1] * sy).toInt().coerceIn(0, height - 1),
                 ((bounds[2] * sx).roundToInt()).coerceIn(1, width),
                 ((bounds[3] * sy).roundToInt()).coerceIn(1, height)
-            ).takeIf { it.width() > 0 && it.height() > 0 }
+            )
+            val scaledCorners = corners.map { corner ->
+                PointF(
+                    (corner.x * sx).coerceIn(0f, width.toFloat()),
+                    (corner.y * sy).coerceIn(0f, height.toFloat())
+                )
+            }
+            val centerX = scaledCorners.map { it.x }.average().toFloat()
+            val centerY = scaledCorners.map { it.y }.average().toFloat()
+            val expandedCorners = scaledCorners.map { corner ->
+                PointF(
+                    (centerX + (corner.x - centerX) * 1.025f).coerceIn(0f, width.toFloat()),
+                    (centerY + (corner.y - centerY) * 1.025f).coerceIn(0f, height.toFloat())
+                )
+            }
+            if (!isValidConvexQuadrilateral(expandedCorners) ||
+                quadrilateralArea(expandedCorners) < width.toFloat() * height.toFloat() * 0.08f
+            ) return null
+            return BrightPaperRegion(scaledBounds, expandedCorners)
         } finally {
             if (small !== bitmap) small.recycle()
         }
+    }
+
+    // Keep the rectangle API for non-perspective auto-cropping callers.
+    private fun detectBrightPaperBounds(bitmap: Bitmap): Rect? = detectBrightPaperRegion(bitmap)?.bounds
+
+    private fun isValidConvexQuadrilateral(points: List<PointF>): Boolean {
+        if (points.size != 4) return false
+        val crosses = points.indices.map { index ->
+            val a = points[index]
+            val b = points[(index + 1) % points.size]
+            val c = points[(index + 2) % points.size]
+            (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x)
+        }
+        return crosses.all { it > 0.01f } || crosses.all { it < -0.01f }
+    }
+
+    private fun isPointInsideConvexQuadrilateral(x: Float, y: Float, points: List<PointF>): Boolean {
+        var hasPositive = false
+        var hasNegative = false
+        for (index in points.indices) {
+            val a = points[index]
+            val b = points[(index + 1) % points.size]
+            val cross = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x)
+            if (cross > 0.01f) hasPositive = true
+            if (cross < -0.01f) hasNegative = true
+            if (hasPositive && hasNegative) return false
+        }
+        return true
+    }
+
+    private fun quadrilateralArea(points: List<PointF>): Float {
+        if (points.size != 4) return 0f
+        var doubleArea = 0f
+        for (index in points.indices) {
+            val a = points[index]
+            val b = points[(index + 1) % points.size]
+            doubleArea += a.x * b.y - b.x * a.y
+        }
+        return kotlin.math.abs(doubleArea) / 2f
     }
 
     /**
@@ -362,19 +454,22 @@ object ImageProcessingService {
     fun detectDocumentCorners(bitmap: Bitmap): List<PointF> {
         val width = bitmap.width.toFloat()
         val height = bitmap.height.toFloat()
-        val bounds = try { detectBrightPaperBounds(ensureSoftwareBitmap(bitmap)) } catch (_: Throwable) { null }
-        if (bounds == null) return getDefaultCorners(width, height)
-
-        val padX = (width * 0.012f).coerceAtLeast(4f)
-        val padY = (height * 0.012f).coerceAtLeast(4f)
-        val left = (bounds.left.toFloat() - padX).coerceIn(0f, width)
-        val top = (bounds.top.toFloat() - padY).coerceIn(0f, height)
-        val right = (bounds.right.toFloat() + padX).coerceIn(0f, width)
-        val bottom = (bounds.bottom.toFloat() + padY).coerceIn(0f, height)
-        if (right - left < width * 0.3f || bottom - top < height * 0.3f) {
+        val workingBitmap = try { ensureSoftwareBitmap(bitmap) } catch (_: Throwable) { bitmap }
+        val region = try {
+            detectBrightPaperRegion(workingBitmap)
+        } catch (_: Throwable) {
+            null
+        } finally {
+            if (workingBitmap !== bitmap && !workingBitmap.isRecycled) {
+                runCatching { workingBitmap.recycle() }
+            }
+        }
+        if (region == null) return getDefaultCorners(width, height)
+        val bounds = region.bounds
+        if (bounds.width() < width * 0.3f || bounds.height() < height * 0.3f) {
             return getDefaultCorners(width, height)
         }
-        return listOf(PointF(left, top), PointF(right, top), PointF(right, bottom), PointF(left, bottom))
+        return region.corners
     }
 
     fun getDefaultCorners(width: Float, height: Float, marginFraction: Float = 0.08f): List<PointF> {

@@ -45,6 +45,46 @@ data class CameraFrameAnalysis(
     val sharpnessScore: Float = 0f
 )
 
+/**
+ * Rejects bright objects that only match by average luminance. A sheet should span
+ * most interior rows and columns, unlike a circular candle or scattered plant leaves.
+ */
+internal fun hasCoherentPaperGrid(lumaGrid: IntArray, gridSize: Int = 8, threshold: Int = 135): Boolean {
+    if (gridSize < 5 || lumaGrid.size != gridSize * gridSize) return false
+    val interiorSize = gridSize - 2
+    val requiredBrightCells = (interiorSize * 2 + 2) / 3
+    val requiredCoveredLines = (interiorSize * 4 + 4) / 5
+    var brightCells = 0
+    val interiorCells = interiorSize * interiorSize
+
+    for (row in 1 until gridSize - 1) {
+        for (column in 1 until gridSize - 1) {
+            if (lumaGrid[row * gridSize + column] >= threshold) brightCells++
+        }
+    }
+    if (brightCells.toFloat() / interiorCells.toFloat() < 0.72f) return false
+
+    var coveredRows = 0
+    for (row in 1 until gridSize - 1) {
+        var brightInRow = 0
+        for (column in 1 until gridSize - 1) {
+            if (lumaGrid[row * gridSize + column] >= threshold) brightInRow++
+        }
+        if (brightInRow >= requiredBrightCells) coveredRows++
+    }
+
+    var coveredColumns = 0
+    for (column in 1 until gridSize - 1) {
+        var brightInColumn = 0
+        for (row in 1 until gridSize - 1) {
+            if (lumaGrid[row * gridSize + column] >= threshold) brightInColumn++
+        }
+        if (brightInColumn >= requiredBrightCells) coveredColumns++
+    }
+
+    return coveredRows >= requiredCoveredLines && coveredColumns >= requiredCoveredLines
+}
+
 @Composable
 fun CameraPreview(
     modifier: Modifier = Modifier,
@@ -182,7 +222,7 @@ fun CameraPreview(
                                     var outerCount = 0
                                     val innerLumas = mutableListOf<Int>()
                                     val currentSamples = ByteArray(gridSize * gridSize)
-                                    var sampleIdx = 0
+                                    val lumaGrid = IntArray(gridSize * gridSize)
 
                                     for (gy in 1..gridSize) {
                                         val y = (height * gy / (gridSize + 1)).coerceIn(0, height - 1)
@@ -193,7 +233,9 @@ fun CameraPreview(
                                             val index = (y * rowStride) + (x * pixelStride)
                                             if (index in 0 until buffer.capacity()) {
                                                 val luma = buffer.get(index).toInt() and 0xFF
-                                                currentSamples[sampleIdx++] = luma.toByte()
+                                                val sampleIndex = (gy - 1) * gridSize + (gx - 1)
+                                                lumaGrid[sampleIndex] = luma
+                                                currentSamples[sampleIndex] = luma.toByte()
 
                                                 if (isEdgeX || isEdgeY) {
                                                     outerSum += luma
@@ -274,13 +316,14 @@ fun CameraPreview(
                                     // Papier muss den Innenbereich mehrheitlich aufhellen und zum Außenrand passen.
                                     val hasPaperContrast =
                                         (avgInnerLuma - avgOuterLuma) >= 10f &&
-                                        brightInnerRatio >= 0.68f &&
-                                        innerStdDev in 4f..58f
+                                        brightInnerRatio >= 0.72f &&
+                                        innerStdDev in 4f..58f &&
+                                        hasCoherentPaperGrid(lumaGrid, gridSize)
                                     val isDoc =
                                         avgInnerLuma in 125f..245f &&
                                         hasPaperContrast &&
                                         motionDiff < 6.0f &&
-                                        sharpnessScore >= 18f
+                                        sharpnessScore >= 26f
                                     mainHandler.post {
                                         onFrameAnalysis(
                                             CameraFrameAnalysis(
