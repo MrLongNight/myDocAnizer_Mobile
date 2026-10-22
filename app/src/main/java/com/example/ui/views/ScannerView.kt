@@ -216,14 +216,14 @@ fun ScannerView(
 
     // Funktion zum Ausführen des eigentlichen Bildabzugs
     val executeCapture: () -> Unit = {
+        // Clear the previous save confirmation before a new capture starts.
+        viewModel.clearLastBulkSavedDoc()
         hasCapturedCurrentDocument = true
         motionDetectedAfterCapture = false
         autoDetectProgress = 0f
 
         val capture = imageCaptureInstance
         val onBmpReady: (android.graphics.Bitmap) -> Unit = { bmp ->
-            // A previous scan's success banner must never carry over to this new capture.
-            viewModel.clearLastBulkSavedDoc()
             hasCapturedCurrentDocument = true
             motionDetectedAfterCapture = false
             autoDetectProgress = 0f
