@@ -1218,11 +1218,12 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isProcessingScan = MutableStateFlow(false)
     val isProcessingScan: StateFlow<Boolean> = _isProcessingScan.asStateFlow()
 
-    // Explicit scan workflow status; Saved is reached only after document persistence.
-    private val _scanWorkflowState = MutableStateFlow("Idle")
-    val scanWorkflowState: StateFlow<String> = _scanWorkflowState.asStateFlow()
-    private val _scanWorkflowError = MutableStateFlow<String?>(null)
-    val scanWorkflowError: StateFlow<String?> = _scanWorkflowError.asStateFlow()
+    // Shared state machine: Saved is entered only after PDF + database persistence.
+    private val scanWorkflow = ScanWorkflowStateMachine()
+    val scanWorkflowState: StateFlow<String> = scanWorkflow.phase
+        .map { it.name }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ScanWorkflowPhase.Idle.name)
+    val scanWorkflowError: StateFlow<String?> = scanWorkflow.error
     // Retains the selected rule and bitmap for an explicit retry after save failure.
     private var scanRetryAction: (() -> Unit)? = null
     private var scanDiscardAction: (() -> Unit)? = null
@@ -1235,21 +1236,10 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         scanDiscardAction?.invoke()
         scanDiscardAction = null
         scanRetryAction = null
-        _scanWorkflowError.value = null
-        _scanWorkflowState.value = "Idle"
+        scanWorkflow.reset()
     }
 
-    private fun scanFailureMessage(error: Throwable, phase: String): String = when {
-        error.message?.contains("Vault is locked", ignoreCase = true) == true ->
-            "Der Tresor ist gesperrt. Bitte entsperren und danach erneut versuchen."
-        error is OutOfMemoryError ->
-            "Zu wenig Arbeitsspeicher während $phase. Der Scan bleibt erhalten; bitte andere Apps schließen und erneut versuchen."
-        error is kotlinx.coroutines.TimeoutCancellationException && phase == "OCR" ->
-            "Die Texterkennung hat das Zeitlimit von 12 Sekunden überschritten. Der Scan bleibt erhalten; bitte erneut versuchen."
-        error is kotlinx.coroutines.TimeoutCancellationException ->
-            "Das Speichern hat länger als 60 Sekunden gedauert. Der Scan bleibt erhalten; bitte erneut versuchen."
-        else -> "$phase fehlgeschlagen: ${error.message ?: error.javaClass.simpleName}. Der Scan bleibt erhalten."
-    }
+
 
     private val _filter = MutableStateFlow(ExplorerFilter())
     val filter: StateFlow<ExplorerFilter> = _filter.asStateFlow()
@@ -1785,8 +1775,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         scanDiscardAction = { clearPages() }
         viewModelScope.launch(Dispatchers.IO) {
             _isProcessingScan.value = true
-            _scanWorkflowState.value = "Saving"
-            _scanWorkflowError.value = null
+            scanWorkflow.transition(ScanWorkflowPhase.Saving)
             var saveCompleted = false
             var processedPages: List<Bitmap> = emptyList()
             val rawPages = _capturedPages.value
@@ -1897,8 +1886,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 val created = entity.copy(id = newId)
 
                 saveCompleted = true
-                _scanWorkflowState.value = "Saved"
-                _scanWorkflowError.value = null
+                scanWorkflow.transition(ScanWorkflowPhase.Saved)
                 scanRetryAction = null
                 scanDiscardAction = null
                 _lastBulkSavedDoc.value = created
@@ -1909,8 +1897,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 }
             } catch (e: Throwable) {
-                _scanWorkflowState.value = "Failed"
-                _scanWorkflowError.value = scanFailureMessage(e, if (e is kotlinx.coroutines.TimeoutCancellationException) "Speichern" else "Mehrseitiges Speichern")
+                scanWorkflow.fail(ScanWorkflowStateMachine.failureMessage(e, "Mehrseitiges Speichern"))
                 Log.e("DocAnizerViewModel", "Fehler bei finishAndSaveMultiPageScan: ${e.message}", e)
             } finally {
                 processedPages.distinct().forEach { page ->
@@ -2001,8 +1988,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         }
         viewModelScope.launch(Dispatchers.IO) {
             _isProcessingScan.value = true
-            _scanWorkflowState.value = "Analyzing"
-            _scanWorkflowError.value = null
+            scanWorkflow.transition(ScanWorkflowPhase.Analyzing)
             try {
                 val preferredMode = if (scannerSettings.value.scanMode == "AUTO") {
                     pdfSettings.value.defaultColorMode
@@ -2042,7 +2028,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 if (processed !== bitmap) runCatching { bitmap.recycle() }
                 scanRetryAction = null
                 scanDiscardAction = null
-                _scanWorkflowState.value = "AwaitingRuleDecision"
+                scanWorkflow.transition(ScanWorkflowPhase.AwaitingRuleDecision)
                 requestScanRuleConfirmation(
                     bitmap = processed,
                     ocrText = ocrText,
@@ -2051,8 +2037,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     onComplete = onComplete
                 )
             } catch (e: Throwable) {
-                _scanWorkflowState.value = "Failed"
-                _scanWorkflowError.value = scanFailureMessage(e, if (e is kotlinx.coroutines.TimeoutCancellationException) "OCR" else "Analyse")
+                scanWorkflow.fail(ScanWorkflowStateMachine.failureMessage(e, if (e is kotlinx.coroutines.TimeoutCancellationException) "OCR" else "Analyse"))
                 Log.e("DocAnizerViewModel", "Fehler in saveSinglePageBulk: ${e.message}", e)
             } finally {
                 _isProcessingScan.value = false
@@ -2257,8 +2242,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         }
         viewModelScope.launch(Dispatchers.IO) {
             _isProcessingScan.value = true
-            _scanWorkflowState.value = "Analyzing"
-            _scanWorkflowError.value = null
+            scanWorkflow.transition(ScanWorkflowPhase.Analyzing)
             try {
                 val ocrText = withTimeout(12_000L) {
                     OcrService.recognizeText(finalBitmap, "", "")
@@ -2271,7 +2255,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 val matchingRules = ruleRepo.matchingRules(ocrText)
                 scanRetryAction = null
                 scanDiscardAction = null
-                _scanWorkflowState.value = "AwaitingRuleDecision"
+                scanWorkflow.transition(ScanWorkflowPhase.AwaitingRuleDecision)
                 requestScanRuleConfirmation(
                     bitmap = finalBitmap,
                     ocrText = ocrText,
@@ -2280,8 +2264,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                     onComplete = onComplete
                 )
             } catch (e: Throwable) {
-                _scanWorkflowState.value = "Failed"
-                _scanWorkflowError.value = scanFailureMessage(e, "OCR")
+                scanWorkflow.fail(ScanWorkflowStateMachine.failureMessage(e, "OCR"))
                 Log.e("DocAnizerViewModel", "Fehler bei finalizeScanWithOptimizedBitmap: ${e.message}", e)
             } finally {
                 _isProcessingScan.value = false
@@ -2302,8 +2285,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         }
         viewModelScope.launch(Dispatchers.IO) {
             _isProcessingScan.value = true
-            _scanWorkflowState.value = "Saving"
-            _scanWorkflowError.value = null
+            scanWorkflow.transition(ScanWorkflowPhase.Saving)
             var saveCompleted = false
             try {
                 withTimeout(60_000L) {
@@ -2459,8 +2441,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
                 saveCompleted = true
-                _scanWorkflowState.value = "Saved"
-                _scanWorkflowError.value = null
+                scanWorkflow.transition(ScanWorkflowPhase.Saved)
                 scanRetryAction = null
                 _lastBulkSavedDoc.value = created
                 dmsManager.clearPendingRuleSuggestion()
@@ -2470,17 +2451,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 }
             } catch (e: Throwable) {
-                val message = when {
-                    e.message?.contains("Vault is locked", ignoreCase = true) == true ->
-                        "Der Tresor ist gesperrt. Bitte entsperren und danach „Erneut versuchen“ wählen."
-                    e is OutOfMemoryError ->
-                        "Zu wenig Arbeitsspeicher beim Speichern. Der Scan bleibt erhalten; bitte andere Apps schließen und erneut versuchen."
-                    e is kotlinx.coroutines.TimeoutCancellationException ->
-                        "Das Speichern hat länger als 60 Sekunden gedauert. Der Scan bleibt erhalten; bitte erneut versuchen."
-                    else -> "Speichern fehlgeschlagen: ${e.message ?: e.javaClass.simpleName}. Der Scan bleibt erhalten."
-                }
-                _scanWorkflowState.value = "Failed"
-                _scanWorkflowError.value = message
+                scanWorkflow.fail(ScanWorkflowStateMachine.failureMessage(e, "Speichern"))
                 Log.e("DocAnizerViewModel", "Fehler in saveProcessedBitmapWithRule: ${e.message}", e)
             } finally {
                 if (saveCompleted) runCatching { bitmap.recycle() }
