@@ -1336,6 +1336,8 @@ data class ModelBenchmarkResult(
     val overallScore: Int = 0,
     val tokensPerSecond: Float = 0f,
     val latencyMs: Long = 0L,
+    val promptEvalTimeMs: Long = 0L,
+    val generationTimeMs: Long = 0L,
     val generatedTokens: Int = 0,
     val extractedSender: String = "",
     val extractedDocType: String = "",
