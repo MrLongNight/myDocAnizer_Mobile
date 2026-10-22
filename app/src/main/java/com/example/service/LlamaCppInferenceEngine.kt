@@ -117,37 +117,39 @@ class LlamaCppInferenceEngine(private val context: Context) {
         }
 
         /**
-         * Neuer Basis-System-Prompt mit Chain-of-Thought (_reasoning ZUERST) und strikter JSON-Schablone.
+         * Kompakter Extraktionsprompt: keine Chain-of-Thought-Ausgabe und keine erfundenen Feldwerte.
          */
-        const val BASE_SYSTEM_PROMPT: String = """Du bist ein präzises DMS-Extraktionsmodell. Analysiere den OCR-Text und extrahiere die Entitäten strikt im vorgegebenen JSON-Format.
+        const val BASE_SYSTEM_PROMPT: String = """Du extrahierst Dokumentdaten für myDocAnizer. Nutze ausschließlich Informationen, die im OCR-Text eindeutig stehen.
 Regeln:
-1. Erfinde keine Daten. Wenn ein Wert fehlt, nutze null.
-2. Achte extrem genau auf den Kontext von Daten (z. B. ein Geburtsdatum neben 'geb.' ist niemals eine Fälligkeit!).
-3. Erfinde unter 'globale_zusatzfelder' sinnvolle, ordnerübergreifende Schlüssel-Wert-Paare (wie 'vertragsnummer', 'zaehlernummer', 'faelligkeit'), um das Dokument maximal filterbar zu machen.
+1. Erfinde niemals Werte. Fehlende oder unsichere Werte sind null bzw. werden ausgelassen.
+2. Unterscheide Datumsarten anhand ihrer Beschriftung. Ein Geburtsdatum ist keine Fälligkeit.
+3. 'globale_zusatzfelder' darf NUR Felder mit einem im OCR-Text belegten Wert enthalten. Erfinde keine Schlüssel-Wert-Paare. Schlüssel kurz und stabil benennen.
+4. '_reasoning' ist eine knappe Ergebnisbegründung mit höchstens einem Satz, keine ausführliche Gedankenkette.
+5. Antworte ausschließlich mit gültigem JSON, ohne Markdown oder Text davor/danach.
 
-Antworte AUSSCHLIESSLICH mit diesem exakten JSON-Schema:
+JSON-Schema:
 {
-  "_reasoning": "Kurzer Satz: Warum hast du diesen Absender und Dokumententyp gewählt?",
-  "absender": "Firma oder Aussteller",
-  "dokumententyp": "z.B. Rechnung, Vertrag, Überweisung",
-  "match_keywords": ["keyword1", "keyword2", "keyword3"],
-  "kategorie_vorschlag": "Hauptkategorie",
+  "_reasoning": "Kurze Begründung",
+  "absender": "Firma oder Aussteller oder null",
+  "dokumententyp": "Dokumenttyp oder null",
+  "match_keywords": ["bis zu drei OCR-belegte Schlüsselwörter"],
+  "kategorie_vorschlag": "Hauptkategorie oder null",
   "globale_zusatzfelder": {
-    "dynamisches_feld_1": "wert",
-    "dynamisches_feld_2": "wert"
+    "feldname": "nur ein tatsächlich erkannter Wert"
   }
 }"""
 
         /**
-         * System-Prompt für den schnellen First Run (Team 1: Poststelle & Eingangstriage).
-         * Konzentriert sich nur auf Absender, Typ, Kategorie und Schlüsselwörter.
+         * System-Prompt für den schnellen First Run. Kompakt und ohne ausführliche Reasoning-Ausgabe.
          */
         const val TRIAGE_SYSTEM_PROMPT: String = """Du bist der Leiter der Poststelle & Eingangstriage (Team 1) für die App myDocAnizer.
 Deine Aufgabe: Blitzschnelle Ersterfassung des Dokuments anhand der Kopfzeilen und Schlüsselbereiche.
 Regeln:
-1. Erfinde keine Daten. Wenn ein Wert fehlt oder unklar ist, nutze null.
-2. Identifiziere primär: Absender (Firma/Behörde/Aussteller), Dokumententyp (Rechnung, Vertrag, Kassenbeleg, Gehalt, Bescheid, Brief) und die passende Hauptkategorie (Finanzen, Verträge, Steuern, Post & Dokumente, Privat).
-3. Extrahiere bis zu 3 prägnante Erkennungswörter (match_keywords).
+1. Nutze nur eindeutig im OCR-Text belegte Informationen. Erfinde keine Werte; fehlende Werte sind null.
+2. Identifiziere Absender, Dokumententyp und Hauptkategorie.
+3. Extrahiere bis zu 3 Schlüsselwörter, die tatsächlich im OCR-Text vorkommen.
+4. '_reasoning' ist höchstens ein kurzer Satz, keine Gedankenkette.
+5. Antworte nur mit gültigem JSON.
 
 Antworte AUSSCHLIESSLICH mit diesem exakten JSON-Schema:
 {
@@ -185,8 +187,9 @@ ws ::= [ \t\n\r]*
 Analysiere den OCR-Text und extrahiere Schlüsseldaten strikt als kompaktes JSON.
 
 REGELN FÜR KLEINE MODELLE:
-1. '_reasoning': Maximal 1 kurzer Satz zur Begründung.
-2. 'globale_zusatzfelder': Nutze AUSSCHLIESSLICH passende Schlüssel aus dieser Liste:
+1. '_reasoning': Maximal 1 kurzer Ergebnissatz, keine Gedankenkette.
+2. Erfinde niemals Werte. Nutze nur Werte, die eindeutig im OCR-Text stehen; sonst lasse das Feld weg oder nutze null.
+3. 'globale_zusatzfelder': Nutze AUSSCHLIESSLICH passende Schlüssel aus dieser Liste und fülle sie nur mit belegten OCR-Werten:
    [ $availableFields ]
 3. Formate: Beträge mit Währung (z.B. "49,90 €"), Datumsangaben als "DD.MM.YYYY".
 4. Erfinde keine Daten; wenn ein Wert nicht im Text steht, lasse das Feld weg.
