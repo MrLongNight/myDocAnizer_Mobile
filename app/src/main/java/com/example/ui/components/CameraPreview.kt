@@ -143,6 +143,7 @@ fun CameraPreview(
     val analysisExecutor = remember { java.util.concurrent.Executors.newSingleThreadExecutor() }
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     val previousSamplesRef = remember { arrayOfNulls<ByteArray>(1) }
+    val lastAutoFocusAt = remember { longArrayOf(0L) }
 
     DisposableEffect(lifecycleOwner) {
         onDispose {
@@ -303,6 +304,29 @@ fun CameraPreview(
                                         laplacianSum.toFloat() / laplacianCount.toFloat()
                                     } else 0f
                                     val sharpnessScore = (averageLaplacian / 12f * 100f).coerceIn(0f, 100f)
+
+                                    // Refocus when the document area is still soft; throttle AF
+                                    // requests so they do not restart on every camera frame.
+                                    val focusNow = android.os.SystemClock.elapsedRealtime()
+                                    if (sharpnessScore < 30f && focusNow - lastAutoFocusAt[0] > 1500L) {
+                                        lastAutoFocusAt[0] = focusNow
+                                        mainHandler.post {
+                                            try {
+                                                if (previewView.width > 0 && previewView.height > 0) {
+                                                    val point = previewView.meteringPointFactory.createPoint(
+                                                        previewView.width / 2f, previewView.height / 2f
+                                                    )
+                                                    val action = androidx.camera.core.FocusMeteringAction.Builder(
+                                                        point,
+                                                        androidx.camera.core.FocusMeteringAction.FLAG_AF or androidx.camera.core.FocusMeteringAction.FLAG_AE
+                                                    ).build()
+                                                    cameraControl?.startFocusAndMetering(action)
+                                                }
+                                            } catch (_: Exception) {
+                                                // Camera may be detaching during navigation.
+                                            }
+                                        }
+                                    }
 
                                     // Bewegung / Blattwechsel ermitteln
                                     val prev = previousSamplesRef[0]
