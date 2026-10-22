@@ -66,11 +66,23 @@ import com.example.ui.views.scanner.MiniSpiritLevel
 import com.example.ui.views.scanner.ScannerCameraPreviewPane
 import com.example.ui.views.scanner.ScannerPageReviewPane
 import java.util.Locale
+import kotlin.math.sqrt
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
 @OptIn(ExperimentalMaterial3Api::class)
+private fun quadMovedBeyondThreshold(reference: List<android.graphics.PointF>?, current: List<android.graphics.PointF>?): Boolean {
+    if (reference == null || reference.size != 4 || current == null || current.size != 4) return false
+    val meanCornerShift = reference.indices.map { i ->
+        val dx = reference[i].x - current[i].x
+        val dy = reference[i].y - current[i].y
+        sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+    }.average().toFloat()
+    // Normalized coordinates: image diagonal is sqrt(2), so 15% is about 0.212.
+    return meanCornerShift > 0.212f
+}
+
 @Composable
 fun ScannerView(
     viewModel: DocAnizerViewModel,
@@ -131,6 +143,10 @@ fun ScannerView(
     var hasCapturedCurrentDocument by remember { mutableStateOf(false) }
     var motionDetectedAfterCapture by remember { mutableStateOf(false) }
     var autoDetectProgress by remember { mutableStateOf(0f) }
+    var stableSinceMs by remember { mutableLongStateOf(0L) }
+    var focusRequestToken by remember { mutableIntStateOf(0) }
+    var autofocusRequestedForStableDocument by remember { mutableStateOf(false) }
+    var capturedQuadAtScan by remember { mutableStateOf<List<android.graphics.PointF>?>(null) }
 
     // Sensoren für Scan-Qualitätstools (Wasserwaage, Schärfe, Kontrast, Ausleuchtung)
     var sensorTiltX by remember { mutableStateOf(0f) }
@@ -172,8 +188,17 @@ fun ScannerView(
     val tiltAngleDegrees = (atan2(xyMagnitude.toDouble(), abs(sensorTiltZ).toDouble()) * (180.0 / Math.PI)).toFloat()
     val isPhoneInWaage = tiltAngleDegrees <= 3.2f
 
-    // Bildschärfe anhand echter Kanten im Kamera-Lumakanal (nicht aus Telefonbewegung schätzen).
+    // Schärfe ist nur ein weicher Qualitätsindikator: bei längerer Stabilität folgt ein AF-Versuch.
     val isSharpnessOptimal = frameAnalysis.sharpnessScore >= 26f
+
+    LaunchedEffect(frameAnalysis.isDocumentDetected, frameAnalysis.isDocumentStable) {
+        if (frameAnalysis.isDocumentDetected && frameAnalysis.isDocumentStable) {
+            if (stableSinceMs == 0L) stableSinceMs = android.os.SystemClock.elapsedRealtime()
+        } else {
+            stableSinceMs = 0L
+            if (!frameAnalysis.isDocumentDetected) autofocusRequestedForStableDocument = false
+        }
+    }
 
     val isAutoMode = scannerSettings.scanMode == "AUTO"
 
@@ -341,8 +366,7 @@ fun ScannerView(
         }
     }
 
-    // 2. Automatischer Scan-Ablauf:
-    // Löst zügig aus, sobald ein Dokument erkannt und ruhig/scharf im Bild ist (kein 5s langes Stillhalten erforderlich!)
+    // 2. Automatischer Scan-Ablauf: Lock + Stabilität sind Pflicht, Wasserwaage/Schärfe sind weich.
     LaunchedEffect(
         isPreScanActive,
         hasCapturedCurrentDocument,
@@ -352,10 +376,10 @@ fun ScannerView(
         scannerSettings.tripodAutoScan,
         scannerSettings.triggerMode,
         scannerSettings.toolsInfoOnly,
-        isPhoneInWaage,
-        isSharpnessOptimal,
+        tiltAngleDegrees,
         frameAnalysis.isDocumentDetected,
         frameAnalysis.isDocumentStable,
+        frameAnalysis.averageLuminance,
         capturedRawBitmap,
         pendingRuleSuggestion
     ) {
@@ -363,23 +387,38 @@ fun ScannerView(
             (scannerSettings.tripodAutoScan || scannerSettings.triggerMode == "AUTO_DETECT")
 
         if (isTripodOrAuto && !isPreScanActive && !hasCapturedCurrentDocument && !isProcessing && !isCountdownRunning && capturedRawBitmap == null && pendingRuleSuggestion == null) {
-            // Keep the settle window alive only while all quality checks remain valid.
-            // collectLatest cancels the delay when the readiness predicate flips false.
             snapshotFlow {
                 frameAnalysis.isDocumentDetected &&
                     frameAnalysis.isDocumentStable &&
-                    isPhoneInWaage &&
-                    isSharpnessOptimal &&
-                    frameAnalysis.motionScore < 4.5f &&
-                    frameAnalysis.averageLuminance in 125f..245f
+                    (!scannerSettings.tripodAutoScan || tiltAngleDegrees <= 8f) &&
+                    frameAnalysis.averageLuminance >= 50f
             }.collectLatest { isReady ->
                 if (isReady) {
                     autoDetectProgress = 0.5f
                     kotlinx.coroutines.delay(650L)
-                    autoDetectProgress = 1.0f
-                    executeCapture()
-                    hasCapturedCurrentDocument = true
-                    motionDetectedAfterCapture = false
+                    if (frameAnalysis.isDocumentDetected && frameAnalysis.isDocumentStable) {
+                        if (frameAnalysis.sharpnessScore < 26f) {
+                            val since = stableSinceMs
+                            val stableFor = if (since > 0L) android.os.SystemClock.elapsedRealtime() - since else 0L
+                            if (stableFor < 1500L) kotlinx.coroutines.delay(1500L - stableFor)
+                            if (frameAnalysis.isDocumentDetected && frameAnalysis.isDocumentStable &&
+                                frameAnalysis.sharpnessScore < 26f && !autofocusRequestedForStableDocument
+                            ) {
+                                focusRequestToken += 1
+                                autofocusRequestedForStableDocument = true
+                                kotlinx.coroutines.delay(1000L)
+                            }
+                        }
+                        if (frameAnalysis.isDocumentDetected && frameAnalysis.isDocumentStable) {
+                            capturedQuadAtScan = frameAnalysis.documentQuad?.map {
+                                android.graphics.PointF(it.x, it.y)
+                            }
+                            autoDetectProgress = 1.0f
+                            executeCapture()
+                            hasCapturedCurrentDocument = true
+                            motionDetectedAfterCapture = false
+                        }
+                    }
                     autoDetectProgress = 0f
                 } else {
                     autoDetectProgress = 0f
@@ -396,8 +435,6 @@ fun ScannerView(
     LaunchedEffect(
         hasCapturedCurrentDocument,
         scannerSettings.postScanDelaySeconds,
-        frameAnalysis.motionScore,
-        frameAnalysis.isDocumentDetected,
         isCameraHardwareAvailable
     ) {
         if (hasCapturedCurrentDocument) {
@@ -411,13 +448,21 @@ fun ScannerView(
             } else {
                 postScanSecondsRemaining = 0
             }
+            if (isCameraHardwareAvailable && postSec == 0) kotlinx.coroutines.delay(300L)
 
-            // Bei Hardware-Kamera und 0s Pause: kurzes Entprellen für Blattwechsel
-            if (isCameraHardwareAvailable && postSec == 0) {
-                kotlinx.coroutines.delay(300L)
+            // Auto-Scan erst wieder freigeben, wenn das Blatt weg ist oder sich deutlich bewegt hat.
+            val capturedQuad = capturedQuadAtScan
+            if (capturedQuad != null) {
+                while (frameAnalysis.isDocumentDetected &&
+                    !quadMovedBeyondThreshold(capturedQuad, frameAnalysis.documentQuad)
+                ) {
+                    kotlinx.coroutines.delay(100L)
+                }
+                capturedQuadAtScan = null
             }
             hasCapturedCurrentDocument = false
             motionDetectedAfterCapture = false
+            autofocusRequestedForStableDocument = false
         } else {
             postScanSecondsRemaining = 0
         }
@@ -548,9 +593,11 @@ fun ScannerView(
         hasCapturedCurrentDocument = hasCapturedCurrentDocument,
         onResetCapturedDocument = {
             hasCapturedCurrentDocument = false
+            capturedQuadAtScan = null
             motionDetectedAfterCapture = false
         },
         autoDetectProgress = autoDetectProgress,
+        focusRequestToken = focusRequestToken,
         preScanSecondsRemaining = preScanSecondsRemaining,
         postScanSecondsRemaining = postScanSecondsRemaining,
         scannerSettings = scannerSettings,
