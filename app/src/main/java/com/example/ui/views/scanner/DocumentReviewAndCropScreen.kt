@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.service.ImageProcessingService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlin.math.hypot
 import kotlin.math.roundToInt
@@ -125,31 +126,62 @@ fun DocumentReviewAndCropScreen(
         rotationAngle
     ) {
         isUpdatingBitmaps = true
-        // Wait for a short pause in the drag before allocating multiple full-size bitmaps.
-        kotlinx.coroutines.delay(140L)
-        val warped = withContext(Dispatchers.Default) {
-            val cropped = ImageProcessingService.cropAndWarpPerspective(capturedBitmap, cornersInBitmap)
-            if (Math.abs(rotationAngle) > 0.1f) {
-                ImageProcessingService.rotateBitmap(cropped, rotationAngle)
-            } else {
-                cropped
+        var candidateWarped: Bitmap? = null
+        var candidateOptimized: Bitmap? = null
+        var previousWarped: Bitmap? = null
+        var previousOptimized: Bitmap? = null
+        try {
+            // Debounce drag updates: avoid allocating full-size bitmaps for tiny finger movements.
+            kotlinx.coroutines.delay(280L)
+            candidateWarped = withContext(Dispatchers.Default) {
+                val cropped = ImageProcessingService.cropAndWarpPerspective(capturedBitmap, cornersInBitmap)
+                if (Math.abs(rotationAngle) > 0.1f) {
+                    ImageProcessingService.rotateBitmap(cropped, rotationAngle)
+                } else {
+                    cropped
+                }
             }
-        }
-        val optimized = withContext(Dispatchers.Default) {
-            ImageProcessingService.applyCustomDocumentOptimization(
-                bitmap = warped,
-                config = ImageProcessingService.DocumentOptimizationConfig(
-                    isEnabled = isOptimizationEnabled,
-                    contrast = contrastValue,
-                    brightnessOffset = brightnessOffsetValue,
-                    cleanBackgroundWhite = true,
-                    rotationAngle = 0f
+            candidateOptimized = withContext(Dispatchers.Default) {
+                ImageProcessingService.applyCustomDocumentOptimization(
+                    bitmap = candidateWarped!!,
+                    config = ImageProcessingService.DocumentOptimizationConfig(
+                        isEnabled = isOptimizationEnabled,
+                        contrast = contrastValue,
+                        brightnessOffset = brightnessOffsetValue,
+                        cleanBackgroundWhite = true,
+                        rotationAngle = 0f
+                    )
                 )
-            )
+            }
+
+            previousWarped = warpedOriginalBitmap
+            previousOptimized = warpedOptimizedBitmap
+            warpedOriginalBitmap = candidateWarped
+            warpedOptimizedBitmap = candidateOptimized
+            candidateWarped = null
+            candidateOptimized = null
+
+            // Keep old bitmaps alive through a frame before releasing native memory.
+            withContext(NonCancellable) { kotlinx.coroutines.delay(48L) }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            android.util.Log.e("DocumentReviewCrop", "Vorschau konnte nicht aktualisiert werden", error)
+        } finally {
+            val currentWarped = warpedOriginalBitmap
+            val currentOptimized = warpedOptimizedBitmap
+            (listOfNotNull(previousWarped, previousOptimized).distinct() +
+                listOfNotNull(candidateWarped, candidateOptimized).distinct())
+                .distinct()
+                .forEach { bitmap ->
+                    if (bitmap !== currentWarped && bitmap !== currentOptimized &&
+                        bitmap !== capturedBitmap && !bitmap.isRecycled
+                    ) {
+                        runCatching { bitmap.recycle() }
+                    }
+                }
+            isUpdatingBitmaps = false
         }
-        warpedOriginalBitmap = warped
-        warpedOptimizedBitmap = optimized
-        isUpdatingBitmaps = false
     }
 
     val density = LocalDensity.current
