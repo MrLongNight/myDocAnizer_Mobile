@@ -688,7 +688,8 @@ fun ModelCardHorizontal(
                     }
                     if (bench.isMeasured) {
                         Text("• Qualität: ${bench.qualityScore}% (heuristische Testfall-Prüfung)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        Text("• Geschwindigkeit: ${bench.tokensPerSecond} TPS (Schätzung; ${bench.latencyMs} ms Laufzeit)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text("• Geschwindigkeit: ${bench.tokensPerSecond} TPS (gemessen; ${bench.latencyMs} ms Gesamtzeit)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text("• Tokens: ${bench.generatedTokens} · Prompt: ${bench.promptEvalTimeMs} ms · Generierung: ${bench.generationTimeMs} ms", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         Text("Benchmark nicht gemessen", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                     }
