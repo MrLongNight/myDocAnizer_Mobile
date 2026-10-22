@@ -184,6 +184,13 @@ class DocumentQuadDetector {
             open3x3(binary, w, h)
             val components = components(binary, w, h)
             for (component in components) {
+                // Check the bounding box too: morphology can erode a large
+                // rectangle enough that its filled-pixel ratio looks acceptable.
+                val boundsRatio = component.boundsArea.toFloat() / n
+                if (boundsRatio > DocumentDetectionConfig.MAX_COMPONENT_AREA_RATIO) {
+                    bestReject = "zu groß"
+                    continue
+                }
                 val ratio = component.area.toFloat() / n
                 if (ratio !in DocumentDetectionConfig.MIN_COMPONENT_AREA_RATIO..DocumentDetectionConfig.MAX_COMPONENT_AREA_RATIO) {
                     bestReject = if (ratio < DocumentDetectionConfig.MIN_COMPONENT_AREA_RATIO) "zu klein" else "zu groß"
