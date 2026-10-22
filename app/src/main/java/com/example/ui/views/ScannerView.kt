@@ -359,11 +359,11 @@ fun ScannerView(
             (scannerSettings.tripodAutoScan || scannerSettings.triggerMode == "AUTO_DETECT")
 
         if (isTripodOrAuto && !isPreScanActive && !hasCapturedCurrentDocument && !isProcessing && !isCountdownRunning) {
-            val isReady = frameAnalysis.isDocumentDetected && (scannerSettings.toolsInfoOnly || (isPhoneInWaage && isSharpnessOptimal))
+            val isReady = frameAnalysis.isDocumentDetected && (isPhoneInWaage && isSharpnessOptimal)
             if (isReady) {
                 autoDetectProgress = 0.5f
                 kotlinx.coroutines.delay(250L) // Kurze Stabilisierung für sauberen Fokus
-                val stillReady = frameAnalysis.isDocumentDetected && (scannerSettings.toolsInfoOnly || (isPhoneInWaage && isSharpnessOptimal))
+                val stillReady = frameAnalysis.isDocumentDetected && (isPhoneInWaage && isSharpnessOptimal)
                 if (stillReady) {
                     autoDetectProgress = 1.0f
                     executeCapture()
