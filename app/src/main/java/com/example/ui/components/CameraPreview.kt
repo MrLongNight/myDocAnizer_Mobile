@@ -55,7 +55,8 @@ data class CameraFrameAnalysis(
     val rotationDegrees: Int = 0,
     val sourceWidth: Int = 0,
     val sourceHeight: Int = 0,
-    val sourceCropRect: android.graphics.Rect? = null
+    val sourceCropRect: android.graphics.Rect? = null,
+    val previewQuad: List<android.graphics.PointF>? = null // normiert in PreviewView-Koordinaten nach Rotation und FILL_CENTER
 )
 
 private data class FrameQuality(val averageLuminance: Float, val sharpnessScore: Float)
@@ -118,13 +119,37 @@ private fun normalizedToPreviewPoint(x: Float, y: Float, rotationDegrees: Int): 
         else -> x to y
     }
 
+private fun mapQuadToPreview(
+    quad: List<android.graphics.PointF>?, rotationDegrees: Int,
+    sourceWidth: Int, sourceHeight: Int, previewWidth: Int, previewHeight: Int
+): List<android.graphics.PointF>? {
+    if (quad == null || quad.size != 4 || sourceWidth <= 0 || sourceHeight <= 0 || previewWidth <= 0 || previewHeight <= 0) return null
+    val rotation = ((rotationDegrees % 360) + 360) % 360
+    val rotatedAspect = if (rotation == 90 || rotation == 270) sourceHeight.toFloat() / sourceWidth else sourceWidth.toFloat() / sourceHeight
+    val previewAspect = previewWidth.toFloat() / previewHeight
+    return quad.map { point ->
+        val (rx, ry) = normalizedToPreviewPoint(point.x, point.y, rotation)
+        val mapped = if (rotatedAspect > previewAspect) {
+            val visibleWidth = (previewAspect / rotatedAspect).coerceIn(0f, 1f)
+            val cropLeft = (1f - visibleWidth) / 2f
+            ((rx - cropLeft) / visibleWidth) to ry
+        } else {
+            val visibleHeight = (rotatedAspect / previewAspect).coerceIn(0f, 1f)
+            val cropTop = (1f - visibleHeight) / 2f
+            rx to ((ry - cropTop) / visibleHeight)
+        }
+        android.graphics.PointF(mapped.first, mapped.second)
+    }
+}
+
 @Composable
 fun CameraPreview(
     modifier: Modifier = Modifier,
     flashOption: FlashOption = FlashOption.OFF,
     onFrameAnalysis: (CameraFrameAnalysis) -> Unit = {},
     onImageCaptureCreated: (ImageCapture) -> Unit = {},
-    onCameraAvailableChanged: (Boolean) -> Unit = {}
+    onCameraAvailableChanged: (Boolean) -> Unit = {},
+    focusRequestToken: Int = 0
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -149,8 +174,32 @@ fun CameraPreview(
     }
 
     var cameraControl by remember { mutableStateOf<androidx.camera.core.CameraControl?>(null) }
+    var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
+    var lastFocusPoint by remember { mutableStateOf(0.5f to 0.5f) }
     var isCameraHardwareAvailable by remember { mutableStateOf<Boolean?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(focusRequestToken, cameraControl) {
+        if (focusRequestToken > 0) {
+            val previewView = previewViewRef
+            val (x, y) = lastFocusPoint
+            if (previewView != null && previewView.width > 0 && previewView.height > 0) {
+                try {
+                    val point = previewView.meteringPointFactory.createPoint(
+                        (x * previewView.width).coerceIn(0f, previewView.width.toFloat()),
+                        (y * previewView.height).coerceIn(0f, previewView.height.toFloat())
+                    )
+                    val action = androidx.camera.core.FocusMeteringAction.Builder(
+                        point,
+                        androidx.camera.core.FocusMeteringAction.FLAG_AF or androidx.camera.core.FocusMeteringAction.FLAG_AE
+                    ).setAutoCancelDuration(3, java.util.concurrent.TimeUnit.SECONDS).build()
+                    cameraControl?.startFocusAndMetering(action)
+                } catch (_: Exception) {
+                    // Camera can detach while an automatic focus request is pending.
+                }
+            }
+        }
+    }
 
     LaunchedEffect(flashOption, cameraControl, imageCapture) {
         try {
@@ -217,6 +266,8 @@ fun CameraPreview(
                     }
                 }
 
+                previewViewRef = previewView
+
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                 cameraProviderFuture.addListener({
                     try {
@@ -264,10 +315,18 @@ fun CameraPreview(
                                     lastAutoFocusAt[0] = now
                                     val centerX = quad?.map { it.x }?.average()?.toFloat() ?: 0.5f
                                     val centerY = quad?.map { it.y }?.average()?.toFloat() ?: 0.5f
-                                    val (previewX, previewY) = normalizedToPreviewPoint(
-                                        centerX, centerY, imageProxy.imageInfo.rotationDegrees
+                                    val focusQuad = mapQuadToPreview(
+                                        quad?.map { android.graphics.PointF(it.x, it.y) },
+                                        imageProxy.imageInfo.rotationDegrees,
+                                        imageProxy.width, imageProxy.height,
+                                        previewView.width, previewView.height
                                     )
+                                    val focusCenter = focusQuad?.let { points ->
+                                        points.map { it.x }.average().toFloat() to points.map { it.y }.average().toFloat()
+                                    } ?: normalizedToPreviewPoint(centerX, centerY, imageProxy.imageInfo.rotationDegrees)
+                                    val (previewX, previewY) = focusCenter
                                     mainHandler.post {
+                                        lastFocusPoint = focusCenter
                                         try {
                                             if (previewView.width > 0 && previewView.height > 0) {
                                                 val point = previewView.meteringPointFactory.createPoint(
@@ -300,7 +359,13 @@ fun CameraPreview(
                                     rotationDegrees = imageProxy.imageInfo.rotationDegrees,
                                     sourceWidth = imageProxy.width,
                                     sourceHeight = imageProxy.height,
-                                    sourceCropRect = android.graphics.Rect(imageProxy.cropRect)
+                                    sourceCropRect = android.graphics.Rect(imageProxy.cropRect),
+                                    previewQuad = mapQuadToPreview(
+                                        quad?.map { android.graphics.PointF(it.x, it.y) },
+                                        imageProxy.imageInfo.rotationDegrees,
+                                        imageProxy.width, imageProxy.height,
+                                        previewView.width, previewView.height
+                                    )
                                 )
                                 mainHandler.post { onFrameAnalysis(result) }
                             } catch (e: Exception) {
