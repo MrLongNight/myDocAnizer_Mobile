@@ -578,7 +578,7 @@ fun ScannerCameraPreviewPane(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "PDF wird erstellt & archiviert...",
+                            text = "Dokument wird verarbeitet...",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary

@@ -247,7 +247,7 @@ fun CameraPreview(
                                                 val right = buffer.get(rightIndex).toInt() and 0xFF
                                                 val top = buffer.get(topIndex).toInt() and 0xFF
                                                 val bottom = buffer.get(bottomIndex).toInt() and 0xFF
-                                                laplacianSum += kotlin.math.abs(4 * center - left - right - top - bottom)
+                                                laplacianSum += kotlin.math.abs(4 * center - left - right - top - bottom).toLong()
                                                 laplacianCount++
                                             }
                                         }

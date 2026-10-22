@@ -739,7 +739,7 @@ ws ::= [ \t\n\r]*
         tools: List<AppTool> = AppTool.DEFAULT_TOOLS,
         documentContextSummary: String = "",
         systemPrompt: String = LlmToolPromptBuilder.buildInjectedSystemPrompt(tools = tools, documentContextSummary = documentContextSummary),
-        params: InferenceParams = InferenceParams(temperature = 0.2f, grammar = null)
+        params: InferenceParams = InferenceParams(temperature = 0.2f, maxTokens = 192, grammar = null)
     ): String = withContext(Dispatchers.Default) {
         lastInferenceMode = InferenceMode.NOT_RUN
         lastInferenceMetrics = null
