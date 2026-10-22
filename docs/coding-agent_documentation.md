@@ -138,7 +138,7 @@ Nach Änderungen die folgenden Dateien synchronisieren, sobald der jeweilige Inh
 **Arbeitsregeln:**
 1. Vor Änderungen den Code und die vorhandenen Dokumente lesen; Dokumente nie aus Annahmen aktualisieren.
 2. Keine Geschwindigkeit, Genauigkeit, GPU-Unterstützung, Tool-Funktion oder End-to-End-Lokalinferenz als verifiziert bezeichnen, wenn es dafür keinen Nachweis gibt.
-3. Einen Fallback nie als Modellantwort kennzeichnen. Einen Benchmark nur als gemessen markieren, wenn `lastInferenceMode == LOCAL_LLM` und echte native Messwerte vorliegen.
+3. Einen Fallback nie als Modellantwort kennzeichnen. Einen Benchmark nur als gemessen markieren, wenn `lastInferenceMode == LOCAL_LLM` und echte native Messwerte vorliegen. Fehlende/ungültige Token- oder Zeitmetriken müssen weiterhin `isMeasured = false` ergeben; keine TPS-Näherung aus Zeichenlängen.
 4. Nach jedem Commit die Actions für genau dessen SHA prüfen. Keinen zweiten Commit auf `main` pushen, während der zugehörige Build läuft, wenn dadurch der Run abgebrochen würde; erst bei Abschluss Status und Doku aktualisieren.
 5. Ein Gerätetest ist erst erledigt, wenn eine tatsächliche GGUF-Inferenz auf dem Zielgerät belegt ist. CI-Kompilierung allein genügt nicht.
 
