@@ -204,6 +204,16 @@ fun ScannerView(
 
     val isAutoMode = scannerSettings.scanMode == "AUTO"
 
+    // Vorab-Qualitätsprüfung & Ecken-Justierung
+    var isQualityCheckModeActive by remember { mutableStateOf(false) }
+    var pendingCheckBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    // Interaktive Dokumentenprüfung & Ecken-Justierung in einer einzigen Ansicht
+    var capturedRawBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var preScanSecondsRemaining by remember { mutableIntStateOf(0) }
+    var isPreScanActive by remember { mutableStateOf(false) }
+    var postScanSecondsRemaining by remember { mutableIntStateOf(0) }
+
     // Privacy-safe trace: only scanner state/quality metrics; never log image data or OCR/document text.
     LaunchedEffect(frameAnalysis) {
         if (isAutoMode) {
@@ -223,15 +233,6 @@ fun ScannerView(
         }
     }
 
-    // Vorab-Qualitätsprüfung & Ecken-Justierung
-    var isQualityCheckModeActive by remember { mutableStateOf(false) }
-    var pendingCheckBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-
-    // Interaktive Dokumentenprüfung & Ecken-Justierung in einer einzigen Ansicht
-    var capturedRawBitmap by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var preScanSecondsRemaining by remember { mutableIntStateOf(0) }
-    var isPreScanActive by remember { mutableStateOf(false) }
-    var postScanSecondsRemaining by remember { mutableIntStateOf(0) }
 
     // Funktion zum Ausführen des eigentlichen Bildabzugs
     val executeCapture: () -> Unit = {
@@ -310,7 +311,7 @@ fun ScannerView(
                     }
                 )
             } catch (e: Exception) {
-                Log.e("ScannerView", "Ausnahme beim Kamera-Auslösen: ${e.message}", e)
+                Log.e("DocScanTrace", "event=capture_result result=exception type=${e.javaClass.simpleName}")
                 scanErrorMessage = "Auslöser-Fehler: ${e.localizedMessage ?: "Auslösung fehlgeschlagen"}"
                 hasCapturedCurrentDocument = false
                 autoDetectProgress = 0f
