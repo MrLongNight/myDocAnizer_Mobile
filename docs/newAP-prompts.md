@@ -79,7 +79,6 @@
 | L09A | JNI-Modelllebenszyklus | In Arbeit |
 | L10A | Vorhandene echte Inferenz verifizieren und sicher begrenzen | In Arbeit |
 | L11A | ABI-/16-KB-/Geräteprüfung | In Arbeit |
-| L08B | LLM-Rückbau (nicht ausgewählte Alternative; nicht automatisch ausführen) | Offen |
 | L12 | Native Inferenz absichern: Grammar, Cancel, Kontext und echte Metriken | Offen |
 | L13 | Kandidatenbasierte Hybridanalyse statt frei erfundener Feldwerte | Offen |
 | L14 | Durchgängiges, datensparsames Audit der Dokumentenverarbeitung | In Arbeit |
@@ -90,7 +89,6 @@
 | C02 | WorkManager-Grundmigration | Offen |
 | C03 | Vault-Lock und SecretStore anbinden | In Arbeit |
 | C04 | Google-Drive-OAuth sicher integrieren | In Arbeit |
-| C04B | Google Drive entfernen (nicht ausgewählte Alternative; nicht automatisch ausführen) | Offen |
 | C05 | Google-Drive-Client und Transfers absichern | In Arbeit |
 | C06 | WebDAV-HTTPS und Zertifikatsvertrauen | In Arbeit |
 | C07 | Verschlüsseltes Sync-Manifest und Differenzabgleich | In Arbeit |
@@ -692,6 +690,3 @@ Nutze ausschließlich synthetische, frei erfundene deutsche OCR-Texte für autom
 **Abhängigkeit:** R22 und abgeschlossene Refactoring-Schritte, deren Performance verglichen werden soll.  
 **Prompt:** Erzeuge für die tatsächlich unterstützten kritischen Nutzerflows ein reproduzierbares Baseline Profile und messe Start-/UI-/Listenverhalten mit gleicher Testumgebung wie in R22. Ändere `largeHeap`, Startup-Work, Plugins oder Dependencies nicht ungeprüft. Berichte Verbesserung und Regressionen mit Messdaten; wenn eine Verbesserung nicht nachweisbar ist, sage das explizit. **Abnahme:** Profil, Reproduktionsschritte und Vorher/Nachher-Werte sind dokumentiert.
 
----
-
----
