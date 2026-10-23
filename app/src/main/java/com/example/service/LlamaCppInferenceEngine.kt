@@ -629,7 +629,7 @@ ws ::= [ \t\n\r]*
             }
             val output = result.optString("text", "")
             lastFinishReason = result.optString("finish_reason", "unknown")
-            if (output.isBlank()) throw IllegalStateException("Native inference returned an empty response")
+            if (output.isBlank() && lastFinishReason != "cancelled") throw IllegalStateException("Native inference returned an empty response")
 
             lastInferenceMode = InferenceMode.LOCAL_LLM
             _inferenceProgress.value = 100
