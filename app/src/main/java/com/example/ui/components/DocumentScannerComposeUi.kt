@@ -11,11 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import com.example.service.NormalizedQuad
 import com.example.service.TrackerStatus
 import kotlin.math.hypot
-import kotlin.math.min
 
 private val ScannerGreen = Color(0xFF00E676)
 private val ScannerFill = Color(0x3300E676)
@@ -203,12 +198,13 @@ fun ManualCropMagnifierScreen(
                     val loupeLeft = if (placeRight) size.width - loupeDiameter - margin else margin
                     val loupeTop = margin
                     val center = Offset(loupeLeft + loupeDiameter / 2f, loupeTop + loupeDiameter / 2f)
-                    val screenPoint = bounds.normToScreen(normPt)
                     val sourceCenterX = (normPt.x * bitmap.width).toInt().coerceIn(0, bitmap.width - 1)
                     val sourceCenterY = (normPt.y * bitmap.height).toInt().coerceIn(0, bitmap.height - 1)
-                    val sourceWidth = (loupeDiameter / 2.5f * bitmap.width / bounds.width)
+                    // The loupe displays a source window that is 1/2.5 of the
+                    // corresponding screen-space width and height.
+                    val sourceWidth = (bitmap.width * loupeDiameter / (bounds.width * 2.5f))
                         .toInt().coerceAtLeast(1).coerceAtMost(bitmap.width)
-                    val sourceHeight = (loupeDiameter / 2.5f * bitmap.height / bounds.height)
+                    val sourceHeight = (bitmap.height * loupeDiameter / (bounds.height * 2.5f))
                         .toInt().coerceAtLeast(1).coerceAtMost(bitmap.height)
                     val sourceLeft = (sourceCenterX - sourceWidth / 2).coerceIn(0, bitmap.width - sourceWidth)
                     val sourceTop = (sourceCenterY - sourceHeight / 2).coerceIn(0, bitmap.height - sourceHeight)
