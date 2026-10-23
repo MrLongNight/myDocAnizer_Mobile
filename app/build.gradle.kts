@@ -116,6 +116,7 @@ dependencies {
   implementation(libs.androidx.camera.lifecycle)
   implementation(libs.androidx.camera.view)
   implementation("com.google.ai.edge.litert:litert:1.0.1")
+  implementation("androidx.exifinterface:exifinterface:1.4.2")
   implementation(libs.bouncycastle)
   implementation(libs.zxing.core)
   implementation(libs.zxing.android.embedded)
