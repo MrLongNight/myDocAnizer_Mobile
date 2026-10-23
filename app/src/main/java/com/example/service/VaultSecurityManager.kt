@@ -1890,7 +1890,8 @@ object Argon2idEngine {
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
                 .encode(CharBuffer.wrap(password))
             encodedBuffer = encoded
-            passwordBytes = ByteArray(encoded.remaining()).also { encoded.get(it) }
+            val encodedPasswordBytes = ByteArray(encoded.remaining()).also { encoded.get(it) }
+            passwordBytes = encodedPasswordBytes
             if (encoded.hasArray()) encoded.array().fill(0)
 
             synchronized(argon2Mutex) {
@@ -1902,7 +1903,7 @@ object Argon2idEngine {
                     .withSalt(salt)
                     .build()
                 Argon2BytesGenerator().apply { init(params) }
-                    .generateBytes(passwordBytes, output, 0, output.size)
+                    .generateBytes(encodedPasswordBytes, output, 0, output.size)
             }
             return output
         } catch (e: IllegalArgumentException) {
@@ -1913,7 +1914,7 @@ object Argon2idEngine {
             throw SecurityException("Argon2id key derivation failed", e)
         } finally {
             passwordBytes?.fill(0)
-            if (encodedBuffer?.hasArray() == true) encodedBuffer.array().fill(0)
+            encodedBuffer?.takeIf { it.hasArray() }?.array()?.fill(0)
         }
     }
 }
