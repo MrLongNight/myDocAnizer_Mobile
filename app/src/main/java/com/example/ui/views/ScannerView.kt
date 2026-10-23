@@ -383,8 +383,9 @@ fun ScannerView(
         capturedRawBitmap,
         pendingRuleSuggestion
     ) {
-        val isTripodOrAuto = scannerSettings.scanMode == "AUTO" &&
-            (scannerSettings.tripodAutoScan || scannerSettings.triggerMode == "AUTO_DETECT")
+        // AUTO scan mode must always arm automatic capture; the previous gate
+        // silently disabled it for AUTO + IMMEDIATE settings.
+        val isTripodOrAuto = scannerSettings.scanMode == "AUTO"
 
         if (isTripodOrAuto && !isPreScanActive && !hasCapturedCurrentDocument && !isProcessing && !isCountdownRunning && capturedRawBitmap == null && pendingRuleSuggestion == null) {
             snapshotFlow {
@@ -678,6 +679,8 @@ fun ScannerView(
     capturedRawBitmap?.let { rawBmp ->
         com.example.ui.views.scanner.DocumentReviewAndCropScreen(
             capturedBitmap = rawBmp,
+            initialDocumentQuad = capturedQuadAtScan,
+            sourceRotationDegrees = frameAnalysis.rotationDegrees,
             onCancel = {
                 capturedRawBitmap = null
                 hasCapturedCurrentDocument = false
