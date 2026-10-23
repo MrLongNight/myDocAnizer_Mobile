@@ -1,138 +1,145 @@
-# myDocAnizer-Mobile – Micro-AP-Arbeitsplan
+# myDocAnizer-Mobile – Arbeitspakete
 
-## Übersicht aller Micro-APs
+## Übersicht
 
-Status und Testanforderung stehen ausschließlich in dieser Übersicht. Die darunterstehenden Prompts beschreiben nur Auftrag, Abhängigkeiten und Abnahmekriterien.
+**Status kurz erklärt:**
+- **Offen** – noch nicht begonnen.
+- **In Arbeit** – teilweise umgesetzt oder Umsetzung noch nicht ausreichend geprüft.
+- **Umgesetzt / geprüft** – Umsetzung, Audit oder Architekturentscheidung liegt vor. Das ist keine pauschale Garantie für fehlerfreien Betrieb.
 
-| AP | Bearbeitungsstatus | Pflicht-Testprofil |
+| AP | Inhalt | Status quo |
 |---|---|---|
-| V01 | GETESTET – CI | B+U |
-| V02 | UMGESETZT – UNGETESTET | B+U |
-| V03 | GETESTET – CI | B+U |
-| V04 | GETESTET – CI | B+U |
-| V05 | ADR FREIGEGEBEN | D |
-| V06 | GETESTET – CI | B+U |
-| V06A | IN BEARBEITUNG | B+U+I+M |
-| V06B | IN BEARBEITUNG | B+U+I+M |
-| V07 | UMGESETZT – UNGETESTET | B+U |
-| V08 | UMGESETZT – UNGETESTET | B+U |
-| V09 | IN BEARBEITUNG | B+U |
-| V10 | UMGESETZT – UNGETESTET | B+U |
-| V11 | UMGESETZT – UNGETESTET | B+U |
-| V12 | IN BEARBEITUNG | B+U+I+M |
-| V12B | NICHT BEARBEITET | B+U+I+M |
-| V13 | IN BEARBEITUNG | B+U+I+M+P |
-| V14 | GETESTET – CI | B+U |
-| V15 | GETESTET – CI | B+U+I |
-| V16 | NICHT BEARBEITET | B+U+I+M+P |
-| V17 | NICHT BEARBEITET | B+U+I+M+P |
-| V18 | NICHT BEARBEITET | B+U+I+M+P |
-| S01 | AUDIT DOKUMENTIERT | D |
-| S02 | GETESTET – CI | B+U |
-| S03 | GETESTET – CI | B+U+I |
-| S04 | UMGESETZT – UNGETESTET | B+U |
-| S05 | UMGESETZT – UNGETESTET | B+U |
-| S06 | GETESTET – CI | B+U |
-| S07 | UMGESETZT – UNGETESTET | B+U+I+M |
-| S08 | GETESTET – CI | B+U+I |
-| S09 | IN BEARBEITUNG | B+U+I |
-| S10 | IN BEARBEITUNG | B+U+I+M |
-| D01 | AUDIT DOKUMENTIERT | D |
-| D02 | IN BEARBEITUNG | D |
-| D03 | IN BEARBEITUNG | B+U+I |
-| D04 | NICHT BEARBEITET | B+U+I |
-| D05 | IN BEARBEITUNG | B+U+I |
-| D06 | IN BEARBEITUNG | B+U+I+M |
-| D07 | NICHT BEARBEITET | B+U+I |
-| D08 | NICHT BEARBEITET | B+U+I |
-| D09 | IN BEARBEITUNG | B+U+I |
-| D10 | IN BEARBEITUNG | B+U+I |
-| D11 | GETESTET – CI | B+U+I |
-| D12 | NICHT BEARBEITET | B+U+I |
-| D13 | IN BEARBEITUNG | B+U+I |
-| D14 | IN BEARBEITUNG | B+U+I |
-| D15 | NICHT BEARBEITET | B+U+I |
-| P01 | AUDIT DOKUMENTIERT | D |
-| P02 | NICHT BEARBEITET | B+U+I |
-| P03 | NICHT BEARBEITET | B+U+I+M |
-| P04 | IN BEARBEITUNG | B+U+I |
-| P05 | IN BEARBEITUNG | B+U+I |
-| P06 | IN BEARBEITUNG | B+U+I |
-| P07 | IN BEARBEITUNG | B+U+I |
-| P08 | IN BEARBEITUNG | B+U+I |
-| P09 | IN BEARBEITUNG | B+U+I |
-| P10 | GETESTET – CI | B+U+I |
-| P11 | IN BEARBEITUNG | B+U+I |
-| P12 | NICHT BEARBEITET | B+U+I |
-| P13 | NICHT BEARBEITET | B+U+I+M |
-| L01 | AUDIT DOKUMENTIERT | D+B |
-| L02 | IN BEARBEITUNG | D |
-| L03 | IN BEARBEITUNG | B+U |
-| L04 | IN BEARBEITUNG | B+U+I |
-| L05 | IN BEARBEITUNG | B+U |
-| L06 | NICHT BEARBEITET | B+U |
-| L07 | IN BEARBEITUNG | B+U |
-| L08A | GETESTET – CI | B+U+I |
-| L09A | IN BEARBEITUNG | B+U+I |
-| L10A | IN BEARBEITUNG | B+U+I+G |
-| L11A | IN BEARBEITUNG | B+U+I+G |
-| L12 | NICHT BEARBEITET | B+U+I+G |
-| L13 | NICHT BEARBEITET | B+U |
-| L14 | IN BEARBEITUNG | B+U |
-| L15 | IN BEARBEITUNG | B+U+I+M |
-| L16 | IN BEARBEITUNG | B+U+I+G |
-| L17 | NICHT BEARBEITET | B+U+I+G+Q |
-| C01 | IN BEARBEITUNG | D+B+U |
-| C02 | NICHT BEARBEITET | B+U+I |
-| C03 | IN BEARBEITUNG | B+U+I |
-| C04 | IN BEARBEITUNG | B+U+I+M |
-| C05 | IN BEARBEITUNG | B+U+I |
-| C06 | IN BEARBEITUNG | B+U+I+M |
-| C07 | IN BEARBEITUNG | B+U+I |
-| C08 | IN BEARBEITUNG | B+U+I+M |
-| C09 | NICHT BEARBEITET | B+U+I |
-| DB01 | IN BEARBEITUNG | D+B+U |
-| DB02 | NICHT BEARBEITET | D+B+U |
-| DB03 | GETESTET – CI | B+U+I |
-| DB04 | NICHT BEARBEITET | B+U+I |
-| DB05 | IN BEARBEITUNG | B+U+I |
-| DB06 | IN BEARBEITUNG | B+U |
-| DB07 | NICHT BEARBEITET | B+U |
-| DB08 | NICHT BEARBEITET | B+U+I |
-| DB09 | NICHT BEARBEITET | B+U |
-| DB10 | NICHT BEARBEITET | B+U+I |
-| DB11 | NICHT BEARBEITET | B+U+I |
-| DB12 | NICHT BEARBEITET | B+U+I |
-| DB13 | NICHT BEARBEITET | B+U+I |
-| DB14 | NICHT BEARBEITET | B+U+I+M |
-| R01 | IN BEARBEITUNG | D+B+U |
-| R02 | NICHT BEARBEITET | D+B+U |
-| R03 | NICHT BEARBEITET | B+U |
-| R04 | IN BEARBEITUNG | B+U |
-| R05 | NICHT BEARBEITET | B+U+I+M |
-| R06 | NICHT BEARBEITET | B+U+I+M |
-| R07 | NICHT BEARBEITET | B+U |
-| R08 | NICHT BEARBEITET | B+U+I |
-| R09 | NICHT BEARBEITET | B+U |
-| R10 | NICHT BEARBEITET | B+U |
-| R11 | NICHT BEARBEITET | B+U |
-| R12 | IN BEARBEITUNG | B+U+I |
-| R13 | NICHT BEARBEITET | B+U |
-| R14 | NICHT BEARBEITET | D+B+U |
-| R15 | NICHT BEARBEITET | B+U |
-| R16 | IN BEARBEITUNG | B+U |
-| R17 | IN BEARBEITUNG | B+U |
-| R18 | NICHT BEARBEITET | B+U+I |
-| R19 | NICHT BEARBEITET | B+U+I |
-| R20 | NICHT BEARBEITET | B+U+I+M |
-| R21 | NICHT BEARBEITET | B+U+I+M |
-| R22 | NICHT BEARBEITET | B+U+I+M |
-| R23 | NICHT BEARBEITET | B+U |
-| R24 | NICHT BEARBEITET | B+U+I+M |
+| V01 | V2-only Vault-Krypto-Inventar und Negativtests | Umgesetzt / geprüft |
+| V02 | Geprüfte Argon2id-Implementierung | In Arbeit |
+| V03 | VaultHeader v2: Datenmodell und Parser | Umgesetzt / geprüft |
+| V04 | Header-Authentifizierung und AAD | Umgesetzt / geprüft |
+| V05 | Optionale echte Zwei-Faktor-Absicherung | Umgesetzt / geprüft |
+| V06 | Zweiten Faktor technisch absichern und testen | Umgesetzt / geprüft |
+| V06A | Optionalen Zwei-Faktor-Modus sicher konfigurierbar machen | In Arbeit |
+| V06B | Optionalen zweiten Faktor an die echte DEK-Freigabe binden | In Arbeit |
+| V09 | Recovery-Format und Wiederherstellungsoptionen festlegen (ADR) | In Arbeit |
+| V07 | BIP-39-Mnemonic-Validierung | In Arbeit |
+| V08 | Shamir-Share-Konsistenz | In Arbeit |
+| V10 | Versionierten Recovery-Payload-Kern umsetzen | In Arbeit |
+| V11 | Standardkonforme QR-Kodierung | In Arbeit |
+| V12 | Eindeutig gekennzeichnetes Notfalldokument | In Arbeit |
+| V12B | Unauffälliges Notfalldokument | Offen |
+| V13 | Biometrie und Keystore getrennt absichern | In Arbeit |
+| V14 | V2-only Laufzeit und vollständige Entfernung von V1 | Umgesetzt / geprüft |
+| V15 | Backup-Regeln für Vault-Secrets | Umgesetzt / geprüft |
+| V16 | Wiederherstellung mit Passkey | Offen |
+| V17 | Zusätzliche Sicherheitsfragen für Passwort-/Passkey-Restore | Offen |
+| V18 | Wiederherstellungsoptionen verständlich auswählbar machen | Offen |
+| S01 | Lock- und Secret-Inventar | Umgesetzt / geprüft |
+| S02 | LockManager als Zustandsautomat | Umgesetzt / geprüft |
+| S03 | Auto-Lock-Lifecycle | Umgesetzt / geprüft |
+| S04 | Unlock-Bypässe entfernen | In Arbeit |
+| S05 | DEK-Leases an Lockstatus binden | In Arbeit |
+| S06 | Fehlversuche und Backoff | Umgesetzt / geprüft |
+| S07 | FLAG_SECURE und sensitive Screens | In Arbeit |
+| S08 | SecretStore-Grundkomponente | Umgesetzt / geprüft |
+| S09 | Legacy-Secrets verlustfrei migrieren | In Arbeit |
+| S10 | Externe Navigationsextras validieren | In Arbeit |
+| D01 | Datenfluss-Inventar | Umgesetzt / geprüft |
+| D02 | Vollständige Datenbankverschlüsselung (SQLCipher) technisch festlegen | In Arbeit |
+| D03 | Gemeinsame Schlüsselarchitektur für DB, Dokumente, Settings und Backups | In Arbeit |
+| D04 | Streaming-Dateiformat für neue Dokumente | Offen |
+| D05 | secureSave auf verschlüsselte Ablage umstellen | In Arbeit |
+| D06 | Viewer, OCR, Share und Vorschau an Verschlüsselung anbinden | In Arbeit |
+| D07 | Verschlüsselungsstatus aus tatsächlicher Speicherung ableiten | Offen |
+| D08 | Resumierbare Migration vorhandener Dokumente | Offen |
+| D09 | Kollisionssichere Ablage | In Arbeit |
+| D10 | Vollständig verschlüsselter Backupcontainer für alle Nutzdaten | In Arbeit |
+| D11 | Restore: Archive und Pfade validieren | Umgesetzt / geprüft |
+| D12 | Restore: atomarer Commit und verständlicher Report | Offen |
+| D13 | Unverschlüsselte Mirrors entfernen und Backupregeln prüfen | In Arbeit |
+| D14 | PDF-Textlayer und OCR-Ausgaben vollständig prüfen | In Arbeit |
+| D15 | Alle App-Einstellungen verschlüsselt speichern | Offen |
+| P01 | Sicherheits-Audit aller Verbindungsarten und Transport-ADR | Umgesetzt / geprüft |
+| P02 | TLS für alle Server-Endpunkte verbindlich machen | Offen |
+| P03 | Native App- und PC-Clients: TLS und Identitätsprüfung | Offen |
+| P04 | Sicherer Pairing-Handshake für alle Verbindungstypen | In Arbeit |
+| P05 | HTTP-Parsing und Ressourcenlimits | In Arbeit |
+| P06 | Dokumente über alle Verbindungstypen streamend übertragen | In Arbeit |
+| P07 | Replay-Schutz, Sessionablauf und Rate-Limits | In Arbeit |
+| P08 | IP-CIDR und Schnittstellenbindung | In Arbeit |
+| P09 | Sichere Upload-Ziele | In Arbeit |
+| P10 | Schwache Kryptofallbacks entfernen | Umgesetzt / geprüft |
+| P11 | Serverlebenszyklus und Android-Berechtigungen | In Arbeit |
+| P12 | End-to-End-Sicherheitstests für App2App, PC2App und Browser2App | Offen |
+| P13 | Browser2App sicher und ohne Warnungsumgehung unterstützen | Offen |
+| L01 | Laufzeit- und APK-Inventur | Umgesetzt / geprüft |
+| L02 | Native-Produktionsplan mit dem tatsächlichen Bestand abgleichen | In Arbeit |
+| L03 | Modellkatalog und Quellenbelege | In Arbeit |
+| L04 | WorkManager-Downloader-Grundlage | In Arbeit |
+| L05 | Modellintegrität und private Ablage | In Arbeit |
+| L06 | Download-Resume korrekt implementieren | Offen |
+| L07 | Ehrliche Laufzeitmodi und Datenschutz | In Arbeit |
+| L08A | Vorhandene Native-Buildintegration reproduzierbar verifizieren | Umgesetzt / geprüft |
+| L09A | JNI-Modelllebenszyklus | In Arbeit |
+| L10A | Vorhandene echte Inferenz verifizieren und sicher begrenzen | In Arbeit |
+| L11A | ABI-/16-KB-/Geräteprüfung | In Arbeit |
+| L08B | LLM-Rückbau (nicht ausgewählte Alternative; nicht automatisch ausführen) | Offen |
+| L12 | Native Inferenz absichern: Grammar, Cancel, Kontext und echte Metriken | Offen |
+| L13 | Kandidatenbasierte Hybridanalyse statt frei erfundener Feldwerte | Offen |
+| L14 | Durchgängiges, datensparsames Audit der Dokumentenverarbeitung | In Arbeit |
+| L15 | Einheitliche Scan-Pipeline, Nutzerprüfung und sichere Chat-Aktionen | In Arbeit |
+| L16 | Modellkatalog, Integrität und Empfehlungen belastbar machen | In Arbeit |
+| L17 | Golden Set, Kandidatenabdeckung und echte Auswahlqualität nachweisen | Offen |
+| C01 | Cloud-Sync, Verschlüsselungsgrenze und Sperrverhalten auditieren | In Arbeit |
+| C02 | WorkManager-Grundmigration | Offen |
+| C03 | Vault-Lock und SecretStore anbinden | In Arbeit |
+| C04 | Google-Drive-OAuth sicher integrieren | In Arbeit |
+| C04B | Google Drive entfernen (nicht ausgewählte Alternative; nicht automatisch ausführen) | Offen |
+| C05 | Google-Drive-Client und Transfers absichern | In Arbeit |
+| C06 | WebDAV-HTTPS und Zertifikatsvertrauen | In Arbeit |
+| C07 | Verschlüsseltes Sync-Manifest und Differenzabgleich | In Arbeit |
+| C08 | Manuellen/automatischen Sync konfigurierbar machen | In Arbeit |
+| C09 | Cloud-End-to-End-Tests | Offen |
+| DB01 | Room-v9-Baseline sichern | In Arbeit |
+| DB02 | Schemaexport und Migrationstest-Infrastruktur | Offen |
+| DB03 | Destruktiven Downgrade-Fallback entfernen | Umgesetzt / geprüft |
+| DB04 | Migrationstests für bestehende Schemaübergänge | Offen |
+| DB05 | FTS-Trigger konsistent machen | In Arbeit |
+| DB06 | Suchabfragen und Eingabevalidierung | In Arbeit |
+| DB07 | Schlanke Dokumentlisten-Projektion | Offen |
+| DB08 | Paging separat einführen | Offen |
+| DB09 | `REPLACE`-Semantik auditieren und korrigieren | Offen |
+| DB10 | Foreign-Key-Migration einzeln durchführen | Offen |
+| DB11 | Geldbeträge als ganzzahlige Cent migrieren | Offen |
+| DB12 | SQLCipher für die vollständige Room-Datenbank umsetzen | Offen |
+| DB13 | Bestehende Datenbank in SQLCipher migrieren | Offen |
+| DB14 | Listen-/Suchperformance messen | Offen |
+| R01 | Charakterisierungstests und Flow-Inventar | In Arbeit |
+| R02 | DI-Technologie als ADR | Offen |
+| R03 | DI-Grundlage für Datenbank und Repositories | Offen |
+| R04 | Vault-/Lock-/Key-Singletons eindeutig verdrahten | In Arbeit |
+| R05 | Scanner-/Import-ViewModel isolieren | Offen |
+| R06 | DMS-/Explorer-ViewModel isolieren | Offen |
+| R07 | Finance-ViewModel isolieren | Offen |
+| R08 | Sync-/P2P-ViewModel isolieren | Offen |
+| R09 | Security-/Lock-ViewModel isolieren | Offen |
+| R10 | LLM-/Chat-ViewModel isolieren | Offen |
+| R11 | Settings-ViewModel isolieren | Offen |
+| R12 | Dashboard-ViewModel isolieren | In Arbeit |
+| R13 | SettingsRepository zu DataStore migrieren | Offen |
+| R14 | JSON-Strategie festlegen | Offen |
+| R15 | Ein internes JSON-Format migrieren | Offen |
+| R16 | Zentrales, redigierendes Logging | In Arbeit |
+| R17 | Optionale Firebase-/Analytics-Initialisierung | In Arbeit |
+| R18 | `runBlocking` in UI-Pfaden entfernen | Offen |
+| R19 | `runBlocking` in Netzwerk-/Servicepfaden entfernen | Offen |
+| R20 | Startarbeit gezielt aus `Application.onCreate` verschieben | Offen |
+| R21 | Eine große Compose-Datei gezielt teilen | Offen |
+| R22 | Performance-Baseline vor weiterem Refactoring | Offen |
+| R23 | Veraltete Dateien und Dependencies einzeln bereinigen | Offen |
+| R24 | Baseline Profile erstellen und Vorher/Nachher vergleichen | Offen |
+
+L08B (LLM-Rückbau) und C04B (Google Drive entfernen) sind verworfene Alternativen und keine regulären Arbeitspakete.
 
 ---
 
-## Micro-AP-Prompts
+## Arbeitspakete
 
 # V – Tresor, Schlüsselableitung und Recovery
 
@@ -350,16 +357,6 @@ Status und Testanforderung stehen ausschließlich in dieser Übersicht. Die daru
 ## L01 – Laufzeit- und APK-Inventur (AUDIT)
 **Prompt:** Prüfe aktuell `LlamaCppInferenceEngine`, `LlmService`, JNI-Aufrufe, `System.loadLibrary`, CMake/NDK, `jniLibs`, Gradle-Artefakte, Modellkatalog, Downloads und tatsächlichen APK-Inhalt. Dokumentiere, was wirklich kompiliert und ladbar ist, und unterscheide echte Inferenz von regelbasierten Heuristiken. Noch keine Native-Bibliotheken hinzufügen und keine Funktion entfernen. **Abnahme:** reproduzierbares Inventar mit bestätigten Dateien/ABIs und offenen Punkten.
 
-**Aktueller Codeabgleich (23.10.2026): AUDIT DOKUMENTIERT.**
-- Native Quell- und Buildintegration ist vorhanden: app/src/main/cpp/CMakeLists.txt, llama_android.cpp, llama_android_stub.cpp, Gradle externalNativeBuild, NDK 27.2.12479018, minSdk 24, ABI-Filter für armeabi-v7a/arm64-v8a/x86/x86_64 und auf Commit 2da668617612d2df773f966e3b0ee22dc2beef7b gepinntes llama.cpp-Submodul.
-- CMake baut echte JNI-Engine-Bibliotheken für arm64-v8a/x86_64 und einen Stub für 32-Bit-ABIs. CPU-only; Vulkan/GPU ist nicht aktiviert. 16-KB-Linkeroptionen sind vorhanden; tatsächliche ELF-/APK-Ausrichtung und Verhalten auf jedem Zielgerät sind gesondert nachzuweisen.
-- LlamaCppInferenceEngine.kt lädt llama_android und ruft nativeExecuteLlamaWithGrammar auf; die zugehörige JNI-Implementierung existiert in llama_android.cpp. Echte Token-Generierung und native Laufzeit-/Tokenmetriken sind im Quelltext vorhanden.
-- Der letzte vollständig erfolgreiche Workflow für diese unveränderte Codebasis ist Run 39944020065 auf Commit c0564c1: Build, JVM-Tests und Android-Instrumentierung erfolgreich. Kein Nachweis eines realen GGUF-Modelllaufs oder eines physischen Gerätetests.
-- Weiterhin fehlend bzw. zu verifizieren sind native Cancel-Funktion/Abort-Callback, finish_reason, belastbarer Ergebnisvertrag statt gemeinsamem lastInferenceMode/lastInferenceMetrics, wirksames Grammar-Schema in den tatsächlichen Klassifikationspfaden und Kontextbudget auf Basis des echten Tokenizers.
-- LlmService nutzt in der Hauptscan-Bestätigung teilweise buildFastRuleSuggestion statt zwingend das LLM; Fallback-/Vorlagenpfade für Regelgenerator und Dokumenten-Assistant existieren. Diese Resultate müssen ehrlich von nativer Inferenz unterschieden werden.
-- Die Aufnahme-/OCR-Telemetrie ist nicht vollständig datensparsam: OcrService übergibt bis zu 120 OCR-Zeichen an AppAuditLogger.logOcr; im DEVELOP-Modus wird eine Textprobe persistiert. logAiInference protokolliert u. a. Absender, Dokumenttyp und Reasoning. Die existierende Größenbegrenzung/Rotation beseitigt diese PII-Risiken nicht.
-- Kein reproduzierbarer Geräte-/GGUF-Qualitätsbericht liegt vor. Die frühere Behauptung, Native-/JNI-Implementierung fehle, ist durch den aktuellen Repositoryzustand widerlegt.
-
 ## L02 – Native-Produktionsplan mit dem tatsächlichen Bestand abgleichen
 **Abhängigkeit:** L01.  
 **Prompt:** Aktualisiere docs/LLM_NATIVE_PRODUCTION_PLAN.md anhand der aktuellen Native-/JNI-/Gradle-Dateien und des neuesten verifizierten CI-Laufs. Entferne veraltete Aussagen, wonach CMake, llama.cpp, JNI oder die native Implementierung fehlten. Trenne exakt: (a) Quell-/Buildintegration vorhanden, (b) durch CI kompiliert, (c) auf ABI installiert, (d) echtes GGUF geladen und Inferenzen erzeugt, (e) Qualität auf realem Gerät gemessen. Vergib für jede Ebene getrennte Nachweise. Verknüpfe verbleibende Punkte mit L08A–L12, ohne deren Arbeit doppelt zu formulieren. **Abnahme:** Der Produktionsplan stimmt mit tatsächlichen Dateien und Tests überein; kein fehlender Datei- oder Gerätetest wird als bestanden gemeldet.
@@ -408,7 +405,7 @@ Status und Testanforderung stehen ausschließlich in dieser Übersicht. Die daru
 
 **Verbindliche Qualitätsregel:** Eine syntaktisch gültige JSON-Antwort ist kein Beleg für sachliche Richtigkeit. Grammar darf nur das Antwortformat und zulässige Kandidaten-IDs begrenzen. Nicht vorhandene, ungültige oder unpassende Kandidaten werden verworfen und dürfen niemals stillschweigend in Dokumentmetadaten gespeichert werden.
 
-### L12 – Native Inferenz absichern: Grammar, Cancel, Kontext und echte Metriken
+## L12 – Native Inferenz absichern: Grammar, Cancel, Kontext und echte Metriken
 
 **Abhängigkeit:** L08A–L11A müssen im tatsächlich bearbeiteten Workspace nachweislich vorhanden sein. Dazu gehören fest versionierte llama.cpp-Integration, passende native Implementierung, JNI-Bindungen und ein echter Modelllauf. Fehlt eine dieser Voraussetzungen, zuerst den konkreten Blocker dokumentieren und auf das passende bestehende AP verweisen. Keine nicht vorhandene Datei oder JNI-Funktion als implementiert darstellen.
 
@@ -427,7 +424,7 @@ Du arbeitest ausschließlich im tatsächlich vorhandenen lokalen Workspace von m
 
 **Abnahme:** Native Laufzeit und JNI sind im Workspace vorhanden; echter Inferenzlauf oder präzise dokumentierter Geräteblocker; Cancel-/Timeout-/Kontext-/Grammar-Tests; keine gefälschten Metriken. Grammar-Tests sind getrennt von der fachlichen Auswahlgenauigkeit auszuweisen.
 
-### L13 – Kandidatenbasierte Hybridanalyse statt frei erfundener Feldwerte
+## L13 – Kandidatenbasierte Hybridanalyse statt frei erfundener Feldwerte
 
 **Abhängigkeit:** L12. Dieses AP ist die fachliche Kernänderung der Dokumentenverarbeitung.
 
@@ -448,7 +445,7 @@ Du arbeitest ausschließlich im tatsächlich vorhandenen lokalen Workspace von m
 
 **Abnahme:** Das LLM kann nur eine existierende Option bzw. einen Kandidaten wählen. Ungültige/fehlende Werte führen kontrolliert zu null/needsReview. Deterministische Extraktion und LLM-Auswahl sind einzeln testbar. Keine frei erfundenen Beträge, Daten, IBANs, Nummern oder Absender im finalen Ergebnis.
 
-### L14 – Durchgängiges, datensparsames Audit der Dokumentenverarbeitung
+## L14 – Durchgängiges, datensparsames Audit der Dokumentenverarbeitung
 
 **Abhängigkeit:** L13.
 
@@ -466,7 +463,7 @@ Arbeite nur im vorhandenen Repository und lies zuerst docs/coding-agent_document
 
 **Abnahme:** Nachvollziehbare Scan-ID und Prozessereignisse; Audit bleibt inhaltlich datensparsam; keine Klartextinhalte oder erfundenen Leistungswerte; Migrations- und PII-Tests vorhanden.
 
-### L15 – Einheitliche Scan-Pipeline, Nutzerprüfung und sichere Chat-Aktionen
+## L15 – Einheitliche Scan-Pipeline, Nutzerprüfung und sichere Chat-Aktionen
 
 **Abhängigkeit:** L12–L14.
 
@@ -485,7 +482,7 @@ Lies docs/coding-agent_documentation.md und alle tatsächlichen ViewModel-Aufruf
 
 **Abnahme:** Alle Analyseaufrufe nutzen dieselbe Validierung. Herkunft und Fehler sind sichtbar und wahrheitsgemäß. Kein stilles Überschreiben, keine unbestätigte Schreibaktion, kein KI-Etikett für Regeln.
 
-### L16 – Modellkatalog, Integrität und Empfehlungen belastbar machen
+## L16 – Modellkatalog, Integrität und Empfehlungen belastbar machen
 
 **Abhängigkeit:** L03–L07 und L12.
 
@@ -503,7 +500,7 @@ Arbeite nur am lokalen Modellkatalog, Downloader, Import und der dazugehörigen 
 
 **Abnahme:** Modellidentität und Integrität sind prüfbar; ungültige Dateien werden abgewiesen; Lizenz- und Geräteclaims sind belegt oder als offen gekennzeichnet; nicht gemessene Modelle heißen Experimentell.
 
-### L17 – Golden Set, Kandidatenabdeckung und echte Auswahlqualität nachweisen
+## L17 – Golden Set, Kandidatenabdeckung und echte Auswahlqualität nachweisen
 
 **Abhängigkeit:** L12–L16.
 
@@ -698,66 +695,3 @@ Nutze ausschließlich synthetische, frei erfundene deutsche OCR-Texte für autom
 ---
 
 ---
-
-## 1. Abhängigkeits- und Freigabeplan
-
-Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Testlauf ausgeführt und der tatsächliche Status dokumentiert wurde.
-
-### Verbindliche Ausführungsreihenfolge
-
-1. **V01–V06B** – V2-Tresor, DEK-Wrapper und der freigegebene Passwort+Keyfile-Faktor. Die TOTP-Entscheidung ist bereits freigegeben; TOTP darf nicht wieder als Tresor-Faktor eingeführt werden.
-2. **V09 → V07/V08 → V10/V11 → V12/V12B → V13/V14/V15 → V16/V17/V18** – zuerst Recovery-Architektur entscheiden, dann passende Mnemonic-/Share-Bausteine implementieren, danach Payload/QR, Notfalldokumente, Laufzeit-/Keystore- und Restore-Optionen.
-3. **S01–S08 und S10** – Lock-/Key-Leases, SecretStore und Intent-Policy. Legacy-Secrets noch nicht endgültig löschen.
-4. **D01 + DB01–DB04** – Datenfluss- und Room-v9-Baseline sowie tatsächliche Migrations-/Schema-Testinfrastruktur. Hier noch keine SQLCipher-Umstellung durchführen.
-5. **D02–D03** – SQLCipher-ADR und gemeinsame Schlüsselarchitektur anhand der nachgewiesenen Datenbank-/Migrationsbasis festlegen und vervollständigen.
-6. **D04–D15 sowie DB05–DB11** – Dokument-/Backup-/Restore-Pfade und dann einzelne FTS-/Query-/Schema-/Cent-Migrationen. Jede Room-Schemamigration bekommt einen eigenen sequenziellen Versionsschritt.
-7. **DB12–DB13**, danach **DB14** – SQLCipher erst nach Abschluss der Schemaänderungen und Schlüssel-/Storage-Tests integrieren; Datenmigration getrennt durchführen; Performance erst danach vergleichen.
-8. **P01–P13** – App2App, PC2App und Browser2App anhand derselben Transport-/Identitäts-/Pairing-Matrix absichern. Keine Klartext-HTTP-Pfade als Übergangslösung.
-9. **C01–C09** – Cloud-Sync baut auf validierten verschlüsselten Containern, SecretStore und belastbarer OAuth-/Transportlogik auf. Google Drive bleibt Produktziel; OAuth wird nicht durch manuell eingegebene Tokens ersetzt.
-10. **S09** – Legacy-Secrets endgültig migrieren/bereinigen, nachdem alle Verbraucher in D/P/C umgestellt sind. Werte erst nach verifiziertem verschlüsseltem Roundtrip entfernen.
-11. **L01 → L02 → L03–L07 → L08A → L09A → L10A → L11A → L12** – Native-Bestand/Produktionsplan bereinigen, Modellquelle/Download/Integrität prüfen und vorhandenen Native-Pfad gezielt verifizieren/härten.
-12. **L16 → L13 → L14 → L15 → L17** – Modellidentität/Lizenz/Integrität vor der Hybridanalyse prüfen; danach kandidatenbasierte Analyse, datensparsames Audit, UI-/Tool-Einbindung und zuletzt Qualitätsbenchmark.
-13. **R01–R24** – ViewModel-/DI-/Repository-/Logging- und Performance-Refactorings erst nach Stabilisierung der jeweiligen Produkt- und Sicherheitsgrenzen.
-
-Die AP-Beschreibungen bleiben fachlich gruppiert. **Für die chronologische Abarbeitung ist diese Liste maßgeblich.** Ein späteres AP wird nur vorgezogen, wenn es hier explizit als Voraussetzung genannt ist.
-
-### Verbindliche Gates und Abhängigkeiten
-
-- **V05 ist entschieden:** Passwort plus zufällige Schlüsseldatei ist der echte kryptografische Zweitfaktor. V06/V06A/V06B müssen konkrete Einrichtung, Unlock und Fehlerpfade nachweisen; keine erneute TOTP-Grundsatzprüfung.
-- **Recovery vor Recovery-Code:** V09 muss die erlaubten Restore-Pfade und Formatversion festlegen, bevor V07/V08/V10/V11 daraus ein inkompatibles Format machen.
-- **SQLCipher-Gate:** DB01–DB04 liefern Schema-/Migrationsbasis; D02/D03 liefern ADR/Key-Boundary. DB12/DB13 dürfen weder unverschlüsselte Fallbacks noch destruktive Datenverluste einführen.
-- **S09-Gate:** Legacy-Passwörter/Token erst entfernen, wenn die konkreten D/P/C-Verbraucher auf sichere Schnittstellen umgestellt und getestet sind.
-- **Transport-Gate:** P2P nutzt aktuell in Teilen http://; WebDAV erzwingt HTTPS, aber TOFU-Pinning ist nicht abgeschlossen. Sicherheitsclaims brauchen echte Client-/Server-Negativtests.
-- **LLM-Gate:** Native CMake/JNI-Dateien existieren und kompilieren in CI. Das beweist keine echte GGUF-Inferenz. L12 darf Grammar nicht blind aktivieren und muss den gepinnten llama.cpp-Sampler/Parser gezielt testen. L13 implementiert dynamische Grammatik aus tatsächlichen Kandidaten-IDs.
-- **Qualitäts-Gate:** L17 muss Golden-Set-, Modell-, Prompt- und Gerätewerte enthalten. Fake-Engine/JVM-Test, erfolgreicher Build und gültiges JSON sind kein Modellqualitätsnachweis.
-
-
----
-
----
-
-## Testprofil-Kürzel
-
-- **B** Build: `./gradlew assembleDebug --stacktrace --no-daemon`
-- **U** JVM-Tests: `./gradlew testDebugUnitTest --stacktrace --no-daemon`
-- **I** Android-Instrumentierung: `./gradlew connectedDebugAndroidTest --stacktrace --no-daemon`
-- **M** manueller App-Test mit dokumentierten Schritten und Ergebnis
-- **P** physisches Gerät/Hardware erforderlich
-- **G** echte native GGUF-Inferenz; Modell-Hash und Gerät dokumentieren
-- **Q** Qualitätsbenchmark auf versioniertem Golden Set
-- **D** statischer Audit/Dokumentationsschritt
-
-Die Profile bezeichnen erforderliche Prüfungen, nicht bereits bestandene Tests. Nicht ausführbare Prüfungen als „nicht ausgeführt“ mit Grund dokumentieren.
-
-## Nicht ausgewählte Alternativen
-
-- **L08B – LLM-Rückbau:** Nicht ausführen. Nur bei konkret dokumentiertem schwerwiegendem technischem Blocker und erneuter ausdrücklicher Freigabe.
-- **C04B – Google Drive entfernen:** Nicht ausführen. Google Drive bleibt Produktziel; OAuth-/Transportblocker beheben oder mit konkretem Befund dokumentieren.
-
-## Arbeitsregeln für Statuspflege
-
-1. **GETESTET – CI** nur bei bestandenem AP-spezifischem Test im genannten Commit.
-2. **GETESTET – APP/GERÄT** nur mit dokumentiertem Ablauf, Build/Commit, Gerät/Emulator, Android-Version sowie Erwartung und Ergebnis.
-3. **ABGENOMMEN** nur, wenn alle AP-spezifischen Prüfungen einschließlich erforderlicher P/G/Q-Ebenen nachgewiesen sind.
-4. Nicht verfügbare Tests als **nicht ausgeführt** dokumentieren, nie als bestanden.
-5. Vorhandene Testklassennamen allein belegen keine vollständige Abdeckung.
