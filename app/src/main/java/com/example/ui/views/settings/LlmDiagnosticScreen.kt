@@ -117,8 +117,15 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
                 _rows.value = _rows.value + measure(name) { text ->
                     val matchCount = rules.matchingRules(text).size
                     service.classifyDocumentFirstRun(text)
+                    val firstMode = engine.lastInferenceMode
+                    val firstTokens = engine.lastInferenceMetrics?.generatedTokens ?: 0
+                    val firstFinish = engine.lastFinishReason ?: "unknown"
                     service.classifyDocumentSecondRun(text)
-                    "Regeltreffer=" + matchCount + "; Vorschlag nur im Arbeitsspeicher, nicht gespeichert"
+                    val secondMode = engine.lastInferenceMode
+                    val secondTokens = engine.lastInferenceMetrics?.generatedTokens ?: 0
+                    val secondFinish = engine.lastFinishReason ?: "unknown"
+                    val anyFallback = firstMode != LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM || secondMode != LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM
+                    "Regeltreffer=" + matchCount + "; firstMode=" + firstMode + "; firstFinish=" + firstFinish + "; firstTokens=" + firstTokens + "; secondMode=" + secondMode + "; secondFinish=" + secondFinish + "; secondTokens=" + secondTokens + "; pipelineFallback=" + anyFallback + "; Vorschlag nur im Arbeitsspeicher, nicht gespeichert"
                 }
             }
             _status.value = "Lauf 1/3 abgeschlossen"
@@ -216,7 +223,7 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         var stack = ""
         try {
             withTimeout(DOC_TIMEOUT_MS) { detail = action(read(name)) }
-            if (engine.lastInferenceMode == LlamaCppInferenceEngine.InferenceMode.RULE_FALLBACK) status = "FALLBACK"
+            if (engine.lastInferenceMode == LlamaCppInferenceEngine.InferenceMode.RULE_FALLBACK || detail.contains("pipelineFallback=true")) status = "FALLBACK"
         } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
             status = "TIMEOUT"; detail = timeout.message ?: "Timeout"; stack = Log.getStackTraceString(timeout)
         } catch (cancelled: CancellationException) { throw cancelled
@@ -284,6 +291,10 @@ fun LlmDiagnosticScreen(viewModel: DocAnizerViewModel) {
             }
             Text("Status: " + status)
             Text("OK " + rows.count { it.status == "OK" } + " · Fallback " + rows.count { it.status == "FALLBACK" } + " · Timeout " + rows.count { it.status == "TIMEOUT" } + " · Fehler " + rows.count { it.status == "FEHLER" })
+            val javaTrend = if (rows.isNotEmpty()) rows.last().javaAfter - rows.first().javaBefore else 0L
+            val nativeTrend = if (rows.isNotEmpty()) rows.last().nativeAfter - rows.first().nativeBefore else 0L
+            Text("Längste Wartezeit: " + (rows.maxOfOrNull { it.elapsedMs } ?: 0L) + " ms", style = MaterialTheme.typography.bodySmall)
+            Text("Heap-Trend: Java " + javaTrend + " B · Native " + nativeTrend + " B · über 150 MB: " + ((javaTrend + nativeTrend) > 150L * 1024L * 1024L), style = MaterialTheme.typography.bodySmall)
             rows.forEach { r ->
                 HorizontalDivider()
                 Text(r.name + ": " + r.status + " · " + r.elapsedMs + " ms · " + r.mode + " · " + r.finishReason + " · " + r.tokens + " Tokens", style = MaterialTheme.typography.bodySmall)
