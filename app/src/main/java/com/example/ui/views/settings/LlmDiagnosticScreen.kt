@@ -179,7 +179,8 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
     }
 
     fun cancelMessage() {
-        _status.value = "Abbruch angefordert; nativen synchronen JNI-Aufruf kann Kotlin nicht gewaltsam stoppen"
+        engine.requestNativeCancellation()
+        _status.value = "Abbruchsignal an native Token-Generierung gesendet; Prompt-Evaluation selbst ist synchron"
     }
 
     fun report(): String = buildString {
