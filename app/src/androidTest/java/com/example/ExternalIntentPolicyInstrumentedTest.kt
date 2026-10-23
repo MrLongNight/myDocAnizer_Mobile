@@ -39,6 +39,39 @@ class ExternalIntentPolicyInstrumentedTest {
     }
 
     @Test
+    fun quickScanIsAllowedOnlyForScannerTabAndPayloadIsConsumed() {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra("EXTRA_START_TAB", "SCANNER")
+            putExtra("EXTRA_QUICK_SCAN", true)
+            putExtra("EXTRA_UNRECOGNIZED", "must not survive")
+        }
+
+        val request = ExternalIntentPolicy.consume(intent)
+
+        assertEquals("SCANNER", request.tab)
+        assertTrue(request.quickScan)
+        assertTrue(intent.extras == null || intent.extras?.isEmpty == true)
+        assertNull(intent.data)
+        assertNull(intent.clipData)
+    }
+
+    @Test
+    fun quickScanIsRejectedForOtherTabsAndMalformedBooleanExtras() {
+        val dashboardIntent = Intent(context, MainActivity::class.java).apply {
+            putExtra("EXTRA_START_TAB", "DASHBOARD")
+            putExtra("EXTRA_QUICK_SCAN", true)
+        }
+        assertFalse(ExternalIntentPolicy.consume(dashboardIntent).quickScan)
+
+        val malformedIntent = Intent(context, MainActivity::class.java).apply {
+            putExtra("EXTRA_START_TAB", "SCANNER")
+            putExtra("EXTRA_QUICK_SCAN", "true")
+        }
+        assertFalse(ExternalIntentPolicy.consume(malformedIntent).quickScan)
+        assertTrue(malformedIntent.extras == null || malformedIntent.extras?.isEmpty == true)
+    }
+
+    @Test
     fun invalidAndMalformedExternalValuesAreDiscarded() {
         val intent = Intent(context, MainActivity::class.java).apply {
             putExtra("EXTRA_START_TAB", "../SETTINGS")

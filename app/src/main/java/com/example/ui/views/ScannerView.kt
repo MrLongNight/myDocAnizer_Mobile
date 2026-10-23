@@ -105,6 +105,7 @@ fun ScannerView(
     val batchQueue by viewModel.batchQueue.collectAsStateWithLifecycle()
     val isBatchModeActive by viewModel.isBatchModeActive.collectAsStateWithLifecycle()
     val pendingRuleSuggestion by viewModel.pendingRuleSuggestion.collectAsStateWithLifecycle()
+    val quickScanRequestPending by viewModel.quickScanRequestPending.collectAsStateWithLifecycle()
     val scanWorkflowError by viewModel.scanWorkflowError.collectAsStateWithLifecycle()
     val scanWorkflowState by viewModel.scanWorkflowState.collectAsStateWithLifecycle()
 
@@ -577,6 +578,31 @@ fun ScannerView(
                 viewModel.setTourStep(4)
             }
         }
+    }
+
+    // A widget scan is queued until permission and the real ImageCapture are ready.
+    // It must not be emitted through the transient hardware SharedFlow before this view mounts.
+    LaunchedEffect(
+        quickScanRequestPending,
+        hasCameraPermission,
+        imageCaptureInstance,
+        isProcessing,
+        isCountdownRunning,
+        capturedRawBitmap,
+        pendingRuleSuggestion
+    ) {
+        if (
+            !quickScanRequestPending ||
+            !hasCameraPermission ||
+            imageCaptureInstance == null ||
+            isProcessing ||
+            isCountdownRunning ||
+            capturedRawBitmap != null ||
+            pendingRuleSuggestion != null
+        ) return@LaunchedEffect
+
+        startCaptureProcess()
+        viewModel.consumeQuickScanRequest()
     }
 
     if (showCameraPermissionExplanation || (showFirstStepsTour && currentTourStep == 3)) {

@@ -10,7 +10,8 @@ internal object ExternalIntentPolicy {
     data class Request(
         val tab: String?,
         val openCashExpense: Boolean,
-        val openReconciliation: Boolean
+        val openReconciliation: Boolean,
+        val quickScan: Boolean
     )
 
     fun validTab(value: String?): String? = value?.takeIf { it in allowedTabs }
@@ -31,6 +32,11 @@ internal object ExternalIntentPolicy {
         val openReconciliation = runCatching {
             intent.getBooleanExtra("EXTRA_OPEN_RECONCILIATION", false)
         }.getOrDefault(false)
+        // Quick scan is a separate explicit command and is only valid with the scanner tab.
+        // Malformed extras are treated as false; the entire Intent payload is still consumed.
+        val quickScan = tab == "SCANNER" && runCatching {
+            intent.getBooleanExtra("EXTRA_QUICK_SCAN", false)
+        }.getOrDefault(false)
 
         // Replace without enumerating/unparceling unknown attacker-controlled extras.
         intent.replaceExtras(null as Bundle?)
@@ -40,7 +46,8 @@ internal object ExternalIntentPolicy {
         return Request(
             tab = tab,
             openCashExpense = openCashExpense,
-            openReconciliation = openReconciliation
+            openReconciliation = openReconciliation,
+            quickScan = quickScan
         )
     }
 }

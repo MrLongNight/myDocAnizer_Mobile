@@ -108,6 +108,7 @@ open class MainActivity : FragmentActivity() {
         if (!viewModel.isAppUnlocked.value || (vault.vaultHeader.value != null && !vault.isUnlocked())) return
 
         request.tab?.let(viewModel::setTargetNavigationTab)
+        if (request.quickScan) viewModel.requestQuickScan()
         if (request.openCashExpense) viewModel.setDirectOpenCashTracker(true)
         if (request.openReconciliation) viewModel.setDirectOpenReconciliation(true)
     }

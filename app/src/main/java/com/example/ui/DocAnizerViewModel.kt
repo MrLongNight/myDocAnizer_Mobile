@@ -313,6 +313,19 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
         _targetNavigationTab.value = tab
     }
 
+    // A pending request survives the Activity-to-Scanner navigation transition and waits
+    // until the camera/capture callback is actually ready. Repeated taps coalesce to one scan.
+    private val _quickScanRequestPending = MutableStateFlow(false)
+    val quickScanRequestPending: StateFlow<Boolean> = _quickScanRequestPending.asStateFlow()
+
+    fun requestQuickScan() {
+        _quickScanRequestPending.value = true
+    }
+
+    fun consumeQuickScanRequest() {
+        _quickScanRequestPending.value = false
+    }
+
     private val _targetSettingsSubTab = MutableStateFlow<Int?>(null)
     val targetSettingsSubTab: StateFlow<Int?> = _targetSettingsSubTab.asStateFlow()
     fun setTargetSettingsSubTab(subTab: Int?) {

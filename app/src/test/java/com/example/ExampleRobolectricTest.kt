@@ -904,6 +904,12 @@ class ExampleRobolectricTest {
 
     viewModel.setTargetNavigationTab("SETTINGS")
     assertEquals("SETTINGS", viewModel.targetNavigationTab.value)
+
+    assertFalse(viewModel.quickScanRequestPending.value)
+    viewModel.requestQuickScan()
+    assertTrue(viewModel.quickScanRequestPending.value)
+    viewModel.consumeQuickScanRequest()
+    assertFalse(viewModel.quickScanRequestPending.value)
   }
 
   @Test
