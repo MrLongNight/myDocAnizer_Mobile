@@ -73,33 +73,54 @@ fun DocumentReviewAndCropScreen(
     val bmpWidth = capturedBitmap.width.toFloat()
     val bmpHeight = capturedBitmap.height.toFloat()
 
-    // Prefer the locked live detector corners over a second, independent brightness heuristic.
-    // imageProxyToBitmap rotates the captured bitmap, so rotate and reorder the normalized quad too.
+    // The live detector analyzes a 160px frame: useful for lock/triggering, but too coarse
+    // to be the sole authority for the final crop. Refine from the captured full-resolution
+    // bitmap first; use the live quad only if the image detector fell back to its inset rectangle.
     val seededCorners = remember(capturedBitmap, initialDocumentQuad, sourceRotationDegrees) {
-        val input = initialDocumentQuad?.takeIf { it.size == 4 }
-        if (input == null) {
-            ImageProcessingService.detectDocumentCorners(capturedBitmap)
+        val highResolutionCorners = ImageProcessingService.detectDocumentCorners(capturedBitmap)
+        val defaultCorners = ImageProcessingService.getDefaultCorners(bmpWidth, bmpHeight)
+        val highResolutionIsFallback = highResolutionCorners.size == 4 &&
+            highResolutionCorners.indices.all { i ->
+                kotlin.math.hypot(
+                    (highResolutionCorners[i].x - defaultCorners[i].x).toDouble(),
+                    (highResolutionCorners[i].y - defaultCorners[i].y).toDouble()
+                ) <= maxOf(bmpWidth, bmpHeight) * 0.002
+            }
+
+        if (isValidCornerQuadrilateral(highResolutionCorners) && !highResolutionIsFallback) {
+            highResolutionCorners
         } else {
-            val rotated = input.map { point ->
-                val x = point.x.coerceIn(0f, 1f)
-                val y = point.y.coerceIn(0f, 1f)
-                when (((sourceRotationDegrees % 360) + 360) % 360) {
-                    90 -> PointF(1f - y, x)
-                    180 -> PointF(1f - x, 1f - y)
-                    270 -> PointF(y, 1f - x)
-                    else -> PointF(x, y)
+            val input = initialDocumentQuad?.takeIf { it.size == 4 }
+            val livePixels = input?.let { quad ->
+                val rotated = quad.map { point ->
+                    val x = point.x.coerceIn(0f, 1f)
+                    val y = point.y.coerceIn(0f, 1f)
+                    when (((sourceRotationDegrees % 360) + 360) % 360) {
+                        90 -> PointF(1f - y, x)
+                        180 -> PointF(1f - x, 1f - y)
+                        270 -> PointF(y, 1f - x)
+                        else -> PointF(x, y)
+                    }
+                }
+                val centerX = rotated.sumOf { it.x.toDouble() }.toFloat() / 4f
+                val centerY = rotated.sumOf { it.y.toDouble() }.toFloat() / 4f
+                val ordered = rotated.sortedBy {
+                    kotlin.math.atan2((it.y - centerY).toDouble(), (it.x - centerX).toDouble())
+                }
+                val start = ordered.indices.minByOrNull { ordered[it].x + ordered[it].y } ?: 0
+                val clockwise = List(4) { ordered[(start + it) % 4] }
+                val centerPixelX = clockwise.sumOf { it.x.toDouble() }.toFloat() * bmpWidth / 4f
+                val centerPixelY = clockwise.sumOf { it.y.toDouble() }.toFloat() * bmpHeight / 4f
+                // Slight outward safety margin prevents low-resolution edge quantization from
+                // trimming a few pixels of paper, especially at a single corner.
+                clockwise.map { point ->
+                    PointF(
+                        (centerPixelX + (point.x * bmpWidth - centerPixelX) * 1.015f).coerceIn(0f, bmpWidth),
+                        (centerPixelY + (point.y * bmpHeight - centerPixelY) * 1.015f).coerceIn(0f, bmpHeight)
+                    )
                 }
             }
-            val centerX = rotated.sumOf { it.x.toDouble() }.toFloat() / 4f
-            val centerY = rotated.sumOf { it.y.toDouble() }.toFloat() / 4f
-            val ordered = rotated.sortedBy {
-                kotlin.math.atan2((it.y - centerY).toDouble(), (it.x - centerX).toDouble())
-            }
-            val start = ordered.indices.minByOrNull { ordered[it].x + ordered[it].y } ?: 0
-            val clockwise = List(4) { ordered[(start + it) % 4] }
-            val pixels = clockwise.map { PointF(it.x * bmpWidth, it.y * bmpHeight) }
-            if (isValidCornerQuadrilateral(pixels)) pixels
-            else ImageProcessingService.detectDocumentCorners(capturedBitmap)
+            livePixels?.takeIf { isValidCornerQuadrilateral(it) } ?: highResolutionCorners
         }
     }
     var cornersInBitmap by remember(capturedBitmap, seededCorners) {
