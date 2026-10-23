@@ -140,4 +140,4 @@ Dieses Dokument enthält den aktuellen Status der Modularisierung und Dateigrö�
 - **Messwerte:** Dauer, LLM/Fallback, finish_reason, Tokens, Java-/Native-Heap vorher/nachher, Fehler und Stacktrace; Summen OK/Fallback/Timeout/Fehler, Heap-Trend und längste Wartezeit; Text-Export.
 - **Abnahme offen:** 20 Dokumente am Stück ohne Hänger und Heap-Wachstum über 150 MB. Parallel- und Abbruchlauf ebenfalls am Gerät prüfen. Kein Fehler gilt vor dieser Prüfung als gelöst.
 - **Codebefund:** `app/src/main/cpp/llama_android.cpp` setzt `kContextSize = 2048`; `fit_prompt_to_context` kürzt lange Prompts. Das native Engine-Objekt wird bei Modell-/Threadwechsel freigegeben und neu aufgebaut; ein expliziter Diagnose-Entladepfad ist zu ergänzen.
-- **Status:** Korpus ist vorbereitet; Implementierung der Diagnoseoberfläche, Messung und Laufzeitkontrollen steht noch aus. Keine Geräteergebnisse behauptet.
+- **Status:** 20 synthetische OCR-Assets sind eingecheckt; native finish_reason-/Engine-Status-Schnittstelle ergänzt. Diagnoseoberfläche und Messläufe stehen in Umsetzung; Geräteabnahme weiterhin offen.

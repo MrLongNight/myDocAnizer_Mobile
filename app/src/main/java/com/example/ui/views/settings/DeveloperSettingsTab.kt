@@ -50,6 +50,10 @@ fun DeveloperSettingsTab(viewModel: DocAnizerViewModel) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (com.example.BuildConfig.DEBUG) {
+            LlmDiagnosticScreen(viewModel)
+        }
+
         // 1. BASIS-INTEGRITÄT (AUTO-RUN)
         Card(
             shape = RoundedCornerShape(16.dp),
