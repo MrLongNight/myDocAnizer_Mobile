@@ -25,7 +25,7 @@ import com.example.model.DocumentFtsEntity
         CustomDashboardWidgetEntity::class
     ],
     version = 9,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun documentDao(): DocumentDao

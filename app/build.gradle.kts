@@ -103,6 +103,12 @@ secrets {
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
+// Export only the schema actually generated from the current Room entities/migrations.
+// Never fabricate missing historical schema versions.
+ksp {
+  arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {

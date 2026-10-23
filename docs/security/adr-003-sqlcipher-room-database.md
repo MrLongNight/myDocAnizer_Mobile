@@ -36,7 +36,7 @@ Die konkrete KeyProvider-Implementierung gehört in D03 und muss vor DB12 freige
 - Haupttabellen, Indizes, Trigger, `documents_fts` und sämtliche Room-Migrationen müssen innerhalb derselben SQLCipher-Datenbank liegen. Es darf kein unverschlüsselter FTS-/OCR-Nebenindex entstehen.
 - WAL/SHM sind zusammen mit der DB-Öffnungs-, Checkpoint- und Schließungssequenz zu testen. Bei Migration: Schreibzugriffe stoppen, `RoomDatabase.close()`, Checkpoint/sauberes Schließen durchführen und nicht blind eine DB ohne zugehörige Sidecars kopieren. Nach erfolgreicher Verschlüsselung dürfen keine alten plaintext-WAL-Dateien verbleiben.
 - Der frühere `fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)`-Löschpfad wurde aus `AppDatabase` entfernt (DB03). Die Entfernung muss durch Regressionstests gegen unbeabsichtigtes Löschen abgesichert bleiben; ein nicht unterstützter Downgrade darf nicht still eine leere Datenbank öffnen.
-- `exportSchema = false` ist aktuell gesetzt. DB01/DB02 müssen zuerst eine belegte Schema-v9-Baseline bzw. reproduzierbare Room-Schemaexporte sichern, bevor Migrationen umgestellt werden.
+- `exportSchema = true` und die KSP-Option `room.schemaLocation` sind für den tatsächlichen Projekt-Schemaausgabepfad konfiguriert. Die automatisch generierte v9-Datei wird durch CI als Artefakt bereitgestellt und muss noch geprüft sowie ins Repository übernommen werden. Es werden keine historischen Schema-Versionen erfunden; DB01/DB02 bleiben offen, bis die v9-Baseline vorliegt und die Migrationstest-Infrastruktur läuft.
 
 ## 5. Migration von SQLite-Klartext zur verschlüsselten Datenbank
 

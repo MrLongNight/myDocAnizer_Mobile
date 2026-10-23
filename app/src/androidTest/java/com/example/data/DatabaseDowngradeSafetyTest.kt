@@ -48,6 +48,11 @@ class DatabaseDowngradeSafetyTest {
                 null,
                 SQLiteDatabase.OPEN_READONLY
             ).use { sqlite ->
+                assertEquals(
+                    "Unsupported downgrade must not change the original schema version",
+                    10,
+                    sqlite.version
+                )
                 sqlite.rawQuery("SELECT value FROM downgrade_sentinel", null).use { cursor ->
                     assertTrue("Original sentinel row must remain present", cursor.moveToFirst())
                     assertEquals("KEEP_AFTER_DOWNGRADE", cursor.getString(0))

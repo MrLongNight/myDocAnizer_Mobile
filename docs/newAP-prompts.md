@@ -6,7 +6,7 @@ Die Liste hatte viele Einträge **„In Arbeit“**, weil dieser Status bisher z
 
 **Für den Release-Fortschritt zuerst verwenden:** [Praktische Beta-Freigabecheckliste](release-beta-checklist.md). Sie bündelt die App-Abnahme in neun Gates; du musst nicht 123 Prompt-Abschnitte einzeln als Release-Checkliste abarbeiten.
 
-**Aktuelle Release-Zuordnung:** 46 APs sind Beta-Blocker (12 davon bereits als „Umgesetzt / geprüft“ markiert; 34 sind noch nicht abgenommen), 51 betreffen Funktionen, die erst nach bestandenem Nachweis aktiviert werden sollen, und 26 sind bewusst auf später verschoben. Diese Zahlen zählen Micro-APs, nicht 46 separate manuelle Testläufe.
+**Aktuelle Release-Zuordnung:** 46 APs sind Beta-Blocker (11 davon derzeit als „Umgesetzt / geprüft“ markiert; 35 sind noch nicht abgenommen), 51 betreffen Funktionen, die erst nach bestandenem Nachweis aktiviert werden sollen, und 26 sind bewusst auf später verschoben. Diese Zahlen zählen Micro-APs, nicht 46 separate manuelle Testläufe.
 
 **Status – ab jetzt eindeutig:**
 - **Offen** – die eigentliche Umsetzung ist noch nicht begonnen oder es gibt bisher nur eine Idee/Anforderung.
@@ -108,8 +108,8 @@ Die Liste hatte viele Einträge **„In Arbeit“**, weil dieser Status bisher z
 | C08 | Cloud-Datensicherung | `Datensicherung_SyncModus` | Manuellen/automatischen Sync konfigurierbar machen | App: manuellen/automatischen Sync einstellen und neu starten; Auto-Sync nur nach Opt-in. | Vor Aktivierung | In Arbeit |
 | C09 | Cloud-Datensicherung | `Datensicherung_CloudEndToEnd` | Cloud-End-to-End-Tests | App + Technik: Cloud-Backup erstellen/wiederherstellen; falsche Credentials/kaputte Datei scheitern ohne Datenverlust. | Vor Aktivierung | Offen |
 | DB01 | Datenbank & Suche | `Datenbank_SchemaBaseline` | Room-v9-Baseline sichern | Technik: Schema v9 aus dem tatsächlichen Code reproduzieren; keine historischen Schemata erfinden. | Beta-Blocker | In Arbeit |
-| DB02 | Datenbank & Suche | `Datenbank_Schemaexport` | Schemaexport und Migrationstest-Infrastruktur | Technik: Schemaexport reproduzieren und MigrationTestHelper ausführen; Schema-Dateien im Repository nachweisen. | Beta-Blocker | Offen |
-| DB03 | Datenbank & Suche | `Datenbank_KeinDestruktiverDowngrade` | Destruktiven Downgrade-Fallback entfernen | Technik: Downgrade/unbekannte Version testen; Tabellen dürfen nicht still gelöscht werden. | Beta-Blocker | Umgesetzt / geprüft |
+| DB02 | Datenbank & Suche | `Datenbank_Schemaexport` | Schemaexport und Migrationstest-Infrastruktur | Technik: Schemaexport reproduzieren und MigrationTestHelper ausführen; Schema-Dateien im Repository nachweisen. | Beta-Blocker | In Arbeit |
+| DB03 | Datenbank & Suche | `Datenbank_KeinDestruktiverDowngrade` | Destruktiven Downgrade-Fallback entfernen | Technik: Downgrade/unbekannte Version testen; Tabellen dürfen nicht still gelöscht werden. | Beta-Blocker | In Arbeit |
 | DB04 | Datenbank & Suche | `Datenbank_Migrationstests` | Migrationstests für bestehende Schemaübergänge | Technik: jede unterstützte Room-Migration mit Testdaten ausführen; Tabellen, FTS, Foreign Keys und Zeilenanzahl prüfen. | Beta-Blocker | Offen |
 | DB05 | Datenbank & Suche | `Datenbank_FTS` | FTS-Trigger konsistent machen | App + Technik: Dokument erstellen/ändern/löschen und danach suchen; FTS-Index stimmt mit Daten überein. | Beta-Blocker | In Arbeit |
 | DB06 | Datenbank & Suche | `Datenbank_Suchvalidierung` | Suchabfragen und Eingabevalidierung | App: leere, lange, ungültige und SQL-artige Suchbegriffe testen; keine Abfragefehler. | Beta-Blocker | In Arbeit |
@@ -580,11 +580,12 @@ Nutze ausschließlich synthetische, frei erfundene deutsche OCR-Texte für autom
 # DB – Room, FTS, Migrationen und Finanzbeträge
 
 ## DB01 – Room-v9-Baseline sichern
-**Prompt:** Exportiere bzw. rekonstruiere das tatsächliche Room-Schema v9, ohne Schema- oder Datenmodelländerung. Prüfe `AppDatabase`, Entities, Indizes, Foreign Keys, FTS-Tabellen/Trigger und vorhandene Migrationen. Schalte noch nicht `exportSchema=true`, falls dadurch historische Versionen fälschlich erfunden würden. Erstelle ein Audit der tatsächlich vorhandenen Schemahistorie. **Abnahme:** v9-Baseline ist aus dem tatsächlichen Code/Build belegbar; keine destruktiven Änderungen.
+**Prompt:** Prüfe das tatsächlich aus `AppDatabase`, Entities, Indizes, Foreign Keys, FTS-Tabellen/Triggern und den Migrationen 1→9 generierte Room-Schema v9. Exportiere nur das Schema, das der aktuelle Code tatsächlich erzeugt; fehlende historische Versionen niemals erfinden. Vergleiche die generierte JSON-Datei mit den tatsächlichen Tabellen/Indizes/Foreign Keys/FTS-Objekten und dokumentiere Abweichungen. **Abnahme:** die tatsächliche v9-Baseline wurde aus dem Build gewonnen, manuell geprüft und als Schemaartefakt versioniert; keine Produktdaten oder Migrationen verändert.
 
 ## DB02 – Schemaexport und Migrationstest-Infrastruktur
 **Abhängigkeit:** DB01.  
-**Prompt:** Aktiviere `exportSchema=true`, konfiguriere KSP-`room.schemaLocation` und nimm die tatsächlich generierten Schema-JSONs in den Patch auf. Richte `MigrationTestHelper`-Infrastruktur ein, ohne gleich die fachlichen Migrationen umzusetzen. Historische fehlende Versionen nur aus echten veröffentlichten Schemata oder als klar bezeichnete Fixtures rekonstruieren. **Abnahme:** Build generiert erwartete Schemas reproduzierbar; Testinfrastruktur läuft, soweit die Umgebung dies ausführen kann; andernfalls verbleibt die Prüfung ausdrücklich offen.
+**Abhängigkeit:** DB01 und die tatsächlich geprüfte v9-JSON.  
+**Prompt:** Stelle sicher, dass `exportSchema=true` und KSP-`room.schemaLocation` reproduzierbar konfiguriert bleiben. Füge ausschließlich die tatsächlich durch den Build erzeugte und geprüfte v9-JSON hinzu. Richte danach `MigrationTestHelper`-Infrastruktur ein, ohne fachliche Migrationen umzusetzen. Historische fehlende Versionen dürfen nur aus echten veröffentlichten Schemata oder klar bezeichneten Fixtures stammen. **Abnahme:** Build generiert die erwartete v9-Datei reproduzierbar, die Datei ist im Repository versioniert und ein MigrationTestHelper-Smoke-Test läuft; nicht ausgeführte Checks bleiben ausdrücklich offen.
 
 ## DB03 – Destruktiven Downgrade-Fallback entfernen
 **Prompt:** Prüfe tatsächliche `fallbackToDestructiveMigrationOnDowngrade`-/Destructive-Migration-Nutzung. Entferne unsichere Löschpfade. Nicht unterstützter Downgrade muss in einen erklärbaren Fehler-/Recovery-Zustand führen, ohne eine leere Datenbank als Erfolg anzulegen. Keine Migration vorhandener Nutzerdaten in diesem Schritt. **Abnahme:** Test beweist, dass unbekannte Downgrades DB-Inhalt nicht löschen.
