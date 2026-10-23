@@ -15,6 +15,9 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
   ndkVersion = "27.2.12479018"
 
+  // The detector maps the model directly from its APK asset via openFd().
+  androidResources { noCompress += "tflite" }
+
   defaultConfig {
     applicationId = "com.aistudio.mydocanizer.app.v28"
     minSdk = 24
