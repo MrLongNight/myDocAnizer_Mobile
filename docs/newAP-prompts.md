@@ -2,16 +2,47 @@
 
 ## Statusübersicht
 
+> **Status-/Testnachweis zuletzt geprüft:** `main` bei Commit `c0564c1ad3af5cdb8d996475b41db6906b518640`. Diese Dokumentationsänderung ist kein Nachweis dafür, dass die gesamte Codebasis oder alle 125 Micro-APs erneut getestet wurden.
+
 | Kennzahl | Aktueller Stand |
 |---|---|
-| Micro-APs insgesamt | **125** |
-| Einzelstatus dokumentiert | **52** |
-| Einzelstatus noch abzugleichen | **73** |
-| Dokumentierte Statusverteilung | 1 abgenommen · 7 getestet · 30 Patch erstellt · 11 nicht gestartet · 1 ADR freigegeben · 1 Audit dokumentiert · 1 ADR erstellt |
-| Tests | 23 Testklassen inkl. `VaultTwoFactorSecurityTest`; vorhanden heißt nicht automatisch ausgeführt oder bestanden |
-| Build/Tests | GitHub Actions Run `39633700992` auf Commit `d509ebb` erfolgreich: `assembleDebug`, `testDebugUnitTest`, `connectedDebugAndroidTest`, APK-Metadatenprüfung und Artefakt-Upload |
+| Geplante Micro-APs | **125** |
+| Statusangaben historisch dokumentiert | **52** (noch nicht vollständig anhand des aktuellen Codes neu verifiziert) |
+| Statusabgleich offen | **73** |
+| Build-/Testnachweis aus früherem Commit | GitHub Actions Run `39633700992` auf `d509ebb`; erfolgreich gemeldet für `assembleDebug`, `testDebugUnitTest`, `connectedDebugAndroidTest`, APK-Metadatenprüfung und Artefakt-Upload. **Gilt nicht als Nachweis für den aktuellen Commit.** |
 
-Fehlende Einzelstatus sind eine Dokumentationslücke, kein Beweis dafür, dass ein Arbeitspaket nicht umgesetzt wurde.
+### Einheitliche Statusbezeichnungen
+
+Jedes AP erhält genau **einen Umsetzungsstatus** und getrennte Nachweise für die jeweils relevanten Testebenen. Ein Status darf nicht aus einer älteren Notiz oder allein aus vorhandenem Code abgeleitet werden.
+
+| Status | Verbindliche Bedeutung |
+|---|---|
+| **NICHT GESTARTET** | Noch keine konkrete Bearbeitung nachgewiesen. |
+| **AUDIT OFFEN** | Ist-Code/Abhängigkeiten noch nicht ausreichend geprüft; keine Implementierungsbehauptung. |
+| **IN UMSETZUNG** | Änderungen laufen; noch kein übernehmbarer, vollständiger Patch. |
+| **PATCH BEREIT** | Vollständiger Diff erstellt, aber noch nicht als integriert/verifiziert bestätigt. |
+| **BLOCKIERT** | Konkreter technischer oder umgebungsbedingter Blocker mit Beleg und nächstem Schritt dokumentiert. |
+| **UMGESETZT – TESTS OFFEN** | Implementierung im betrachteten Commit vorhanden; passende Tests fehlen oder wurden nicht ausgeführt. |
+| **VERIFIZIERT** | Relevante statische/automatisierte Prüfungen bestanden; die tatsächlich ausgeführten Befehle und Ergebnisse sind dokumentiert. |
+| **ABGENOMMEN** | Alle für dieses AP als erforderlich begründeten Prüfungen bestanden und fachliche Abnahmekriterien nachgewiesen. |
+| **ADR FREIGEGEBEN** | Architekturentscheidung abgeschlossen; Implementierung ist dadurch ausdrücklich nicht automatisch erledigt. |
+| **AUDIT DOKUMENTIERT** | Nur lesender Befundbericht erstellt; kein Umsetzungsstatus. |
+
+Historische Statusformulierungen in den einzelnen APs sind im Zuge des Statusabgleichs auf diese Bezeichnungen umzustellen. Zusätzliche Erläuterungen gehören in ein separates Feld „Befund/Restarbeit“, nicht in neue Varianten des Statusnamens.
+
+### Getrennte Testebenen – niemals zusammenfassen
+
+| Ebene | Was sie nachweist | Was sie **nicht** nachweist |
+|---|---|---|
+| **Build** | Konkretes Build-Kommando erzeugt erfolgreich die angeforderte Variante. | Kein Nachweis, dass Tests laufen, die App startet oder ein Feature fachlich funktioniert. |
+| **Unit-Tests** | Benannte JVM-Tests liefen und bestanden. | Keine Android-Systemintegration, native ABI, echte Modellinferenz oder Geräte-UI. |
+| **Instrumentierungs-/Integrationstests** | Benannte Tests liefen in Emulator/Gerät und prüften Android-/JNI-/Datenbankintegration. | Kein physischer Geräte- oder Modellqualitätsnachweis, sofern dieser nicht ausdrücklich Teil des Laufs war. |
+| **Manueller App-/Gerätetest** | Ein konkreter Ablauf wurde auf einem benannten Gerät/Build mit beobachtetem Ergebnis ausgeführt. | Keine allgemeine Freigabe für andere Geräte, Modelle oder nicht getestete Pfade. |
+| **Qualitäts-/Leistungstest** | Gemessene fachliche Kennzahlen auf dokumentiertem Golden Set, Modell, Prompt und Gerät. | JSON-/Grammar-Gültigkeit allein beweist keine fachliche Richtigkeit. |
+
+Für **jedes AP individuell** ist vor dem Testen festzuhalten: (1) prüfbare Akzeptanzkriterien, (2) passender Testtyp, (3) exakter Befehl oder nummerierte manuelle Schritte, (4) erwartetes Ergebnis, (5) tatsächliches Ergebnis und (6) Umgebung/Commit. Wenn ein App-Test nicht möglich oder für eine reine Bibliotheksänderung nicht sinnvoll ist, muss das begründet werden; er darf weder pauschal verlangt noch als bestanden behauptet werden.
+
+Fehlende Einzelstatus sind eine Dokumentationslücke, kein Beweis dafür, dass ein Arbeitspaket nicht umgesetzt wurde. Ebenso sind vorhandene Implementierungen, Testklassen und alte CI-Erfolge allein kein aktueller Abnahmenachweis.
 
 ## Verbindliche Produktvorgaben
 
