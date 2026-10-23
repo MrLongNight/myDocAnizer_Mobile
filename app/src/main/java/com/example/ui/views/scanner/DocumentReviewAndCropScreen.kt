@@ -66,14 +66,44 @@ fun DocumentReviewAndCropScreen(
     capturedBitmap: Bitmap,
     onCancel: () -> Unit,
     onConfirmFinalDocument: (Bitmap) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    initialDocumentQuad: List<PointF>? = null,
+    sourceRotationDegrees: Int = 0
 ) {
     val bmpWidth = capturedBitmap.width.toFloat()
     val bmpHeight = capturedBitmap.height.toFloat()
 
-    // 4 Ecken im Bitmap-Koordinatensystem [TL, TR, BR, BL] - automatisch initialisiert
-    var cornersInBitmap by remember {
-        mutableStateOf(ImageProcessingService.detectDocumentCorners(capturedBitmap))
+    // Prefer the locked live detector corners over a second, independent brightness heuristic.
+    // imageProxyToBitmap rotates the captured bitmap, so rotate and reorder the normalized quad too.
+    val seededCorners = remember(capturedBitmap, initialDocumentQuad, sourceRotationDegrees) {
+        val input = initialDocumentQuad?.takeIf { it.size == 4 }
+        if (input == null) {
+            ImageProcessingService.detectDocumentCorners(capturedBitmap)
+        } else {
+            val rotated = input.map { point ->
+                val x = point.x.coerceIn(0f, 1f)
+                val y = point.y.coerceIn(0f, 1f)
+                when (((sourceRotationDegrees % 360) + 360) % 360) {
+                    90 -> PointF(1f - y, x)
+                    180 -> PointF(1f - x, 1f - y)
+                    270 -> PointF(y, 1f - x)
+                    else -> PointF(x, y)
+                }
+            }
+            val centerX = rotated.sumOf { it.x.toDouble() }.toFloat() / 4f
+            val centerY = rotated.sumOf { it.y.toDouble() }.toFloat() / 4f
+            val ordered = rotated.sortedBy {
+                kotlin.math.atan2((it.y - centerY).toDouble(), (it.x - centerX).toDouble())
+            }
+            val start = ordered.indices.minByOrNull { ordered[it].x + ordered[it].y } ?: 0
+            val clockwise = List(4) { ordered[(start + it) % 4] }
+            val pixels = clockwise.map { PointF(it.x * bmpWidth, it.y * bmpHeight) }
+            if (isValidCornerQuadrilateral(pixels)) pixels
+            else ImageProcessingService.detectDocumentCorners(capturedBitmap)
+        }
+    }
+    var cornersInBitmap by remember(capturedBitmap, seededCorners) {
+        mutableStateOf(seededCorners)
     }
 
     // Aktiver Ziehpunkt (0..3) oder null
