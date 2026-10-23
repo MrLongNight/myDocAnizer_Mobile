@@ -35,7 +35,7 @@
 | S03 | Auto-Lock-Lifecycle | Umgesetzt / geprüft |
 | S04 | Unlock-Bypässe entfernen | In Arbeit |
 | S05 | DEK-Leases an Lockstatus binden | In Arbeit |
-| S06 | Fehlversuche und Backoff | Umgesetzt / geprüft |
+| S06 | Fehlversuche und Backoff | In Arbeit |
 | S07 | FLAG_SECURE und sensitive Screens | In Arbeit |
 | S08 | SecretStore-Grundkomponente | Umgesetzt / geprüft |
 | S09 | Legacy-Secrets verlustfrei migrieren | In Arbeit |
@@ -234,7 +234,7 @@ L08B (LLM-Rückbau) und C04B (Google Drive entfernen) sind verworfene Alternativ
 
 ## S06 – Fehlversuche und Backoff
 **Abhängigkeit:** S02.  
-**Prompt:** Implementiere nur die gemeinsame Backoff-Logik für Passwort-/Recovery-Fehlversuche; TOTP ist kein Vault-Faktor und darf keinen Vault-Unlock auslösen oder blockieren, wobei vorhandene Authentifizierungswege nicht umgangen werden dürfen. Schreibe persistent und atomar die notwendigen Zähler/Deadline-Informationen; nutze monotone Zeit während einer Sitzung und definiere konservatives Verhalten nach Prozess-/Geräteneustart. Teste die festgelegte Folge: nach fünf Fehlversuchen 30 Sekunden, danach 1, 5 und 15 Minuten. **Abnahme:** Grenzwerte, parallele Fehlversuche, Neustart und Restzeit getestet; Dokumentation, dass lokaler Backoff Defense-in-Depth ist.
+**Prompt:** Prüfe die vorhandene Backoff-Implementierung und entferne TOTP aus aktiven Vault-Unlock-/Backoff-Pfaden: TOTP ist kein Vault-Faktor. Der Backoff muss nur die tatsächlich aktiven Passwort-/Passwort+Schlüsseldatei- und freigegebenen Recovery-Pfade absichern, ohne andere Authentifizierungswege zu umgehen. Schreibe persistent und atomar die notwendigen Zähler/Deadline-Informationen; nutze monotone Zeit während einer Sitzung und definiere konservatives Verhalten nach Prozess-/Geräteneustart. Teste die festgelegte Folge: nach fünf Fehlversuchen 30 Sekunden, danach 1, 5 und 15 Minuten. **Abnahme:** Grenzwerte, parallele Fehlversuche, Neustart und Restzeit getestet; Dokumentation, dass lokaler Backoff Defense-in-Depth ist.
 
 ## S07 – FLAG_SECURE und sensitive Screens
 **Prompt:** Setze `FLAG_SECURE` rechtzeitig vor dem Rendern sensibler Inhalte und steuere Debug-Ausnahmen ausschließlich über ein explizites Build-Flag bzw. `BuildConfig.DEBUG`, nicht über Emulatorerkennung. Sorge dafür, dass Recents/Screenshots und offene Detailansichten nach Sperrung keine sensiblen Inhalte mehr zeigen. Keine Navigation oder Sicherheitsarchitektur nebenbei refactoren. **Abnahme:** dokumentierter manueller Testplan für Screenshot, Recents, App-Hintergrund, Activity-Neustart und Lock auf einer offenen Detailseite.
