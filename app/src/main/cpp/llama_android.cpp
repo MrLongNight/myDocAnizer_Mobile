@@ -255,17 +255,19 @@ std::string run_inference(
 
     std::string output;
     int generated = 0;
+    bool reached_eog = false;
+    bool decode_failed = false;
     for (; generated < generation_limit; ++generated) {
         const int progress = 45 + static_cast<int>((static_cast<int64_t>(generated) * 54) / generation_limit);
         g_inference_progress.store(progress, std::memory_order_relaxed);
         llama_token token = llama_sampler_sample(sampler, g_engine->context, -1);
-        if (llama_vocab_is_eog(vocab, token)) break;
+        if (llama_vocab_is_eog(vocab, token)) { reached_eog = true; break; }
         llama_sampler_accept(sampler, token);
         char piece[512];
         const int32_t piece_length = llama_token_to_piece(vocab, token, piece, sizeof(piece), 0, true);
         if (piece_length > 0) output.append(piece, static_cast<size_t>(piece_length));
         llama_batch next = llama_batch_get_one(&token, 1);
-        if (llama_decode(g_engine->context, next) != 0) break;
+        if (llama_decode(g_engine->context, next) != 0) { decode_failed = true; break; }
     }
     const int64_t end_us = llama_time_us();
     llama_sampler_free(sampler);
@@ -276,9 +278,10 @@ std::string run_inference(
     const float tokens_per_second = generation_ms > 0
         ? static_cast<float>(generated * 1000.0 / generation_ms) : 0.0f;
 
+    const char * finish_reason = decode_failed ? "error" : (reached_eog ? "stop" : "length");
     return "{\"text\":\"" + json_escape(output) +
         "\",\"tokensGenerated\":" + std::to_string(generated) +
-        ",\"promptEvalTimeMs\":" + std::to_string(prompt_ms) +
+        ",\"finish_reason\":\"" + finish_reason + "\",\"promptEvalTimeMs\":" + std::to_string(prompt_ms) +
         ",\"generateTimeMs\":" + std::to_string(generation_ms) +
         ",\"tokensPerSecond\":" + std::to_string(tokens_per_second) + "}";
 }
@@ -303,4 +306,29 @@ Java_com_example_service_LlamaCppInferenceEngine_nativeExecuteLlamaWithGrammar(
         threads, temperature, top_p, max_tokens,
         from_jstring(env, grammar));
     return env->NewStringUTF(result.c_str());
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_service_LlamaCppInferenceEngine_nativeUnloadEngine(JNIEnv *, jobject) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    release_engine();
+    g_inference_progress.store(-1, std::memory_order_relaxed);
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_example_service_LlamaCppInferenceEngine_nativeIsEngineLoaded(JNIEnv *, jobject) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return (g_engine && g_engine->model && g_engine->context) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_example_service_LlamaCppInferenceEngine_nativeGetLoadedModelPath(JNIEnv * env, jobject) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    const std::string path = (g_engine && g_engine->model) ? g_engine->model_path : std::string();
+    return env->NewStringUTF(path.c_str());
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_example_service_LlamaCppInferenceEngine_nativeGetContextSize(JNIEnv *, jobject) {
+    return static_cast<jint>(kContextSize);
 }

@@ -121,6 +121,23 @@ class LlamaCppInferenceEngine(private val context: Context) {
     var lastInferenceMetrics: InferenceMetrics? = null
         private set
 
+    @Volatile
+    var lastFinishReason: String? = null
+        private set
+
+    fun nativeEngineLoaded(): Boolean = runCatching { nativeIsEngineLoaded() }.getOrDefault(false)
+    fun nativeLoadedModelPath(): String? = runCatching { nativeGetLoadedModelPath().takeIf { it.isNotBlank() } }.getOrNull()
+    fun nativeContextSize(): Int = runCatching { nativeGetContextSize() }.getOrDefault(2048)
+    fun unloadNativeEngine() {
+        try { nativeUnloadEngine() } catch (_: Throwable) {
+            safeLogW(TAG, "Native Engine konnte nicht explizit entladen werden")
+        }
+        lastFinishReason = null
+        lastInferenceMetrics = null
+        lastInferenceMode = InferenceMode.NOT_RUN
+        _inferenceProgress.value = -1
+    }
+
     private val progressScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _inferenceProgress = MutableStateFlow(-1)
     /** -1 = no native inference; 0..100 = native phase/progress. */
@@ -459,6 +476,7 @@ ws ::= [ \t\n\r]*
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
         lastInferenceMode = InferenceMode.NOT_RUN
         lastInferenceMetrics = null
+        lastFinishReason = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText)
@@ -604,6 +622,7 @@ ws ::= [ \t\n\r]*
                 throw IllegalStateException(result.optString("error", "Native inference failed"))
             }
             val output = result.optString("text", "")
+            lastFinishReason = result.optString("finish_reason", "unknown")
             if (output.isBlank()) throw IllegalStateException("Native inference returned an empty response")
 
             lastInferenceMode = InferenceMode.LOCAL_LLM
@@ -637,12 +656,14 @@ ws ::= [ \t\n\r]*
         } catch (e: LinkageError) {
             _inferenceProgress.value = -1
             lastInferenceMetrics = null
+            lastFinishReason = "error"
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             safeLogW(TAG, "Native llama.cpp-Laufzeit nicht verfügbar: ${e.message}")
             executeFallbackInference(prompt, systemPrompt)
         } catch (e: Exception) {
             _inferenceProgress.value = -1
             lastInferenceMetrics = null
+            lastFinishReason = "error"
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             AppAuditLogger.log(
                 category = LogCategory.AI_INFERENCE,
@@ -986,6 +1007,10 @@ ws ::= [ \t\n\r]*
     }
 
     private external fun nativeGetInferenceProgress(): Int
+    private external fun nativeUnloadEngine()
+    private external fun nativeIsEngineLoaded(): Boolean
+    private external fun nativeGetLoadedModelPath(): String
+    private external fun nativeGetContextSize(): Int
 
     private external fun nativeExecuteLlamaWithGrammar(
         modelPath: String,
