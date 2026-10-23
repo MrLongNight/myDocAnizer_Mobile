@@ -78,7 +78,8 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 5. **DB01–DB14** – vollständige SQLCipher-Datenbankverschlüsselung, Migrationen, FTS, Geldbeträge und Performance. Datenbankversionen strikt sequenziell erhöhen.
 6. **P01–P13** – sichere App2App-, PC2App- und Browser2App-Verbindungen; alle drei anhand einer gemeinsamen Sicherheitsmatrix prüfen.
 7. **C01–C09** – Google-Drive-/WebDAV-Sync. Backupcontainer und sensible Metadaten vor dem Upload clientseitig verschlüsseln; manueller/automatischer Sync ist eine Nutzeroption.
-8. **L01–L17** – echte native lokale Inferenz ist gewählt. L08B ist kein regulärer Pfad und darf nicht ohne technischen Befund und erneute ausdrückliche Produktfreigabe anstelle der nativen Engine ausgeführt werden. Nach L01–L11A folgen L12–L17 für kandidatenbasierte Dokumentverarbeitung, einheitliche Einbindung, Integrität und Qualitätsnachweis.
+8. **L01–L12** – zuerst native Inferenz und ihre Abbruch-/Mess-/Kontextgrenzen stabilisieren. L08B ist kein regulärer Pfad und darf nicht ohne technischen Befund und erneute ausdrückliche Produktfreigabe anstelle der nativen Engine ausgeführt werden.
+   Danach in dieser Reihenfolge: **L16 → L13 → L14 → L15 → L17**. Modellidentität, Datei-Integrität und Lizenzdaten werden vor dem fachlichen Qualitätsbenchmark bereinigt; L13 baut danach die kandidatenbasierte Analyse, L14 macht sie datensparsam nachvollziehbar, L15 bindet sie in alle UI-Aufrufpfade ein und L17 misst die resultierende Qualität. L16 bleibt von L13 unabhängig genug, um direkt nach L12 bearbeitet zu werden; L17 kommt zuletzt, weil es die vorangehenden Komponenten und den echten Modellkatalog benötigt.
 9. **R01–R24** – Refactoring nach Stabilisierung der Sicherheitsgrenzen, Persistenzformate und Integrationspfade.
 
 ### Technische Freigabe- und Stopp-Punkte
