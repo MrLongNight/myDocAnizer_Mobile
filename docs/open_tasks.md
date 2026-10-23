@@ -1,5 +1,7 @@
 # Aktueller IST-/SOLL-Status – Stabilisierung (23.10.2026)
 
+**Vor dem Betatest verwenden:** [Praktische Beta-Freigabecheckliste](release-beta-checklist.md). Die offenen technischen Einzelpunkte bleiben in diesem Dokument; die Freigabe wird über die dortigen Funktions-Gates beurteilt.
+
 ## Scan-Speicherfluss – aktueller Arbeitsstand
 
 - **Regelvorschlag-Dialog:** Außenklick und Zurück verwerfen den Scan nicht mehr. Verwerfen erfolgt über eine eigene Schaltfläche mit Rückfrage.
