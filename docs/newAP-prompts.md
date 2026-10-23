@@ -383,7 +383,7 @@ L08B (LLM-Rückbau) und C04B (Google Drive entfernen) sind verworfene Alternativ
 
 ## L09A – JNI-Modelllebenszyklus
 **Abhängigkeit:** L08A.  
-**Prompt:** Implementiere den minimalen JNI-Lebenszyklus für Modell laden/entladen, Fehler zurückmelden und Ressourcen freigeben. Schütze vor parallelem Laden und ungültigen Modellpfaden; native Fehler dürfen nicht unkontrolliert den Prozess beenden. Tokenstreaming, Toolrouting und UI bleiben außerhalb dieses Micro-AP. **Abnahme:** instrumentierte Tests für erfolgreiches Laden/Entladen, ungültige Datei, doppeltes Laden und Cleanup.
+**Prompt:** Prüfe den bereits vorhandenen nativen Modelllebenszyklus in `llama_android.cpp` (`ensure_engine`, `release_engine`, globaler Engine-Zustand) und den Kotlin-Aufrufpfad. Implementiere keine zweite Lade-/Inferenz-Engine. Ergänze nur nachgewiesene Lücken: sichere Serialisierung von Laden/Wechseln, explizite Freigabe nur falls ein realer App-Lifecycle-Aufrufer sie benötigt, robuste Fehlerweitergabe und Cleanup bei Modellwechsel sowie Fehlern. Prüfe ungültige Modellpfade und konkurrierende Aufrufe; native Fehler dürfen den Prozess nicht unkontrolliert beenden. Tokenstreaming, Grammar, Cancel/Timeout und UI bleiben außerhalb dieses Micro-AP. **Abnahme:** Tests für Wiederverwendung desselben Modells, Modellwechsel, ungültige Datei, parallele Aufrufe und Cleanup; keine Behauptung über einen physischen GGUF-Lauf ohne dessen Nachweis.
 
 ## L10A – Vorhandene echte Inferenz verifizieren und sicher begrenzen
 **Abhängigkeit:** L09A.  
