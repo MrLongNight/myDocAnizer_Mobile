@@ -1,0 +1,13 @@
+AeroHome
+BEDIENUNGSANLEITUNG
+Seriennummer AH2-558-110
+Datum/Termin: Modell AH-200
+
+Betreff: Kurzanleitung Luftreiniger AH-200
+
+Sehr geehrte Damen und Herren,
+
+zu dem fiktiven Vorgang Seriennummer AH2-558-110 wird Folgendes mitgeteilt: Kurzanleitung Luftreiniger AH-200. Die zugehörigen Angaben lauten Filter AH-F2. Aussteller ist AeroHome. Bitte beachten Sie die angegebene Referenz und den Termin. Das Dokument ist eigens für den lokalen LLM-Stresstest erstellt und darf keine Daten im echten Tresor anlegen.
+
+Mit freundlichen Grüßen
+AeroHome

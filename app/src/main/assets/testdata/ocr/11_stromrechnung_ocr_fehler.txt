@@ -1,0 +1,13 @@
+ENERGIEWERK OST
+STROMRECHNUNG
+Rechnungsnr. EW-26-7O18
+Datum/Termin: 02.11.2O26
+
+Betreff: Abrechnung Stromverbrauch
+
+Sehr geehrte Damen und Herren,
+
+zu dem fiktiven Vorgang Rechnungsnr. EW-26-7O18 wird Folgendes mitgeteilt: Abrechnung Stromverbrauch. Die zugehörigen Angaben lauten 236,34 EUR. Aussteller ist ENERGIEWERK OST. Bitte beachten Sie die angegebene Referenz und den Termin. Das Dokument ist eigens für den lokalen LLM-Stresstest erstellt und darf keine Daten im echten Tresor anlegen.
+
+Mit freundlichen Grüßen
+ENERGIEWERK OST

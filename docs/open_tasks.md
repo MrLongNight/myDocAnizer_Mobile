@@ -130,3 +130,14 @@ Dieses Dokument enthält den aktuellen Status der Modularisierung und Dateigrö�
 ---
 
 ## 🛠️ Status: Alle 22 geplanten Refactoring-Pakete, UI-Anpassungen & Stabilitäts-Härtungen erfolgreich abgeschlossen!
+
+
+## LLM-Gerätediagnose und reproduzierbarer OCR-Stresstest (24.10.2026)
+
+- **Angefordert:** Debug-/Entwickleransicht „LLM-Diagnose“ mit Modellpfad/-größe/GGUF-Signatur, ABI, Java- und Native-Heap, Engine-Zustand, n_ctx und Threads; native Engine kontrolliert laden/entladen.
+- **Testkorpus:** 20 frei erfundene OCR-Texte in `app/src/main/assets/testdata/ocr/*.txt`, inklusive OCR-Fehlern und einem Langtext deutlich oberhalb des 2048-Token-Kontextfensters.
+- **Stresstest:** Regelmatch → First-Run-Analyse → Vorschlag/Second-Run, ohne Kamera, Dialog oder produktives Speichern. Zusätzlich Paralleltest (Chat + Analyse + Re-Run) und Abbruchtest.
+- **Messwerte:** Dauer, LLM/Fallback, finish_reason, Tokens, Java-/Native-Heap vorher/nachher, Fehler und Stacktrace; Summen OK/Fallback/Timeout/Fehler, Heap-Trend und längste Wartezeit; Text-Export.
+- **Abnahme offen:** 20 Dokumente am Stück ohne Hänger und Heap-Wachstum über 150 MB. Parallel- und Abbruchlauf ebenfalls am Gerät prüfen. Kein Fehler gilt vor dieser Prüfung als gelöst.
+- **Codebefund:** `app/src/main/cpp/llama_android.cpp` setzt `kContextSize = 2048`; `fit_prompt_to_context` kürzt lange Prompts. Das native Engine-Objekt wird bei Modell-/Threadwechsel freigegeben und neu aufgebaut; ein expliziter Diagnose-Entladepfad ist zu ergänzen.
+- **Status:** Korpus ist vorbereitet; Implementierung der Diagnoseoberfläche, Messung und Laufzeitkontrollen steht noch aus. Keine Geräteergebnisse behauptet.
