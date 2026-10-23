@@ -1,5 +1,7 @@
 package com.example.ui.views
 
+import com.example.service.DocumentScanTrace
+
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -229,14 +231,14 @@ fun ScannerView(
                 if (capturedRawBitmap != null) add("crop_preview_open")
                 if (pendingRuleSuggestion != null) add("rule_confirmation_open")
             }
-            Log.i("DocScanTrace", "event=auto_readiness mode=AUTO ready=${reasons.isEmpty()} reasons=${if (reasons.isEmpty()) "none" else reasons.joinToString(",")} detected=${frameAnalysis.isDocumentDetected} stable=${frameAnalysis.isDocumentStable} confidence=${String.format(java.util.Locale.US, "%.3f", frameAnalysis.documentConfidence)} luminance=${String.format(java.util.Locale.US, "%.1f", frameAnalysis.averageLuminance)} sharpness=${String.format(java.util.Locale.US, "%.1f", frameAnalysis.sharpnessScore)} tripod=${scannerSettings.tripodAutoScan} tiltDeg=${String.format(java.util.Locale.US, "%.1f", tiltAngleDegrees)} preScan=$isPreScanActive captured=$hasCapturedCurrentDocument processing=$isProcessing countdown=$isCountdownRunning")
+            DocumentScanTrace.info("event=auto_readiness mode=AUTO ready=${reasons.isEmpty()} reasons=${if (reasons.isEmpty()) "none" else reasons.joinToString(",")} detected=${frameAnalysis.isDocumentDetected} stable=${frameAnalysis.isDocumentStable} confidence=${String.format(java.util.Locale.US, "%.3f", frameAnalysis.documentConfidence)} luminance=${String.format(java.util.Locale.US, "%.1f", frameAnalysis.averageLuminance)} sharpness=${String.format(java.util.Locale.US, "%.1f", frameAnalysis.sharpnessScore)} tripod=${scannerSettings.tripodAutoScan} tiltDeg=${String.format(java.util.Locale.US, "%.1f", tiltAngleDegrees)} preScan=$isPreScanActive captured=$hasCapturedCurrentDocument processing=$isProcessing countdown=$isCountdownRunning")
         }
     }
 
 
     // Funktion zum Ausführen des eigentlichen Bildabzugs
     val executeCapture: () -> Unit = {
-        Log.i("DocScanTrace", "event=capture_requested source=${if (isAutoMode) "auto" else "manual_or_button"} cameraReady=${imageCaptureInstance != null} qualityCheck=$isQualityCheckModeActive cropPreview=${scannerSettings.enableCropPreview && !isBatchModeActive}")
+        DocumentScanTrace.info("event=capture_requested source=${if (isAutoMode) "auto" else "manual_or_button"} cameraReady=${imageCaptureInstance != null} qualityCheck=$isQualityCheckModeActive cropPreview=${scannerSettings.enableCropPreview && !isBatchModeActive}")
         // Clear the previous save confirmation before a new capture starts.
         viewModel.clearLastBulkSavedDoc()
         hasCapturedCurrentDocument = true
@@ -292,7 +294,7 @@ fun ScannerView(
                                 imageProxy.close()
                             }
                             if (bmp != null) {
-                                Log.i("DocScanTrace", "event=capture_result result=success width=${bmp.width} height=${bmp.height}")
+                                DocumentScanTrace.info("event=capture_result result=success width=${bmp.width} height=${bmp.height}")
                                 onBmpReady(bmp)
                             } else {
                                 Log.e("ScannerView", "Bild konnte nicht decodiert werden")
@@ -303,7 +305,7 @@ fun ScannerView(
                         }
 
                         override fun onError(exception: ImageCaptureException) {
-                            Log.e("DocScanTrace", "event=capture_result result=error code=${exception.imageCaptureError} type=${exception.javaClass.simpleName}")
+                            DocumentScanTrace.error("event=capture_result result=error code=${exception.imageCaptureError} type=${exception.javaClass.simpleName}")
                             scanErrorMessage = "Kamerafehler: ${exception.localizedMessage ?: "Auslösung fehlgeschlagen"}"
                             hasCapturedCurrentDocument = false
                             autoDetectProgress = 0f
@@ -311,13 +313,13 @@ fun ScannerView(
                     }
                 )
             } catch (e: Exception) {
-                Log.e("DocScanTrace", "event=capture_result result=exception type=${e.javaClass.simpleName}")
+                DocumentScanTrace.error("event=capture_result result=exception type=${e.javaClass.simpleName}")
                 scanErrorMessage = "Auslöser-Fehler: ${e.localizedMessage ?: "Auslösung fehlgeschlagen"}"
                 hasCapturedCurrentDocument = false
                 autoDetectProgress = 0f
             }
         } else {
-            Log.w("DocScanTrace", "event=capture_skipped reason=image_capture_instance_null cameraAvailable=$isCameraHardwareAvailable")
+            DocumentScanTrace.warn("event=capture_skipped reason=image_capture_instance_null cameraAvailable=$isCameraHardwareAvailable")
             if (!isCameraHardwareAvailable) {
                 // Nur im Emulator ohne Hardware-Kamera: Simuliertes Testblatt
                 val template = selectedTemplate ?: templates.firstOrNull()
@@ -379,9 +381,9 @@ fun ScannerView(
     LaunchedEffect(scannerSettings.scanMode, scannerSettings.tripodAutoScan, scannerSettings.preScanDelaySeconds) {
         val isAuto = scannerSettings.scanMode == "AUTO" &&
             (scannerSettings.tripodAutoScan || scannerSettings.triggerMode == "AUTO_DETECT")
-        Log.i("DocScanTrace", "event=auto_config mode=${scannerSettings.scanMode} trigger=${scannerSettings.triggerMode} tripod=${scannerSettings.tripodAutoScan} preScanDelaySec=${scannerSettings.preScanDelaySeconds} enabled=$isAuto")
+        DocumentScanTrace.info("event=auto_config mode=${scannerSettings.scanMode} trigger=${scannerSettings.triggerMode} tripod=${scannerSettings.tripodAutoScan} preScanDelaySec=${scannerSettings.preScanDelaySeconds} enabled=$isAuto")
         if (isAuto && scannerSettings.preScanDelaySeconds > 0) {
-            Log.i("DocScanTrace", "event=pre_scan_started seconds=${scannerSettings.preScanDelaySeconds}")
+            DocumentScanTrace.info("event=pre_scan_started seconds=${scannerSettings.preScanDelaySeconds}")
             isPreScanActive = true
             preScanSecondsRemaining = scannerSettings.preScanDelaySeconds
             while (preScanSecondsRemaining > 0) {
@@ -389,7 +391,7 @@ fun ScannerView(
                 preScanSecondsRemaining--
             }
             isPreScanActive = false
-            Log.i("DocScanTrace", "event=pre_scan_finished")
+            DocumentScanTrace.info("event=pre_scan_finished")
         } else {
             isPreScanActive = false
             preScanSecondsRemaining = 0
@@ -422,7 +424,7 @@ fun ScannerView(
             if (capturedRawBitmap != null) add("crop_preview_open")
             if (pendingRuleSuggestion != null) add("rule_confirmation_open")
         }
-        Log.i("DocScanTrace", "event=auto_loop_config armed=${armReasons.isEmpty()} reasons=${if (armReasons.isEmpty()) "none" else armReasons.joinToString(",")}")
+        DocumentScanTrace.info("event=auto_loop_config armed=${armReasons.isEmpty()} reasons=${if (armReasons.isEmpty()) "none" else armReasons.joinToString(",")}")
         if (isTripodOrAuto && !isPreScanActive && !hasCapturedCurrentDocument && !isProcessing && !isCountdownRunning && capturedRawBitmap == null && pendingRuleSuggestion == null) {
             snapshotFlow {
                 frameAnalysis.isDocumentDetected &&
@@ -430,13 +432,13 @@ fun ScannerView(
                     (!scannerSettings.tripodAutoScan || tiltAngleDegrees <= 8f) &&
                     frameAnalysis.averageLuminance >= 50f
             }.collectLatest { isReady ->
-                Log.i("DocScanTrace", "event=auto_readiness_transition ready=$isReady detected=${frameAnalysis.isDocumentDetected} stable=${frameAnalysis.isDocumentStable} luminance=${String.format(java.util.Locale.US, "%.1f", frameAnalysis.averageLuminance)} tripod=${scannerSettings.tripodAutoScan} tiltDeg=${String.format(java.util.Locale.US, "%.1f", tiltAngleDegrees)}")
+                DocumentScanTrace.info("event=auto_readiness_transition ready=$isReady detected=${frameAnalysis.isDocumentDetected} stable=${frameAnalysis.isDocumentStable} luminance=${String.format(java.util.Locale.US, "%.1f", frameAnalysis.averageLuminance)} tripod=${scannerSettings.tripodAutoScan} tiltDeg=${String.format(java.util.Locale.US, "%.1f", tiltAngleDegrees)}")
                 if (isReady) {
-                    Log.i("DocScanTrace", "event=auto_candidate_wait_started delayMs=650")
+                    DocumentScanTrace.info("event=auto_candidate_wait_started delayMs=650")
                     autoDetectProgress = 0.5f
                     kotlinx.coroutines.delay(650L)
                     if (frameAnalysis.isDocumentDetected && frameAnalysis.isDocumentStable) {
-                        Log.i("DocScanTrace", "event=auto_candidate_recheck passed=true stable=${frameAnalysis.isDocumentStable} detected=${frameAnalysis.isDocumentDetected} sharpness=${String.format(java.util.Locale.US, "%.1f", frameAnalysis.sharpnessScore)}")
+                        DocumentScanTrace.info("event=auto_candidate_recheck passed=true stable=${frameAnalysis.isDocumentStable} detected=${frameAnalysis.isDocumentDetected} sharpness=${String.format(java.util.Locale.US, "%.1f", frameAnalysis.sharpnessScore)}")
                         if (frameAnalysis.sharpnessScore < 26f) {
                             val since = stableSinceMs
                             val stableFor = if (since > 0L) android.os.SystemClock.elapsedRealtime() - since else 0L
@@ -450,7 +452,7 @@ fun ScannerView(
                             }
                         }
                         if (frameAnalysis.isDocumentDetected && frameAnalysis.isDocumentStable) {
-                            Log.i("DocScanTrace", "event=auto_capture_decision result=trigger reason=locked_and_stable")
+                            DocumentScanTrace.info("event=auto_capture_decision result=trigger reason=locked_and_stable")
                             capturedQuadAtScan = frameAnalysis.documentQuad?.map {
                                 android.graphics.PointF(it.x, it.y)
                             }
@@ -460,11 +462,11 @@ fun ScannerView(
                             motionDetectedAfterCapture = false
                         }
                     } else {
-                        Log.i("DocScanTrace", "event=auto_capture_decision result=skip reason=lock_or_stability_lost_after_wait detected=${frameAnalysis.isDocumentDetected} stable=${frameAnalysis.isDocumentStable}")
+                        DocumentScanTrace.info("event=auto_capture_decision result=skip reason=lock_or_stability_lost_after_wait detected=${frameAnalysis.isDocumentDetected} stable=${frameAnalysis.isDocumentStable}")
                     }
                     autoDetectProgress = 0f
                 } else {
-                    Log.i("DocScanTrace", "event=auto_readiness_transition ready=false reason=one_or_more_gates_failed")
+                    DocumentScanTrace.info("event=auto_readiness_transition ready=false reason=one_or_more_gates_failed")
                     autoDetectProgress = 0f
                 }
             }
