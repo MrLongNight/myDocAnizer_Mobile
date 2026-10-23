@@ -4,15 +4,11 @@ import android.util.Base64
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.nio.ByteBuffer
-import java.nio.CharBuffer
-import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
-import org.bouncycastle.crypto.generators.Argon2BytesGenerator
-import org.bouncycastle.crypto.params.Argon2Parameters
 
 /**
  * Versioned recovery payload defined by docs/security/adr-001-recovery-format.md.
@@ -31,7 +27,6 @@ object RecoveryPayloadEngine {
     private const val KEY_LENGTH_BYTES = 32
     private const val ARGON2_ITERATIONS = 2
     private const val ARGON2_MEMORY_KB = 19456
-    private const val ARGON2_PARALLELISM = 1
     private const val MAX_SERIALIZED_BYTES = 16 * 1024
     private const val MIN_PASSPHRASE_CHARS = 20
 
@@ -127,33 +122,13 @@ object RecoveryPayloadEngine {
         require(passphrase.size >= MIN_PASSPHRASE_CHARS) {
             "Recovery passphrase must contain at least $MIN_PASSPHRASE_CHARS characters"
         }
-        val encoded = StandardCharsets.UTF_8.newEncoder()
-            .onMalformedInput(CodingErrorAction.REPORT)
-            .onUnmappableCharacter(CodingErrorAction.REPORT)
-            .encode(CharBuffer.wrap(passphrase))
-        val passBytes = ByteArray(encoded.remaining())
-        encoded.get(passBytes)
-        if (encoded.hasArray()) encoded.array().fill(0)
-
-        val out = ByteArray(KEY_LENGTH_BYTES)
-        try {
-            val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
-                .withVersion(Argon2Parameters.ARGON2_VERSION_13)
-                .withIterations(ARGON2_ITERATIONS)
-                .withMemoryAsKB(ARGON2_MEMORY_KB)
-                .withParallelism(ARGON2_PARALLELISM)
-                .withSalt(salt)
-                .build()
-            val generator = Argon2BytesGenerator()
-            generator.init(params)
-            generator.generateBytes(passBytes, out, 0, out.size)
-            return out
-        } catch (e: Exception) {
-            out.fill(0)
-            throw SecurityException("Recovery key derivation failed", e)
-        } finally {
-            passBytes.fill(0)
-        }
+        return Argon2idEngine.deriveKey(
+            password = passphrase,
+            salt = salt,
+            iterations = ARGON2_ITERATIONS,
+            memoryKb = ARGON2_MEMORY_KB,
+            tagLength = KEY_LENGTH_BYTES
+        )
     }
 
     /** Encrypts exactly one 256-bit DEK using the ADR-approved v2 format. */

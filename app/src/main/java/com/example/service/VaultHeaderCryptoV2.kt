@@ -3,8 +3,6 @@ package com.example.service
 import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
-import java.nio.CharBuffer
-import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -12,8 +10,6 @@ import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
-import org.bouncycastle.crypto.generators.Argon2BytesGenerator
-import org.bouncycastle.crypto.params.Argon2Parameters
 
 /**
  * AEAD operations for VaultHeader v2. Header metadata is authenticated as AAD;
@@ -31,7 +27,6 @@ object VaultHeaderCryptoV2 {
     private const val MIN_MEMORY_KB = 19456
     private const val MAX_MEMORY_KB = 262144
     private val random = SecureRandom()
-    private val kdfLock = Any()
 
     fun createHeader(
         vaultId: String,
@@ -206,31 +201,14 @@ object VaultHeaderCryptoV2 {
     private fun deriveKey(password: CharArray, salt: ByteArray, iterations: Int, memoryKb: Int): ByteArray {
         validateKdf(iterations, memoryKb)
         require(salt.size == SALT_BYTES) { "Invalid Argon2id salt length" }
-        val encoded = StandardCharsets.UTF_8.newEncoder()
-            .onMalformedInput(CodingErrorAction.REPORT)
-            .onUnmappableCharacter(CodingErrorAction.REPORT)
-            .encode(CharBuffer.wrap(password))
-        val passBytes = ByteArray(encoded.remaining()).also { encoded.get(it) }
-        if (encoded.hasArray()) encoded.array().fill(0)
-        val result = ByteArray(KEY_BYTES)
-        try {
-            synchronized(kdfLock) {
-                val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
-                    .withVersion(Argon2Parameters.ARGON2_VERSION_13)
-                    .withIterations(iterations)
-                    .withMemoryAsKB(memoryKb)
-                    .withParallelism(1)
-                    .withSalt(salt)
-                    .build()
-                Argon2BytesGenerator().apply { init(params) }.generateBytes(passBytes, result, 0, result.size)
-            }
-            return result
-        } catch (e: Exception) {
-            result.fill(0)
-            throw SecurityException("Vault key derivation failed", e)
-        } finally {
-            passBytes.fill(0)
-        }
+        // Use the same bounded, serialized, strict-UTF-8 implementation as recovery.
+        return Argon2idEngine.deriveKey(
+            password = password,
+            salt = salt,
+            iterations = iterations,
+            memoryKb = memoryKb,
+            tagLength = KEY_BYTES
+        )
     }
 
     private fun aad(header: VaultHeaderV2): ByteArray {

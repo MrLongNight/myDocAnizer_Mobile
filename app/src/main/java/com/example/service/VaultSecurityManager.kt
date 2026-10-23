@@ -22,6 +22,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.CharBuffer
+import java.nio.charset.CodingErrorAction
+import java.nio.charset.StandardCharsets
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -1867,10 +1870,10 @@ object Argon2idEngine {
         password: CharArray,
         salt: ByteArray,
         iterations: Int = 2,
-        memoryKb: Int = 19456, // Mindestens 19 MiB für V2
+        memoryKb: Int = 19456, // V2-Argon2id: mindestens 19 MiB
         tagLength: Int = 32
     ): ByteArray {
-        // Only the current V2 parameter policy is accepted. Never silently clamp hostile values.
+        // Single policy for vault and recovery KDFs; never clamp hostile parameters.
         require(memoryKb in 19456..262144 && iterations in 2..10) {
             "Unsupported Argon2id parameters: memory=$memoryKb KB, iterations=$iterations"
         }
@@ -1878,26 +1881,39 @@ object Argon2idEngine {
         require(tagLength == 32) { "Vault KEK must be exactly 32 bytes" }
         require(password.isNotEmpty()) { "Password cannot be empty" }
 
-        synchronized(argon2Mutex) {
-            val builder = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
-                .withVersion(Argon2Parameters.ARGON2_VERSION_13)
-                .withIterations(iterations)
-                .withMemoryAsKB(memoryKb)
-                .withParallelism(1)
-                .withSalt(salt)
+        val output = ByteArray(tagLength)
+        var passwordBytes: ByteArray? = null
+        var encodedBuffer: java.nio.ByteBuffer? = null
+        try {
+            val encoded = StandardCharsets.UTF_8.newEncoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .encode(CharBuffer.wrap(password))
+            encodedBuffer = encoded
+            passwordBytes = ByteArray(encoded.remaining()).also { encoded.get(it) }
+            if (encoded.hasArray()) encoded.array().fill(0)
 
-            val params = builder.build()
-            val generator = Argon2BytesGenerator()
-            generator.init(params)
-
-            val out = ByteArray(tagLength)
-            try {
-                generator.generateBytes(password, out, 0, out.size)
-                return out
-            } catch (e: Exception) {
-                out.fill(0)
-                throw SecurityException("Argon2id key derivation failed", e)
+            synchronized(argon2Mutex) {
+                val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
+                    .withVersion(Argon2Parameters.ARGON2_VERSION_13)
+                    .withIterations(iterations)
+                    .withMemoryAsKB(memoryKb)
+                    .withParallelism(1)
+                    .withSalt(salt)
+                    .build()
+                Argon2BytesGenerator().apply { init(params) }
+                    .generateBytes(passwordBytes, output, 0, output.size)
             }
+            return output
+        } catch (e: IllegalArgumentException) {
+            output.fill(0)
+            throw e
+        } catch (e: Exception) {
+            output.fill(0)
+            throw SecurityException("Argon2id key derivation failed", e)
+        } finally {
+            passwordBytes?.fill(0)
+            if (encodedBuffer?.hasArray() == true) encodedBuffer.array().fill(0)
         }
     }
 }
