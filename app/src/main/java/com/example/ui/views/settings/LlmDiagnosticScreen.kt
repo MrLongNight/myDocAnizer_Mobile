@@ -30,6 +30,7 @@ import com.example.ui.DocAnizerViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -160,12 +161,19 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
             val name = assets().firstOrNull { it.contains("langer_ocrtext") } ?: assets().last()
             val before = HeapSample.capture()
             val start = SystemClock.elapsedRealtime()
-            try {
-                withTimeout(1_500L) { service.classifyDocumentSecondRun(read(name)) }
-                _rows.value = _rows.value + row(name, start, before, "OK", "Analyse war vor Timeout fertig")
-            } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
-                _rows.value = _rows.value + row(name, start, before, "ABGEBROCHEN", "Kotlin-Abbruch nach 1,5 s; laufender synchroner JNI-Aufruf kann bis zur Rückkehr weiterlaufen")
+            coroutineScope {
+                val cancelJob = launch {
+                    delay(1_500L)
+                    engine.requestNativeCancellation()
+                }
+                try {
+                    service.classifyDocumentSecondRun(read(name))
+                } finally {
+                    cancelJob.cancel()
+                }
             }
+            val wasCancelled = engine.lastFinishReason == "cancelled"
+            _rows.value = _rows.value + row(name, start, before, if (wasCancelled) "ABGEBROCHEN" else "OK", if (wasCancelled) "Native Token-Generierung hat Abbruchsignal verarbeitet" else "Analyse vor Abbruchsignal abgeschlossen")
             _status.value = "Abbruchtest abgeschlossen"
         } finally { _running.value = false }
     }
@@ -185,8 +193,11 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         appendLine("Abgebrochen=" + _rows.value.count { it.status == "ABGEBROCHEN" })
         appendLine("Längste Wartezeit=" + (_rows.value.maxOfOrNull { it.elapsedMs } ?: 0L) + " ms")
         if (_rows.value.isNotEmpty()) {
-            appendLine("Java-Heap-Trend=" + (_rows.value.last().javaAfter - _rows.value.first().javaBefore) + " Bytes")
-            appendLine("Native-Heap-Trend=" + (_rows.value.last().nativeAfter - _rows.value.first().nativeBefore) + " Bytes")
+            val javaTrend = _rows.value.last().javaAfter - _rows.value.first().javaBefore
+            val nativeTrend = _rows.value.last().nativeAfter - _rows.value.first().nativeBefore
+            appendLine("Java-Heap-Trend=" + javaTrend + " Bytes")
+            appendLine("Native-Heap-Trend=" + nativeTrend + " Bytes")
+            appendLine("Heap-Wachstum > 150 MB=" + ((javaTrend + nativeTrend) > 150L * 1024L * 1024L))
         }
         _rows.value.forEach { r ->
             appendLine("[" + r.status + "] " + r.name + " | " + r.elapsedMs + " ms | " + r.mode + " | finish_reason=" + r.finishReason + " | Tokens=" + r.tokens)
@@ -256,7 +267,8 @@ fun LlmDiagnosticScreen(viewModel: DocAnizerViewModel) {
             Text("Nur Debug-Build. Kein Kamerazugriff, kein Dialog, keine Speicherung im echten Tresor.", style = MaterialTheme.typography.bodySmall)
             Text(snapshot, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = !running, onClick = { activeJob = scope.launch { runCatching { runner.testPrompt() }; snapshot = runner.snapshot() } }) { Icon(Icons.Default.PlayArrow, null); Text("Testprompt") }
+                Button(enabled = !running, onClick = { activeJob = scope.launch { runCatching { runner.testPrompt() }; snapshot = runner.snapshot() } }) { Icon(Icons.Default.PlayArrow, null); Text("Modell laden") }
+                OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch { runCatching { runner.testPrompt() }; snapshot = runner.snapshot() } }) { Text("Testprompt") }
                 OutlinedButton(enabled = !running, onClick = { runner.unload(); snapshot = runner.snapshot() }) { Icon(Icons.Default.Memory, null); Text("Entladen") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

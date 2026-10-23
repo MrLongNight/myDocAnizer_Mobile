@@ -128,6 +128,10 @@ class LlamaCppInferenceEngine(private val context: Context) {
     fun nativeEngineLoaded(): Boolean = runCatching { nativeIsEngineLoaded() }.getOrDefault(false)
     fun nativeLoadedModelPath(): String? = runCatching { nativeGetLoadedModelPath().takeIf { it.isNotBlank() } }.getOrNull()
     fun nativeContextSize(): Int = runCatching { nativeGetContextSize() }.getOrDefault(2048)
+    fun requestNativeCancellation() {
+        try { nativeCancelInference() } catch (_: Throwable) { }
+    }
+
     fun unloadNativeEngine() {
         try { nativeUnloadEngine() } catch (_: Throwable) {
             safeLogW(TAG, "Native Engine konnte nicht explizit entladen werden")
@@ -580,8 +584,10 @@ ws ::= [ \t\n\r]*
         // Clear previous-call state first: a fallback must never inherit stale LLM status/metrics.
         lastInferenceMode = InferenceMode.NOT_RUN
         lastInferenceMetrics = null
+        lastFinishReason = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
+            lastFinishReason = "fallback"
             return@withContext executeFallbackInference(prompt, systemPrompt)
         }
         if (!supportsNativeInference()) {
@@ -1007,6 +1013,7 @@ ws ::= [ \t\n\r]*
     }
 
     private external fun nativeGetInferenceProgress(): Int
+    private external fun nativeCancelInference()
     private external fun nativeUnloadEngine()
     private external fun nativeIsEngineLoaded(): Boolean
     private external fun nativeGetLoadedModelPath(): String

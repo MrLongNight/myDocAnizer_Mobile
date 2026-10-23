@@ -25,6 +25,7 @@ struct Engine {
 
 std::mutex g_mutex;
 std::atomic<int> g_inference_progress{-1};
+std::atomic<bool> g_cancel_requested{false};
 Engine * g_engine = nullptr;
 bool g_backend_ready = false;
 
@@ -218,6 +219,7 @@ std::string run_inference(
         int max_tokens,
         const std::string & grammar) {
     std::lock_guard<std::mutex> lock(g_mutex);
+    g_cancel_requested.store(false, std::memory_order_relaxed);
     g_inference_progress.store(5, std::memory_order_relaxed);
     std::string error;
     threads = std::max(1, std::min(threads, 8));
@@ -257,7 +259,9 @@ std::string run_inference(
     int generated = 0;
     bool reached_eog = false;
     bool decode_failed = false;
+    bool cancelled = false;
     for (; generated < generation_limit; ++generated) {
+        if (g_cancel_requested.load(std::memory_order_relaxed)) { cancelled = true; break; }
         const int progress = 45 + static_cast<int>((static_cast<int64_t>(generated) * 54) / generation_limit);
         g_inference_progress.store(progress, std::memory_order_relaxed);
         llama_token token = llama_sampler_sample(sampler, g_engine->context, -1);
@@ -278,7 +282,7 @@ std::string run_inference(
     const float tokens_per_second = generation_ms > 0
         ? static_cast<float>(generated * 1000.0 / generation_ms) : 0.0f;
 
-    const char * finish_reason = decode_failed ? "error" : (reached_eog ? "stop" : "length");
+    const char * finish_reason = decode_failed ? "error" : (cancelled ? "cancelled" : (reached_eog ? "stop" : "length"));
     return "{\"text\":\"" + json_escape(output) +
         "\",\"tokensGenerated\":" + std::to_string(generated) +
         ",\"finish_reason\":\"" + finish_reason + "\",\"promptEvalTimeMs\":" + std::to_string(prompt_ms) +
@@ -331,4 +335,9 @@ Java_com_example_service_LlamaCppInferenceEngine_nativeGetLoadedModelPath(JNIEnv
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_service_LlamaCppInferenceEngine_nativeGetContextSize(JNIEnv *, jobject) {
     return static_cast<jint>(kContextSize);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_service_LlamaCppInferenceEngine_nativeCancelInference(JNIEnv *, jobject) {
+    g_cancel_requested.store(true, std::memory_order_relaxed);
 }

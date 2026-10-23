@@ -141,3 +141,11 @@ Dieses Dokument enthält den aktuellen Status der Modularisierung und Dateigrö�
 - **Abnahme offen:** 20 Dokumente am Stück ohne Hänger und Heap-Wachstum über 150 MB. Parallel- und Abbruchlauf ebenfalls am Gerät prüfen. Kein Fehler gilt vor dieser Prüfung als gelöst.
 - **Codebefund:** `app/src/main/cpp/llama_android.cpp` setzt `kContextSize = 2048`; `fit_prompt_to_context` kürzt lange Prompts. Das native Engine-Objekt wird bei Modell-/Threadwechsel freigegeben und neu aufgebaut; ein expliziter Diagnose-Entladepfad ist zu ergänzen.
 - **Status:** 20 synthetische OCR-Assets sind eingecheckt; native finish_reason-/Engine-Status-Schnittstelle ergänzt. Diagnoseoberfläche und Messläufe stehen in Umsetzung; Geräteabnahme weiterhin offen.
+
+
+### Implementierungsnotizen LLM-Diagnose (24.10.2026)
+
+- Native Inferenz liefert jetzt `finish_reason` aus der Token-Schleife und JNI-Endpunkte für Engine-Status, geladenen Modellpfad, Kontextgröße, Entladen und Abbruchsignal.
+- Diagnosemesswerte für parallele Aufrufe lesen weiterhin globale „last inference“-Felder; dadurch können Finish-Reason/Tokenzahlen zwischen gleichzeitig laufenden Tasks verwechselt werden. Das ist selbst ein zu prüfender Befund und muss vor belastbarer paralleler Metrikzuordnung behoben werden.
+- Der native Abbruch prüft das Signal pro generiertem Token. Prompt-Evaluation via `llama_decode` ist synchron und lässt sich damit nicht mitten in diesem einzelnen Aufruf unterbrechen; Abbruch kann erst nach Rückkehr aus dieser Phase greifen.
+- Geräteabnahme und CI für den Diagnosepfad offen. Keine Ergebnisse als gelöst melden.
