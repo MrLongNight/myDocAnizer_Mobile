@@ -1,9 +1,10 @@
 # Baseline Audit Bericht - myDocAnizer-Mobile
 
-**Datum:** 2026-10-17  
-**Status:** AUDIT ABGESCHLOSSEN  
-**Build-Status:** SUCCESSFUL (Gradle assembleDebug)  
-**Test-Status:** SUCCESSFUL (33 unit tests passed)
+**Datum des historischen Snapshots:** 2026-10-17  
+**Status:** Historischer Baseline-Audit – nicht als aktueller IST-Stand verwenden  
+**Build-/Test-Nachweis:** Galt nur für den damaligen Commit; kein Nachweis für den aktuellen `main`-Stand.
+
+> **Wichtig:** Dieser Bericht entstand vor den späteren Vault-v2-only-Änderungen und weiteren Sicherheits-Refactorings. Aussagen über Vault-Version, KDF, Recovery, Secrets, P2P, Datenbank und Backups sind historische Befunde. Für aktuelle Entscheidungen zuerst den gegenwärtigen Quellcode und die neueren ADRs/Implementierungsberichte prüfen. V1 darf gemäß aktueller Produktvorgabe weder wieder eingeführt noch per V1→V2-Migration unterstützt werden.
 
 ## 1. Inventar und Befunde
 
