@@ -68,18 +68,18 @@
 | P11 | Serverlebenszyklus und Android-Berechtigungen | In Arbeit |
 | P12 | End-to-End-Sicherheitstests für App2App, PC2App und Browser2App | Offen |
 | P13 | Browser2App sicher und ohne Warnungsumgehung unterstützen | Offen |
-| L01 | Laufzeit- und APK-Inventur | Umgesetzt / geprüft |
+| L01 | Laufzeit- und APK-Inventur | In Arbeit |
 | L02 | Native-Produktionsplan mit dem tatsächlichen Bestand abgleichen | In Arbeit |
 | L03 | Modellkatalog und Quellenbelege | In Arbeit |
 | L04 | WorkManager-Downloader-Grundlage | In Arbeit |
 | L05 | Modellintegrität und private Ablage | In Arbeit |
 | L06 | Download-Resume korrekt implementieren | Offen |
 | L07 | Ehrliche Laufzeitmodi und Datenschutz | In Arbeit |
-| L08A | Vorhandene Native-Buildintegration reproduzierbar verifizieren | Umgesetzt / geprüft |
+| L08A | Vorhandene Native-Buildintegration reproduzierbar verifizieren | In Arbeit |
 | L09A | JNI-Modelllebenszyklus | In Arbeit |
 | L10A | Vorhandene echte Inferenz verifizieren und sicher begrenzen | In Arbeit |
 | L11A | ABI-/16-KB-/Geräteprüfung | In Arbeit |
-| L12 | Native Inferenz absichern: Grammar, Cancel, Kontext und echte Metriken | Offen |
+| L12 | Native Inferenz absichern: Grammar, Cancel, Kontext und echte Metriken | In Arbeit |
 | L13 | Kandidatenbasierte Hybridanalyse statt frei erfundener Feldwerte | Offen |
 | L14 | Durchgängiges, datensparsames Audit der Dokumentenverarbeitung | In Arbeit |
 | L15 | Einheitliche Scan-Pipeline, Nutzerprüfung und sichere Chat-Aktionen | In Arbeit |
@@ -197,7 +197,7 @@ L08B (LLM-Rückbau) und C04B (Google Drive entfernen) sind verworfene Alternativ
 **Prompt:** Prüfe und sichere den Biometrie-/Keystore-Pfad: Biometrie ist eine lokale Freigabemethode, nicht automatisch ein portabler Wiederherstellungsschlüssel. Der DEK darf nur über den dokumentierten Gatekeeper freigegeben werden; aktivierte Zwei-Faktor-Regeln dürfen nicht durch Biometrie, Service/API-Aufruf oder UI-Callback umgangen werden. Gerätewechsel und Keystore-Invalidierung müssen einen getesteten Recovery-Pfad verwenden. **Abnahme:** Instrumentationstests für Biometrie, Ablehnung, Key-Invalidierung, Neustart und optional aktivierte 2FA.
 ## V14 – V2-only Laufzeit und vollständige Entfernung von V1
 **Abhängigkeit:** V02–V04 und V07–V13.
-**Prompt:** V2 ist das einzige Persistenz- und Laufzeitformat. Ersteinrichtung, Entsperren, Passwortwechsel, Biometrie, Keyfile/2FA, TOTP und Recovery müssen V2 verwenden. Entferne vollständig V1-Header, -Serialisierung, -Parser, -KDF-/Unlockpfade, Rückfalllogik, V1-Fixtures/-Tests und jede Staging-/Promotionslogik für eine Migration. Keine V1-Migration durchführen, vorbereiten oder als Fallback beibehalten. Alte V1-Daten werden nicht übernommen und dürfen vom Code nicht als Tresor erkannt werden. Beschädigte V2-Header müssen geschlossen fehlschlagen und dürfen nicht stillschweigend überschrieben oder als entsperrt behandelt werden. **Abnahme:** keine V1-Codepfade; V2-Funktionstests und vollständiger Build/Testlauf bestehen.
+**Prompt:** V2 ist das einzige Persistenz- und Laufzeitformat. Ersteinrichtung, Entsperren, Passwortwechsel, Biometrie, Keyfile/2FA und Recovery müssen V2 verwenden. Verbleibende TOTP-Hilfsfunktionen dürfen keinen Vault-Unlock beeinflussen und sind nicht Teil des V2-Faktorpfads. Entferne vollständig V1-Header, -Serialisierung, -Parser, -KDF-/Unlockpfade, Rückfalllogik, V1-Fixtures/-Tests und jede Staging-/Promotionslogik für eine Migration. Keine V1-Migration durchführen, vorbereiten oder als Fallback beibehalten. Alte V1-Daten werden nicht übernommen und dürfen vom Code nicht als Tresor erkannt werden. Beschädigte V2-Header müssen geschlossen fehlschlagen und dürfen nicht stillschweigend überschrieben oder als entsperrt behandelt werden. **Abnahme:** keine V1-Codepfade; V2-Funktionstests und vollständiger Build/Testlauf bestehen.
 
 ## V15 – Backup-Regeln für Vault-Secrets
 **Prompt:** Prüfe Manifest-Backupregeln, Auto Backup, Device Transfer und alle Android-Backup-/Exportpfade. Schlüssel, Einstellungen im Klartext, TOTP-Secrets, Recovery-Secrets, Access-/Refresh-Tokens und Klartextdokumente dürfen nicht unbeabsichtigt in Systembackups gelangen. Nutzerinitiierte verschlüsselte Backupcontainer bleiben unterstützt. **Abnahme:** XML-/Manifest- und Backup-Regressionsprüfungen belegen, dass nur freigegebene verschlüsselte Artefakte aufgenommen werden.
@@ -234,7 +234,7 @@ L08B (LLM-Rückbau) und C04B (Google Drive entfernen) sind verworfene Alternativ
 
 ## S06 – Fehlversuche und Backoff
 **Abhängigkeit:** S02.  
-**Prompt:** Implementiere nur die gemeinsame Backoff-Logik für Passwort-/TOTP-/Recovery-Fehlversuche, wobei vorhandene Authentifizierungswege nicht umgangen werden dürfen. Schreibe persistent und atomar die notwendigen Zähler/Deadline-Informationen; nutze monotone Zeit während einer Sitzung und definiere konservatives Verhalten nach Prozess-/Geräteneustart. Teste die festgelegte Folge: nach fünf Fehlversuchen 30 Sekunden, danach 1, 5 und 15 Minuten. **Abnahme:** Grenzwerte, parallele Fehlversuche, Neustart und Restzeit getestet; Dokumentation, dass lokaler Backoff Defense-in-Depth ist.
+**Prompt:** Implementiere nur die gemeinsame Backoff-Logik für Passwort-/Recovery-Fehlversuche; TOTP ist kein Vault-Faktor und darf keinen Vault-Unlock auslösen oder blockieren, wobei vorhandene Authentifizierungswege nicht umgangen werden dürfen. Schreibe persistent und atomar die notwendigen Zähler/Deadline-Informationen; nutze monotone Zeit während einer Sitzung und definiere konservatives Verhalten nach Prozess-/Geräteneustart. Teste die festgelegte Folge: nach fünf Fehlversuchen 30 Sekunden, danach 1, 5 und 15 Minuten. **Abnahme:** Grenzwerte, parallele Fehlversuche, Neustart und Restzeit getestet; Dokumentation, dass lokaler Backoff Defense-in-Depth ist.
 
 ## S07 – FLAG_SECURE und sensitive Screens
 **Prompt:** Setze `FLAG_SECURE` rechtzeitig vor dem Rendern sensibler Inhalte und steuere Debug-Ausnahmen ausschließlich über ein explizites Build-Flag bzw. `BuildConfig.DEBUG`, nicht über Emulatorerkennung. Sorge dafür, dass Recents/Screenshots und offene Detailansichten nach Sperrung keine sensiblen Inhalte mehr zeigen. Keine Navigation oder Sicherheitsarchitektur nebenbei refactoren. **Abnahme:** dokumentierter manueller Testplan für Screenshot, Recents, App-Hintergrund, Activity-Neustart und Lock auf einer offenen Detailseite.
@@ -405,7 +405,7 @@ L08B (LLM-Rückbau) und C04B (Google Drive entfernen) sind verworfene Alternativ
 
 ## L12 – Native Inferenz absichern: Grammar, Cancel, Kontext und echte Metriken
 
-**Abhängigkeit:** L08A–L11A müssen im tatsächlich bearbeiteten Workspace nachweislich vorhanden sein. Dazu gehören fest versionierte llama.cpp-Integration, passende native Implementierung, JNI-Bindungen und ein echter Modelllauf. Fehlt eine dieser Voraussetzungen, zuerst den konkreten Blocker dokumentieren und auf das passende bestehende AP verweisen. Keine nicht vorhandene Datei oder JNI-Funktion als implementiert darstellen.
+**Abhängigkeit:** Die Quell-/Buildintegration (L08A) und der JNI-Modelllebenszyklus (L09A) sind im Repository vorhanden; reproduzierbarer CI-Build und echte GGUF-Inferenz auf einem unterstützten Zielgerät sind in den aktuellen Arbeitsnotizen noch nicht abschließend nachgewiesen. Vor Änderungen den aktuellen CI- und Gerätestand prüfen. Keine nicht vorhandene Datei oder JNI-Funktion als implementiert darstellen.
 
 **Projektregeln-Vorspann (bei jeder Ausführung verbindlich):**
 Du arbeitest ausschließlich im tatsächlich vorhandenen lokalen Workspace von myDocAnizer-Mobile. Lies zuerst docs/coding-agent_documentation.md und die unmittelbar betroffenen Implementierungen und Tests. Der Code ist maßgeblich; Dokumentation, Kommentare und frühere Statusmeldungen sind zu verifizieren. Bearbeite nur diese Micro-AP, führe kein unabhängiges Groß-Refactoring durch und ändere keine fachfremden Datenmodelle. Sende OCR, Dokumentinhalte, Chatfragen oder Feldwerte nicht an externe KI-Dienste. Erfinde keine Funktionen, Messwerte, Tests oder Erfolgsmeldungen. Der Coding-Agent in AI Studio arbeitet mit der bereitgestellten Workspace-Kopie; behaupte weder GitHub-Zugriff noch einen Commit, wenn du ihn nicht tatsächlich ausgeführt hast. Liefere einen vollständigen, übernehmbaren Patch/Diff mit den geänderten Dateien. Führe nach der Änderung ./gradlew assembleDebug testDebugUnitTest aus, sofern die Umgebung es unterstützt; sonst dokumentiere konkret, weshalb nicht. Bei Fehlern bleib innerhalb dieser AP, behebe sie oder melde sie offen. Aktualisiere docs/open_tasks.md für nicht ausführbare Geräte-/Native-Tests.
