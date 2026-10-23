@@ -43,6 +43,8 @@ class BackupRulesSecurityTest {
         val extractionRules = exclusions(R.xml.data_extraction_rules, "cloud-backup")
         assertTrue(("sharedpref" to "mydocanizer_vault_security.xml") in legacyBackup)
         assertTrue(("sharedpref" to "mydocanizer_prefs.xml") in legacyBackup)
+        assertTrue(("sharedpref" to "mydocanizer_auth_backoff.xml") in legacyBackup)
+        assertTrue(("sharedpref" to "mydocanizer_auth_backoff.xml") in extractionRules)
         assertTrue(("sharedpref" to "mydocanizer_vault_security.xml") in extractionRules)
         assertTrue(("sharedpref" to "mydocanizer_prefs.xml") in extractionRules)
         assertTrue(("external" to ".") in extractionRules)
@@ -57,6 +59,7 @@ class BackupRulesSecurityTest {
         assertTrue(("sharedpref" to "mydocanizer_vault_security.xml") in transfer)
         assertTrue(("sharedpref" to "mydocanizer_prefs.xml") in transfer)
         assertTrue(("sharedpref" to "doc_rules_storage.xml") in transfer)
+        assertTrue(("sharedpref" to "mydocanizer_auth_backoff.xml") in transfer)
     }
 
     @Test

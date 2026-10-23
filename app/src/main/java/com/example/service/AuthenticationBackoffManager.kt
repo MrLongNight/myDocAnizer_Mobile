@@ -3,7 +3,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.SystemClock
 
-/** Persistent local backoff for vault password/TOTP and recovery attempts; stores no entered secrets. */
+/** Persistent local backoff for vault password/key-file and recovery attempts; never treats TOTP as a vault factor. */
 class AuthenticationBackoffManager internal constructor(
  private val prefs: SharedPreferences, private val wallClock: () -> Long, private val elapsedClock: () -> Long
 ) {

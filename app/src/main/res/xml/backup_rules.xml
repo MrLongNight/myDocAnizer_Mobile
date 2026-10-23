@@ -20,4 +20,5 @@
     <exclude domain="sharedpref" path="mydocanizer_prefs.xml" />
     <exclude domain="sharedpref" path="mydocanizer_vault_security.xml" />
     <exclude domain="sharedpref" path="doc_rules_storage.xml" />
+    <exclude domain="sharedpref" path="mydocanizer_auth_backoff.xml" />
 </full-backup-content>
