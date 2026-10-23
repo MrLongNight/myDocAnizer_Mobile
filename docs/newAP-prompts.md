@@ -44,6 +44,32 @@ Für **jedes AP individuell** ist vor dem Testen festzuhalten: (1) prüfbare Akz
 
 Fehlende Einzelstatus sind eine Dokumentationslücke, kein Beweis dafür, dass ein Arbeitspaket nicht umgesetzt wurde. Ebenso sind vorhandene Implementierungen, Testklassen und alte CI-Erfolge allein kein aktueller Abnahmenachweis.
 
+### Aktueller Codeabgleich – LLM/Dokumentenverarbeitung (statische Prüfung)
+
+Geprüfte Dateien im aktuellen `main`-Stand:
+
+- `app/src/main/java/com/example/service/LlmService.kt`
+- `app/src/main/java/com/example/service/LlamaCppInferenceEngine.kt`
+- `app/src/main/java/com/example/service/llm/LlmPrompts.kt`
+- `app/src/main/java/com/example/ui/DocAnizerViewModel.kt`
+- `app/src/main/java/com/example/service/OcrService.kt`
+- `app/src/main/java/com/example/service/DocumentStorageService.kt`
+- `app/src/main/java/com/example/service/AppAuditLogger.kt`
+- `app/src/main/cpp/llama_android.cpp`
+- `docs/open_tasks.md` und `docs/coding-agent_documentation.md`
+
+**Bestätigte Befunde im Quelltext, noch keine Laufzeitmessungen:**
+
+1. `LlmService.kt` enthält weiterhin fest eingetragene Konfidenzwerte `0.94f`/`0.98f`, `buildModelReasoning`, den Fallback-Absender `Deutsche Post` und vier Aufrufstellen mit `grammar = null`. `generateRulesFromPrompt` hat einen eigenen regel-/keywordbasierten Ablauf. Die vorhandene Prüfung von `lastInferenceMode` in einem Benchmarkpfad beweist nicht, dass alle Klassifikationspfade den tatsächlichen Inferenzmodus korrekt ausweisen.
+2. `LlamaCppInferenceEngine.kt` verwendet den gemeinsam veränderlichen Zustand `lastInferenceMode` und `lastInferenceMetrics`. In dieser Datei wurden keine Treffer für `nativeCancelInference`, `finishReason`, `prompt_tokens` oder `withTimeout` gefunden. Das ist ein statischer Suchbefund, kein Beweis für das Fehlen jeder alternativen Abbruchmöglichkeit.
+3. `llama_android.cpp` baut die Sampler-Kette mit top-k/top-p/temperature vor dem Grammar-Sampler auf; eine native Funktion namens `nativeCancelInference` und `llama_set_abort_callback` wurden nicht gefunden. Die Sampler-Hypothese ist durch einen gezielten Test gegen den tatsächlich gepinnten llama.cpp-Stand zu verifizieren, nicht nur durch Umstellen der Reihenfolge.
+4. `DocAnizerViewModel.kt` verwendet im Scan-Bestätigungsablauf `matchingRules.singleOrNull() ?: buildFastRuleSuggestion(ocrText)`. Der Hauptpfad ist damit nicht automatisch eine echte LLM-Analyse. Andere Pfade rufen `classifyDocumentText` auf; diese Aufrufpfade müssen im AP separat zusammengeführt werden.
+5. `LlmPrompts.kt` enthält nicht die zuvor genannten konkreten Platzhalterstrings `keyword1`, `dynamisches_feld_1` oder `_reasoning`. Promptänderungen müssen vom tatsächlichen aktuellen Schema ausgehen und dürfen veraltete Behauptungen nicht blind reproduzieren.
+6. `OcrService.kt` enthält bereits einen OCR-Zeitlimit-/Auditpfad. Daher muss L14 vorhandene Ereignisse erweitern bzw. Lücken belegen, statt pauschal zu behaupten, OCR-Logging fehle vollständig.
+7. Die statische Prüfung von `AppAuditLogger.kt` zeigte keine offensichtliche Rotation über den Begriff `rotate`; tatsächliche Speichergrenzen, Export, Redaktion und PII-Sicherheit sind durch Lesen der vollständigen Implementierung und gezielte Tests zu prüfen, nicht aus einer Textsuche abzuleiten.
+
+**Konsequenz für die APs:** L12, L13, L14 und L15 bleiben fachlich begründet, müssen aber vor Umsetzung gegen diese konkreten Ist-Befunde und die aktuellen Signaturen aktualisiert werden. Die Prompts sind eine Soll-Spezifikation, kein Beleg dafür, dass der jeweilige Mangel schon behoben ist. Dieser Codeabgleich ist statisch; Build, Unit-Tests, Instrumentierung und physische App-/Modelltests wurden in diesem Audit nicht ausgeführt.
+
 ## Verbindliche Produktvorgaben
 
 | Thema | Festgelegte Anforderung |
