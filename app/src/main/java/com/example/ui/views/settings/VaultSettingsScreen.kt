@@ -561,8 +561,19 @@ fun VaultSettingsScreen(
                                 modifier = Modifier.size(20.dp)
                             )
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("2. Faktor via Biometrie (Android KeyStore)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                                Text(if (vaultStatus.biometric2FaEnabled) "Aktiv für automatische Entsperrung" else "Inaktiv", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Biometrischer Tresor-Unlock", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = when {
+                                        vaultStatus.securityTier == VaultSecurityTier.TWO_FACTOR && vaultStatus.biometric2FaEnabled ->
+                                            "Nicht zulässig bei 2-Faktor; bitte den alten Biometrie-Eintrag deaktivieren"
+                                        vaultStatus.securityTier == VaultSecurityTier.TWO_FACTOR ->
+                                            "Bei 2-Faktor deaktiviert; Passwort + Schlüsseldatei bleiben Pflicht"
+                                        vaultStatus.biometric2FaEnabled -> "Aktiv für den Ein-Faktor-Tresor"
+                                        else -> "Inaktiv"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -846,14 +857,19 @@ fun VaultSettingsScreen(
                             Icon(Icons.Default.Fingerprint, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(8.dp).size(22.dp))
                         }
                         Column {
-                            Text("2. Faktor via Biometrie", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("Biometrischer Tresor-Unlock (nur 1-Faktor)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                             Text("Fingerabdruck / Face Unlock im Android KeyStore", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Switch(
                         checked = vaultStatus.biometric2FaEnabled,
+                        enabled = vaultStatus.securityTier == VaultSecurityTier.ONE_FACTOR ||
+                            vaultStatus.biometric2FaEnabled,
                         onCheckedChange = { enable ->
-                            if (!enable) {
+                            if (enable && vaultStatus.securityTier != VaultSecurityTier.ONE_FACTOR) {
+                                actionFeedbackMessage = "Biometrischer Tresor-Unlock ist nur im Ein-Faktor-Modus erlaubt; Passwort + Schlüsseldatei dürfen nicht umgangen werden."
+                                actionIsError = true
+                            } else if (!enable) {
                                 val success = vaultSecManager.setBiometricsEnabled(false)
                                 if (success) {
                                     viewModel.setBiometricAuthEnabled(false)
@@ -898,7 +914,11 @@ fun VaultSettingsScreen(
                     )
                 }
                 Text(
-                    text = "Hardware-Status: ${viewModel.getBiometricStatusLabel()}",
+                    text = when {
+                        vaultStatus.securityTier == VaultSecurityTier.TWO_FACTOR ->
+                            "Biometrie kann Passwort + Schlüsseldatei nicht ersetzen. Ein vorhandener alter Slot kann hier deaktiviert werden."
+                        else -> "Hardware-Status: ${viewModel.getBiometricStatusLabel()}"
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

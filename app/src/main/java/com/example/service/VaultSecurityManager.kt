@@ -104,6 +104,14 @@ enum class VaultFactorType {
 }
 
 /**
+ * Biometric DEK wrapping is a local convenience path for single-factor vaults only.
+ * A two-factor vault must always require both password and key file.
+ */
+internal fun isBiometricUnlockAllowed(securityTier: VaultSecurityTier): Boolean =
+    securityTier == VaultSecurityTier.ONE_FACTOR
+
+
+/**
  * Persistenter Tresor-Header für Zero-Knowledge Sicherheit.
  */
 data class VaultHeader(
@@ -393,7 +401,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
         // 2. Biometrischer 2. Faktor via KeyStore
         var encryptedDekBioBase64: String? = null
         var ivBioBase64: String? = null
-        if (enableBiometrics) {
+        if (enableBiometrics && isBiometricUnlockAllowed(securityTier)) {
             try {
                 val bioPair = encryptDekWithKeyStore(dek)
                 if (bioPair != null) {
@@ -492,7 +500,8 @@ class VaultSecurityManager private constructor(private val context: Context) {
             argon2MemoryKb = v2Header.argon2MemoryKb,
             encryptedDekByPasswordBase64 = v2Header.encryptedDekBase64,
             passwordDekIvBase64 = v2Header.ivBase64,
-            biometric2FaEnabled = enableBiometrics && encryptedDekBioBase64 != null,
+            biometric2FaEnabled = isBiometricUnlockAllowed(securityTier) &&
+                enableBiometrics && encryptedDekBioBase64 != null,
             encryptedDekByBiometricsBase64 = encryptedDekBioBase64,
             biometricDekIvBase64 = ivBioBase64,
             recoveryMethod = recoveryMethod,
@@ -601,7 +610,8 @@ class VaultSecurityManager private constructor(private val context: Context) {
 
     /** Creates a Keystore-backed encryption Cipher; the actual encryption requires biometric auth. */
     fun createBiometricEnrollmentCipher(): Cipher? {
-        if (!isUnlocked()) return null
+        val header = _vaultHeader.value ?: return null
+        if (!isBiometricUnlockAllowed(header.securityTier) || !isUnlocked()) return null
         return try {
             Cipher.getInstance("AES/GCM/NoPadding").apply {
                 init(Cipher.ENCRYPT_MODE, getOrCreateKeyStoreKey())
@@ -614,7 +624,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /** Called only with the Cipher returned by a successful CryptoObject authentication callback. */
     fun completeBiometricEnrollment(authenticatedCipher: Cipher): Boolean {
         val header = _vaultHeader.value ?: return false
-        if (header.version != 2 || !isUnlocked()) return false
+        if (header.version != 2 || !isBiometricUnlockAllowed(header.securityTier) || !isUnlocked()) return false
         var encrypted: ByteArray? = null
         var iv: ByteArray? = null
         return try {
@@ -642,7 +652,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /** Prepares the decryption operation to be authorized by BiometricPrompt.CryptoObject. */
     fun createBiometricUnlockCipher(): Cipher? {
         val header = _vaultHeader.value ?: return null
-        if (!header.biometric2FaEnabled) return null
+        if (!isBiometricUnlockAllowed(header.securityTier) || !header.biometric2FaEnabled) return null
         val ivEncoded = header.biometricDekIvBase64 ?: return null
         var iv: ByteArray? = null
         return try {
@@ -664,6 +674,7 @@ class VaultSecurityManager private constructor(private val context: Context) {
     /** Completes DEK decryption only after Android returns the authenticated CryptoObject Cipher. */
     fun completeBiometricUnlock(authenticatedCipher: Cipher): Boolean {
         val header = _vaultHeader.value ?: return false
+        if (!isBiometricUnlockAllowed(header.securityTier) || !header.biometric2FaEnabled) return false
         val encryptedBase64 = header.encryptedDekByBiometricsBase64 ?: return false
         var ciphertext: ByteArray? = null
         var dek: ByteArray? = null
@@ -675,7 +686,11 @@ class VaultSecurityManager private constructor(private val context: Context) {
             if (decryptedDek.size != DEK_SIZE_BYTES) return false
             val rawHeader = prefs.getString(V2_ACTIVE_HEADER_PREF_KEY, null) ?: return false
             val parsedHeader = VaultHeaderParserV2.parse(rawHeader)
-                ?.takeIf { it.vaultId == header.vaultId } ?: return false
+                ?.takeIf {
+                    it.vaultId == header.vaultId &&
+                        it.biometric2FaEnabled &&
+                        it.securityTier == VaultSecurityTier.ONE_FACTOR.name
+                } ?: return false
             if (authenticateOrUpgradeStoredHeaderMetadata(parsedHeader, decryptedDek) == null) return false
             replaceActiveDek(decryptedDek)
             true

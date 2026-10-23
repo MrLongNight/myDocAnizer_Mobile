@@ -213,6 +213,17 @@ fun SecurityWizardStep(
     }
 
     // Synchronisation mit übergeordnetem State
+    LaunchedEffect(selectedTier) {
+        if (
+            selectedTier != null &&
+            selectedTier != VaultSecurityTier.ONE_FACTOR &&
+            isBiometricActive
+        ) {
+            isBiometricActive = false
+            onBiometricToggle(false)
+        }
+    }
+
     LaunchedEffect(password, selectedTier, selectedFactorType, keyFileToken) {
         if (selectedTier == VaultSecurityTier.UNENCRYPTED) {
             onPasswordChange("")
@@ -1243,12 +1254,20 @@ fun SecurityWizardStep(
                         Switch(
                             checked = isBiometricActive,
                             onCheckedChange = { isBiometricActive = it },
+                            enabled = selectedTier == null || selectedTier == VaultSecurityTier.ONE_FACTOR,
                             modifier = Modifier.testTag("switch_wizard_biometrics")
                         )
                     }
 
                     Text(
-                        text = "Mit biometrischer Authentifizierung kannst du den Tresor im Alltag blitzschnell per Fingerabdruck oder Face Unlock öffnen, ohne jedes Mal das lange Master-Passwort einzugeben.",
+                        text = when (selectedTier) {
+                            VaultSecurityTier.TWO_FACTOR ->
+                                "Bei 2-Faktor mit Master-Passwort + Schlüsseldatei ist biometrischer Tresor-Unlock deaktiviert. Biometrie darf keinen der beiden Pflichtfaktoren ersetzen."
+                            VaultSecurityTier.UNENCRYPTED ->
+                                "Biometrischer Tresor-Unlock ist nur bei aktivierter Verschlüsselung verfügbar."
+                            else ->
+                                "Mit biometrischer Authentifizierung kannst du den Tresor im Alltag öffnen, ohne jedes Mal das lange Master-Passwort einzugeben."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
