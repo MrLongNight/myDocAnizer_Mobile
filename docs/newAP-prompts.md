@@ -4,6 +4,10 @@
 
 Die Liste hatte viele Einträge **„In Arbeit“**, weil dieser Status bisher zwei verschiedene Dinge zusammenfasste: teilweise vorhandene Implementierung **und** fehlenden Abschlussnachweis. Das bedeutete nicht, dass 60 Punkte gleichzeitig aktiv bearbeitet wurden. Die Zahl allein war deshalb kein brauchbarer Fortschrittsmesser.
 
+**Für den Release-Fortschritt zuerst verwenden:** [Praktische Beta-Freigabecheckliste](release-beta-checklist.md). Sie bündelt die App-Abnahme in neun Gates; du musst nicht 123 Prompt-Abschnitte einzeln als Release-Checkliste abarbeiten.
+
+**Aktuelle Release-Zuordnung:** 46 APs sind Beta-Blocker (12 davon bereits als „Umgesetzt / geprüft“ markiert; 34 sind noch nicht abgenommen), 51 betreffen Funktionen, die erst nach bestandenem Nachweis aktiviert werden sollen, und 26 sind bewusst auf später verschoben. Diese Zahlen zählen Micro-APs, nicht 46 separate manuelle Testläufe.
+
 **Status – ab jetzt eindeutig:**
 - **Offen** – die eigentliche Umsetzung ist noch nicht begonnen oder es gibt bisher nur eine Idee/Anforderung.
 - **In Arbeit** – Teile sind im Code vorhanden, aber die definierte Funktion oder ein notwendiger Test/Nachweis fehlt noch. Der konkrete Rest steht in der AP-Abnahme.
