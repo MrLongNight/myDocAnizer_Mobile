@@ -78,7 +78,6 @@ Die Testprofile sind pro AP individuell festgelegt. Ein AP ohne M/P benötigt ni
 - Wenn eine gewählte Funktion mit den erforderlichen Sicherheitsgarantien technisch nicht machbar erscheint, wird sie nicht stillschweigend unsicher umgesetzt oder entfernt. Dann folgt eine verständliche Entscheidungsfrage mit Empfehlung.
 - Kein roher DEK in PDFs, QR-Codes, UI oder Logs. Ein bewusst erzeugter, zufälliger Recovery-Schlüssel darf als explizites Notfallgeheimnis exportiert werden; das Dokument ist dann hochsensibel.
 - Eine unauffällige Gestaltung eines Notfalldokuments ist nur Tarnung, keine kryptografische Sicherheit. Wer das Geheimnis findet, kann es möglicherweise benutzen.
-- Die Testbasis umfasst laut Bericht 22 Testklassen. Der Status einzelner Micro-APs muss zusätzlich anhand echter Implementierung, passender Tests und erforderlicher Geräte-/Integrationstests bewertet werden.
 
 ---
 
@@ -731,10 +730,10 @@ Nutze ausschließlich synthetische, frei erfundene deutsche OCR-Texte für autom
 | S01 | AUDIT DOKUMENTIERT | D |
 | S02 | GETESTET – CI | B+U |
 | S03 | GETESTET – CI | B+U+I |
-| S04 | IN BEARBEITUNG | B+U |
-| S05 | IN BEARBEITUNG | B+U |
+| S04 | UMGESETZT – UNGETESTET | B+U |
+| S05 | UMGESETZT – UNGETESTET | B+U |
 | S06 | GETESTET – CI | B+U |
-| S07 | IN BEARBEITUNG | B+U+I+M |
+| S07 | UMGESETZT – UNGETESTET | B+U+I+M |
 | S08 | GETESTET – CI | B+U+I |
 | S09 | IN BEARBEITUNG | B+U+I |
 | S10 | IN BEARBEITUNG | B+U+I+M |
