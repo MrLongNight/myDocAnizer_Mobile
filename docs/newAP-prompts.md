@@ -153,7 +153,7 @@ Ein AP darf erst auf **„Umgesetzt / geprüft“** wechseln, wenn alle Punkte f
 1. **Änderung auf main:** Code oder Entscheidungstext ist tatsächlich vorhanden; der Commit ist notiert.
 2. **Passender Test bestanden:** `./gradlew assembleDebug testDebugUnitTest` läuft auf genau diesem Stand. Für Schlüssel, Datenbank, Backup, Sync und native LLM-Funktionen zusätzlich die AP-spezifischen Negativ-/Integrationstests; ein erfolgreicher Build allein reicht nicht.
 3. **App-Funktion manuell geprüft, wenn sie sichtbar/bedienbar ist:** Verwende die kurze Prüfung aus der Übersicht und dokumentiere Pass/Fail. Bei rein technischen APs ersetzt der reproduzierbare automatisierte Test den UI-Test.
-4. **Fehler behoben und Nachweis auffindbar:** Commit plus CI-Lauf/Testergebnis werden in `docs/release-beta-checklist.md` festgehalten. Fehler oder nicht durchführbare Gerätetests bleiben offen; sie werden nicht als bestanden markiert.
+4. **Fehler behoben und Nachweis auffindbar:** Der Commit und der passende CI-/Testnachweis müssen benannt sein. Ergebnis eines beta-relevanten End-to-End-Flows wird einmal pro Gate in `docs/release-beta-checklist.md` festgehalten – nicht als zusätzliche Zeile für jeden Micro-AP. Rein technische APs verweisen auf ihren konkreten Testlauf bzw. das bereits zuständige Technikdokument. Fehler oder nicht durchführbare Gerätetests bleiben offen; sie werden nicht als bestanden markiert.
 
 Das kann keine mathematische Fehlerfreiheit garantieren. Es verhindert aber, dass ein Punkt nur wegen vorhandenen Codes, einer alten CI-Ausführung oder eines gelungenen Builds als abgeschlossen gilt. Die Release-Checkliste ist der kurze Nachweis für den Betatest; die 123 Prompts bleiben Arbeitsanweisungen, nicht 123 gleichzeitige Release-Blocker.
 
