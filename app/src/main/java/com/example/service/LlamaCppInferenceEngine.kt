@@ -520,6 +520,7 @@ ws ::= [ \t\n\r]*
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
         lastInferenceMode = InferenceMode.NOT_RUN
         lastInferenceMetrics = null
+        lastFinishReason = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText, folderStrategy)
@@ -559,6 +560,7 @@ ws ::= [ \t\n\r]*
     ): DmsExtractionResponse = withContext(Dispatchers.Default) {
         lastInferenceMode = InferenceMode.NOT_RUN
         lastInferenceMetrics = null
+        lastFinishReason = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText)
@@ -797,6 +799,7 @@ ws ::= [ \t\n\r]*
     ): String = withContext(Dispatchers.Default) {
         lastInferenceMode = InferenceMode.NOT_RUN
         lastInferenceMetrics = null
+        lastFinishReason = null
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext executeFallbackToolInference(userMessage)
