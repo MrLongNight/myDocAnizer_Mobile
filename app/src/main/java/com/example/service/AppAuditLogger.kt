@@ -386,13 +386,13 @@ object AppAuditLogger {
     }
 
     /**
-     * Erstellt eine saubere, exportierbare Textdatei mit allen System- & KI-Logs
+     * Erstellt eine saubere, exportierbare .log-Datei mit allen System- & KI-Logs
      */
     fun exportLogFile(context: Context): File {
         val exportDir = File(context.cacheDir, "exports").apply { if (!exists()) mkdirs() }
         val dateStr = SimpleDateFormat("yyyy-MM-dd_HHmmss", Locale.getDefault()).format(Date())
         val prettyDate = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.GERMAN).format(Date())
-        val exportFile = File(exportDir, "myDocAnizer_Diagnose_Protokoll_$dateStr.txt")
+        val exportFile = File(exportDir, "myDocAnizer_Diagnose_Protokoll_$dateStr.log")
 
         val currentLogs = _logs.value
         val totalCount = currentLogs.size
