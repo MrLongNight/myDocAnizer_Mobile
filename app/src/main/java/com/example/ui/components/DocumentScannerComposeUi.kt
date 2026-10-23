@@ -54,9 +54,9 @@ fun LiveScannerOverlay(
             imageAspectRatio = 3f / 4f
         )
         val quad = status.smoothedQuad ?: return@Canvas
-        if (quad.size != 4 || bounds.width <= 0f || bounds.height <= 0f) return@Canvas
+        if (bounds.width <= 0f || bounds.height <= 0f) return@Canvas
 
-        val points = quad.map(bounds::normToScreen)
+        val points = listOf(quad.tl, quad.tr, quad.br, quad.bl).map(bounds::normToScreen)
         val path = Path().apply {
             moveTo(points[0].x, points[0].y)
             lineTo(points[1].x, points[1].y)
