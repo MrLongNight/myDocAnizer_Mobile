@@ -1,129 +1,138 @@
 # myDocAnizer-Mobile – Micro-AP-Arbeitsplan
 
-## Aktueller Code- und Teststand
+## Übersicht aller Micro-APs
 
-**Codebasis:** main; Anwendungscode zuletzt vollständig geprüft unter Commit c0564c1ad3af5cdb8d996475b41db6906b518640. Die späteren Commits 07ee48ce, c6a32f16 und e545bc3c änderten Dokumentation, nicht den Anwendungscode. Geprüft wurden die den Micro-APs zugehörigen Produktivdateien, native Buildquellen, Sync-/Speicherpfade, Testdateien und die CI-Konfiguration. Das ist eine statische Codeanalyse mit überprüften CI-Nachweisen – keine physische Geräte- oder echte Modellqualitätsprüfung.
+Status und Testanforderung stehen ausschließlich in dieser Übersicht. Die darunterstehenden Prompts beschreiben nur Auftrag, Abhängigkeiten und Abnahmekriterien.
 
-| Prüfebene | Letzter verifizierter Stand | Aussage |
+| AP | Bearbeitungsstatus | Pflicht-Testprofil |
 |---|---|---|
-| **Build** | GitHub Actions Run [39944020065](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39944020065), Commit c0564c1: assembleDebug erfolgreich | Debug-APK wurde gebaut und als Artefakt hochgeladen; allein kein Funktionsnachweis. |
-| **JVM-Unit-Tests** | Derselbe Run: testDebugUnitTest erfolgreich | Nur vorhandene automatisierte JVM-Tests; Lücken ohne passenden Test bleiben bestehen. |
-| **Android-Instrumentierung** | Derselbe Run: connectedDebugAndroidTest erfolgreich | Emulator-/Android-Integrationstests bestanden; kein physischer Gerätetest. |
-| **Manueller App-/Gerätetest** | Kein vollständiger Nachweis für alle Produktpfade | Nur bei APs mit Profil M/P erforderlich; nicht pauschal für jedes AP. |
-| **Echte native GGUF-Inferenz** | Kein reproduzierbarer Geräte-/Modelllauf im CI-Nachweis | Native Quellintegration und erfolgreicher Build beweisen nicht, dass ein konkretes GGUF-Modell auf dem Zielgerät läuft. |
-| **Dokumentenqualität / Benchmark** | Kein aktueller Golden-Set-Bericht mit Modell-, Prompt- und Geräteangaben nachgewiesen | Keine Modellfreigabe oder Qualitätsquote ohne tatsächliche Messung. |
-
-Die Workflow-Befehle lauten ./gradlew assembleDebug --stacktrace --no-daemon, ./gradlew testDebugUnitTest --stacktrace --no-daemon und ./gradlew connectedDebugAndroidTest --stacktrace --no-daemon. Der Instrumentierungslauf hängt davon ab, ob Emulator/KVM verfügbar sind. Run 39944020065 belegt den allgemeinen CI-Erfolg dieser Codebasis, nicht die Erfüllung sämtlicher AP-spezifischer Abnahmekriterien.
-
-### Bestätigte aktuelle Codebefunde
-
-| Bereich | Aktueller Ist-Stand aus dem Quelltext | Konsequenz für die Micro-APs |
-|---|---|---|
-| **Native Engine / Build** | Native Dateien sind vorhanden: app/src/main/cpp/CMakeLists.txt, llama_android.cpp, llama_android_stub.cpp und das auf Commit 2da668617612d2df773f966e3b0ee22dc2beef7b gepinnte llama.cpp-Submodul. Gradle verwendet NDK 27.2.12479018, minSdk 24 und vier ABI-Filter. Echter llama.cpp-Code wird für arm64-v8a/x86_64 gebaut; 32-Bit-ABIs erhalten einen Stub/Fallback. Konfiguration ist CPU-only. | Der alte L01-Befund „keine C/C++-/CMake-/JNI-Implementierung vorhanden“ ist überholt. Die offene Arbeit ist Verifikation/Härtung, nicht die Engine ungeprüft neu einzubauen. |
-| **Native Inferenz** | llama_android.cpp enthält Modellladen, Chat-Template, Token-Generierung und native Zeit-/Tokenmetriken. Der Kontext ist fest auf 2048 gesetzt. Der Sampler fügt top-k/top-p/temperature vor dem Grammar-Sampler ein. Kotlin hält lastInferenceMode/lastInferenceMetrics als gemeinsam veränderlichen Zustand; eine native Cancel-Funktion, belastbares finish_reason und ein nativer Abbruch-Callback sind im aktuellen Pfad nicht vorhanden. Triage/Second-Run schalten Grammar teilweise ausdrücklich auf null. | L08A–L11A müssen vorhandenen Code verifizieren und tatsächliche Lücken schließen. L12 härtet verbleibende Abbruch-, Kontext-, Grammar- und Ergebnisverträge. Die Sampler-Reihenfolge wird erst nach Test gegen den gepinnten llama.cpp-Stand geändert. |
-| **Analyse und Scan** | LlmService.kt enthält weiterhin feste Confidence-Werte, buildModelReasoning, den Fallback-Absender „Deutsche Post“ und heuristische Wege in generateRulesFromPrompt/Dokumenten-Assistant. DocAnizerViewModel.kt nutzt im Scan-Bestätigungspfad matchingRules.singleOrNull() ?: buildFastRuleSuggestion(ocrText); der Hauptscan läuft damit nicht automatisch durch eine echte LLM-Analyse. | L13/L15 müssen eine gemeinsame Hybrid-Pipeline anbinden; Regel-/Heuristikresultate dürfen nicht als LLM ausgegeben werden. |
-| **Promptbestand** | Die konkreten Platzhalter keyword1 und dynamisches_feld_1 stehen nicht in LlmPrompts.kt; _reasoning steht dagegen in den Prompt-/Response-Definitionen der Engine. | Prompts gegen tatsächliche Schema- und Parserstellen ändern, nicht auf ältere Befundlisten vertrauen. |
-| **OCR/Audit** | OcrService.kt besitzt bereits OCR-Timeout und Audit-Aufrufe. AppAuditLogger hält höchstens 300 In-Memory-Einträge und rollt eine Logdatei ab 2 MiB in eine alte Datei. Gleichzeitig kann logOcr im DEVELOP-Modus Textproben ausgeben; OcrService übergibt die ersten 120 OCR-Zeichen und logAiInference protokolliert u. a. Absender/Typ/Reasoning. Eine durchgehende scanId über alle Schritte ist nicht nachgewiesen. | L14 soll das existierende Logging gezielt härten und ergänzen, nicht so tun, als existiere noch kein OCR-/Auditpfad. PII-Freiheit und End-to-End-Korrelation müssen mit gezielten Tests belegt werden. |
-| **Dokumentspeicher und Datenbank** | DocumentStorageService besitzt bereits verschlüsselte Speicherpfade, temporäre Dateien und Legacy-Overloads mit Passwort-/Schlüsselparametern; das beweist keine vollständige, einheitliche Tresor-Key-Integration aller Dateien. AppDatabase verwendet Room-Version 9 und exportSchema = false; vollständige SQLCipher-Öffnung ist im gecheckten Builder nicht implementiert. | D-/DB-APs müssen vorhandenen Bestand ergänzen; DB01–DB04 liefern die Baseline, bevor DB12/DB13 SQLCipher integrieren. |
-| **Secrets / Einstellungen** | SecretStore und VaultKeyProvider existieren. SettingsRepository verwendet aber weiterhin viele SharedPreferences-Werte. Die Secret-Migration wurde für einzelne Sync-Secrets ergänzt; nicht alle Verbraucher sind migriert. | S09 darf Legacy-Werte nicht endgültig löschen, bevor die Verbraucher aus D/P/C nachweislich umgestellt sind. D15 und R13 bleiben eigenständige Aufgaben. |
-| **P2P / Cloud** | P2P-Clients enthalten weiterhin http://-URLs; der Server verwendet einen eigenen TCP-/HTTP-Parser mit Socket-Timeout, kein flächendeckendes TLS. Header-Token-Härtung ist teilweise vorhanden, Replay-Cache/Rate-Limits sind nicht vollständig. WebDAV lehnt explizites HTTP ab und deaktiviert Redirects; TOFU-Fingerprintbindung ist nicht abgeschlossen. Google Drive nimmt ein Access-Token entgegen, ein vollständiger OAuth-Flow ist nicht belegt; der Sync-Einstieg ist kein CoroutineWorker. | P01–P13 und C01–C09 enthalten echte Restarbeiten/Teilimplementierungen. Klassen-/Client-Existenz gilt nicht als End-to-End-Sicherheitsnachweis. |
-| **Modellkatalog** | Der Katalog lebt im Code. LIFT 4B Structured PDF Extractor verweist aktuell auf dieselbe Phi-3.5-GGUF-Datei wie der Phi-Eintrag; ein verlässlicher Katalogvertrag mit überprüfter Dateiidentität, Größe, Hash, Lizenz und Qualitätsfreigabe ist nicht nachgewiesen. | L16 muss den aktuellen Katalog prüfen. Frühere Namensbeispiele, die nicht mehr vorkommen, dürfen nicht blind als aktuelle Befunde weitergeführt werden. |
-
-### Einheitliche Bearbeitungsstatus
-
-Jedes aktive AP erhält genau einen Status. NICHT BEARBEITET heißt, dass dieses AP noch nicht umgesetzt wurde. UMGESETZT – UNGETESTET heißt, dass die Umsetzung im Code vorhanden scheint, aber der benötigte AP-spezifische Nachweis noch nicht ausgeführt oder belegt ist. Teilumsetzungen erhalten IN BEARBEITUNG statt fälschlich als erledigt oder nur ungetestet zu gelten.
-
-| Status | Verbindliche Bedeutung |
-|---|---|
-| **NICHT BEARBEITET** | Das Arbeitspaket selbst wurde noch nicht umgesetzt; vorhandene allgemeine Infrastruktur zählt nicht als Umsetzung dieses APs. |
-| **IN BEARBEITUNG** | Ein Teil des Sollumfangs existiert, aber mindestens ein fachlicher oder technischer Teil fehlt. |
-| **PATCH BEREIT** | Vollständiger Patch/Diff liegt vor, ist aber noch nicht in den betrachteten Code integriert. |
-| **UMGESETZT – UNGETESTET** | Umsetzung ist im Code vorhanden; der geforderte AP-spezifische Nachweis wurde noch nicht ausgeführt oder belegt. |
-| **GETESTET – CI** | Zum genannten Code-Commit existiert ein erfolgreicher CI-Lauf mit Tests, die das AP tatsächlich abdecken. Allgemeiner Build-Erfolg allein genügt nicht. |
-| **GETESTET – APP/GERÄT** | Der konkrete App-Ablauf wurde auf dem dokumentierten Emulator/Gerät und Build ausgeführt; die Umgebung wird im Testbericht genannt. |
-| **ABGENOMMEN** | Alle für dieses AP begründeten Prüfungen bestanden; relevante reale App-/Geräte-/Qualitätsprüfungen sind ebenfalls belegt. |
-| **AUDIT DOKUMENTIERT** | Das AP ist ein lesender Audit und der Befundbericht ist erstellt; kein Implementierungsstatus. |
-| **ADR FREIGEGEBEN** | Architekturentscheidung ist beschlossen; das implementierende AP bleibt davon getrennt. |
-| **BLOCKIERT** | Ein konkreter technischer/umgebungsbedingter Blocker verhindert die Arbeit; Ursache und nächster Schritt sind angegeben. |
-
-### Testprofile: nur die für das jeweilige AP erforderlichen Ebenen
-
-| Kürzel | Ebene und exakter Ablauf |
-|---|---|
-| **B** | Build: ./gradlew assembleDebug --stacktrace --no-daemon. Bestätigt nur den Build der Debug-APK. |
-| **U** | JVM-Tests: ./gradlew testDebugUnitTest --stacktrace --no-daemon. Testklassen und Ergebnis müssen im Bericht benannt werden. |
-| **I** | Android-Instrumentierung: ./gradlew connectedDebugAndroidTest --stacktrace --no-daemon auf verfügbarem Emulator/Gerät. Nicht ausführbar ist nicht gleich bestanden. |
-| **M** | Manueller App-Test nur bei UI-/Lifecycle-/Import-/Exportverhalten, das nicht ausreichend automatisch abgedeckt ist. Nummerierte Schritte, Erwartung, Ergebnis, APK/Commit, Android-Version und Emulator-/Gerätemodell notieren. |
-| **P** | Physisches Gerät/Hardware zwingend, z. B. echte Biometrie, portabler Passkey/Authenticator oder hardwareabhängige Laufzeit. Ein Emulator ist kein Ersatz, sofern die Funktion dort nicht unterstützt wird. |
-| **G** | Echte native GGUF-Ausführung auf unterstützter ABI. Testmodell, SHA-256, Modellversion, ABI/Gerät und tatsächliches Ergebnis dokumentieren. Ein Build oder Fake-Engine-Test genügt nicht. |
-| **Q** | Qualitätsbenchmark auf versioniertem Golden Set; Modell-/Hash-/Promptversion, Kennzahlen und Gerät dokumentieren. |
-| **D** | Statischer Audit/Dokumentationsschritt ohne Produktcode-Änderung. Build/App-Test nur, wenn das AP ihn ausdrücklich erfordert. |
-
-Die Testprofile sind pro AP individuell festgelegt. Ein AP ohne M/P benötigt nicht automatisch einen manuellen App-Test. Ein Profil mit M/P/G/Q darf nicht auf „CI grün“ reduziert werden. Die nummerierten Testschritte und erwarteten Ergebnisse stehen im jeweiligen AP-Prompt. Nicht verfügbare Prüfungen werden als „nicht ausgeführt“ mit Grund dokumentiert, nie als bestanden.
-
-## Verbindliche Produktvorgaben
-
-| Thema | Festgelegte Anforderung |
-|---|---|
-| **Optionale Zwei-Faktor-Absicherung** | Nutzer kann sie bei Bedarf aktivieren. Nur als echte kryptografische Absicherung ausliefern; falls sie nicht mit vertretbarem Aufwand sicher umsetzbar ist, zuerst technische Optionen mit Empfehlung vorlegen. |
-| **Tresor-Wiederherstellung** | Passwort **oder** Passkey; optional zusätzliche Sicherheitsfragen; optional druckbares Notfalldokument in eindeutig erkennbarer oder unauffälliger Gestaltung. |
-| **Vollständige lokale Verschlüsselung** | Gesamte Room-Datenbank, dauerhaft gespeicherte App-Einstellungen und Dokumente verschlüsseln. Suchindizes, Metadaten, Vorschauen, temporäre Dateien und Backups mitprüfen; keine unverschlüsselten dauerhaften Spiegel. |
-| **Verbindungen** | App2App, PC2App und Browser2App sollen unterstützt und jeweils auf Transportverschlüsselung, Identitätsprüfung, Kopplung und Angriffsflächen geprüft werden. Kein Klartext-Fallback. |
-| **Lokale KI** | Echte native Modellinferenz ist das gewählte Ziel. Regelbasierte Heuristiken dürfen nicht als KI-Inferenz dargestellt werden. |
-| **Google Drive** | Vollständige OAuth-Integration für verschlüsselte Backups/Sync. Synchronisationsmodus in der App wählbar: manuell oder automatisch; automatischer Sync ist explizit aktivierbar. Hochgeladen werden ausschließlich clientseitig verschlüsselte Daten. |
-
-## Technische Leitplanken
-
-- Architektur-, Bibliotheks- und Implementierungsentscheidungen treffe ich nach Codeprüfung und dokumentiere sie knapp. Produktentscheidungen werden nicht erneut abgefragt.
-- Wenn eine gewählte Funktion mit den erforderlichen Sicherheitsgarantien technisch nicht machbar erscheint, wird sie nicht stillschweigend unsicher umgesetzt oder entfernt. Dann folgt eine verständliche Entscheidungsfrage mit Empfehlung.
-- Kein roher DEK in PDFs, QR-Codes, UI oder Logs. Ein bewusst erzeugter, zufälliger Recovery-Schlüssel darf als explizites Notfallgeheimnis exportiert werden; das Dokument ist dann hochsensibel.
-- Eine unauffällige Gestaltung eines Notfalldokuments ist nur Tarnung, keine kryptografische Sicherheit. Wer das Geheimnis findet, kann es möglicherweise benutzen.
+| V01 | GETESTET – CI | B+U |
+| V02 | UMGESETZT – UNGETESTET | B+U |
+| V03 | GETESTET – CI | B+U |
+| V04 | GETESTET – CI | B+U |
+| V05 | ADR FREIGEGEBEN | D |
+| V06 | GETESTET – CI | B+U |
+| V06A | IN BEARBEITUNG | B+U+I+M |
+| V06B | IN BEARBEITUNG | B+U+I+M |
+| V07 | UMGESETZT – UNGETESTET | B+U |
+| V08 | UMGESETZT – UNGETESTET | B+U |
+| V09 | IN BEARBEITUNG | B+U |
+| V10 | UMGESETZT – UNGETESTET | B+U |
+| V11 | UMGESETZT – UNGETESTET | B+U |
+| V12 | IN BEARBEITUNG | B+U+I+M |
+| V12B | NICHT BEARBEITET | B+U+I+M |
+| V13 | IN BEARBEITUNG | B+U+I+M+P |
+| V14 | GETESTET – CI | B+U |
+| V15 | GETESTET – CI | B+U+I |
+| V16 | NICHT BEARBEITET | B+U+I+M+P |
+| V17 | NICHT BEARBEITET | B+U+I+M+P |
+| V18 | NICHT BEARBEITET | B+U+I+M+P |
+| S01 | AUDIT DOKUMENTIERT | D |
+| S02 | GETESTET – CI | B+U |
+| S03 | GETESTET – CI | B+U+I |
+| S04 | UMGESETZT – UNGETESTET | B+U |
+| S05 | UMGESETZT – UNGETESTET | B+U |
+| S06 | GETESTET – CI | B+U |
+| S07 | UMGESETZT – UNGETESTET | B+U+I+M |
+| S08 | GETESTET – CI | B+U+I |
+| S09 | IN BEARBEITUNG | B+U+I |
+| S10 | IN BEARBEITUNG | B+U+I+M |
+| D01 | AUDIT DOKUMENTIERT | D |
+| D02 | IN BEARBEITUNG | D |
+| D03 | IN BEARBEITUNG | B+U+I |
+| D04 | NICHT BEARBEITET | B+U+I |
+| D05 | IN BEARBEITUNG | B+U+I |
+| D06 | IN BEARBEITUNG | B+U+I+M |
+| D07 | NICHT BEARBEITET | B+U+I |
+| D08 | NICHT BEARBEITET | B+U+I |
+| D09 | IN BEARBEITUNG | B+U+I |
+| D10 | IN BEARBEITUNG | B+U+I |
+| D11 | GETESTET – CI | B+U+I |
+| D12 | NICHT BEARBEITET | B+U+I |
+| D13 | IN BEARBEITUNG | B+U+I |
+| D14 | IN BEARBEITUNG | B+U+I |
+| D15 | NICHT BEARBEITET | B+U+I |
+| P01 | AUDIT DOKUMENTIERT | D |
+| P02 | NICHT BEARBEITET | B+U+I |
+| P03 | NICHT BEARBEITET | B+U+I+M |
+| P04 | IN BEARBEITUNG | B+U+I |
+| P05 | IN BEARBEITUNG | B+U+I |
+| P06 | IN BEARBEITUNG | B+U+I |
+| P07 | IN BEARBEITUNG | B+U+I |
+| P08 | IN BEARBEITUNG | B+U+I |
+| P09 | IN BEARBEITUNG | B+U+I |
+| P10 | GETESTET – CI | B+U+I |
+| P11 | IN BEARBEITUNG | B+U+I |
+| P12 | NICHT BEARBEITET | B+U+I |
+| P13 | NICHT BEARBEITET | B+U+I+M |
+| L01 | AUDIT DOKUMENTIERT | D+B |
+| L02 | IN BEARBEITUNG | D |
+| L03 | IN BEARBEITUNG | B+U |
+| L04 | IN BEARBEITUNG | B+U+I |
+| L05 | IN BEARBEITUNG | B+U |
+| L06 | NICHT BEARBEITET | B+U |
+| L07 | IN BEARBEITUNG | B+U |
+| L08A | GETESTET – CI | B+U+I |
+| L09A | IN BEARBEITUNG | B+U+I |
+| L10A | IN BEARBEITUNG | B+U+I+G |
+| L11A | IN BEARBEITUNG | B+U+I+G |
+| L12 | NICHT BEARBEITET | B+U+I+G |
+| L13 | NICHT BEARBEITET | B+U |
+| L14 | IN BEARBEITUNG | B+U |
+| L15 | IN BEARBEITUNG | B+U+I+M |
+| L16 | IN BEARBEITUNG | B+U+I+G |
+| L17 | NICHT BEARBEITET | B+U+I+G+Q |
+| C01 | IN BEARBEITUNG | D+B+U |
+| C02 | NICHT BEARBEITET | B+U+I |
+| C03 | IN BEARBEITUNG | B+U+I |
+| C04 | IN BEARBEITUNG | B+U+I+M |
+| C05 | IN BEARBEITUNG | B+U+I |
+| C06 | IN BEARBEITUNG | B+U+I+M |
+| C07 | IN BEARBEITUNG | B+U+I |
+| C08 | IN BEARBEITUNG | B+U+I+M |
+| C09 | NICHT BEARBEITET | B+U+I |
+| DB01 | IN BEARBEITUNG | D+B+U |
+| DB02 | NICHT BEARBEITET | D+B+U |
+| DB03 | GETESTET – CI | B+U+I |
+| DB04 | NICHT BEARBEITET | B+U+I |
+| DB05 | IN BEARBEITUNG | B+U+I |
+| DB06 | IN BEARBEITUNG | B+U |
+| DB07 | NICHT BEARBEITET | B+U |
+| DB08 | NICHT BEARBEITET | B+U+I |
+| DB09 | NICHT BEARBEITET | B+U |
+| DB10 | NICHT BEARBEITET | B+U+I |
+| DB11 | NICHT BEARBEITET | B+U+I |
+| DB12 | NICHT BEARBEITET | B+U+I |
+| DB13 | NICHT BEARBEITET | B+U+I |
+| DB14 | NICHT BEARBEITET | B+U+I+M |
+| R01 | IN BEARBEITUNG | D+B+U |
+| R02 | NICHT BEARBEITET | D+B+U |
+| R03 | NICHT BEARBEITET | B+U |
+| R04 | IN BEARBEITUNG | B+U |
+| R05 | NICHT BEARBEITET | B+U+I+M |
+| R06 | NICHT BEARBEITET | B+U+I+M |
+| R07 | NICHT BEARBEITET | B+U |
+| R08 | NICHT BEARBEITET | B+U+I |
+| R09 | NICHT BEARBEITET | B+U |
+| R10 | NICHT BEARBEITET | B+U |
+| R11 | NICHT BEARBEITET | B+U |
+| R12 | IN BEARBEITUNG | B+U+I |
+| R13 | NICHT BEARBEITET | B+U |
+| R14 | NICHT BEARBEITET | D+B+U |
+| R15 | NICHT BEARBEITET | B+U |
+| R16 | IN BEARBEITUNG | B+U |
+| R17 | IN BEARBEITUNG | B+U |
+| R18 | NICHT BEARBEITET | B+U+I |
+| R19 | NICHT BEARBEITET | B+U+I |
+| R20 | NICHT BEARBEITET | B+U+I+M |
+| R21 | NICHT BEARBEITET | B+U+I+M |
+| R22 | NICHT BEARBEITET | B+U+I+M |
+| R23 | NICHT BEARBEITET | B+U |
+| R24 | NICHT BEARBEITET | B+U+I+M |
 
 ---
 
-## 1. Abhängigkeits- und Freigabeplan
-
-Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Testlauf ausgeführt und der tatsächliche Status dokumentiert wurde.
-
-### Verbindliche Ausführungsreihenfolge
-
-1. **M00** – aktuelle Baseline aus dem tatsächlich vorliegenden Code-/Build-/Teststand erstellen. Keine Produktänderungen in diesem AP.
-2. **V01–V06B** – V2-Tresor, DEK-Wrapper und der freigegebene Passwort+Keyfile-Faktor. Die TOTP-Entscheidung ist bereits freigegeben; TOTP darf nicht wieder als Tresor-Faktor eingeführt werden.
-3. **V09 → V07/V08 → V10/V11 → V12/V12B → V13/V14/V15 → V16/V17/V18** – zuerst Recovery-Architektur entscheiden, dann passende Mnemonic-/Share-Bausteine implementieren, danach Payload/QR, Notfalldokumente, Laufzeit-/Keystore- und Restore-Optionen.
-4. **S01–S08 und S10** – Lock-/Key-Leases, SecretStore und Intent-Policy. Legacy-Secrets noch nicht endgültig löschen.
-5. **D01 + DB01–DB04** – Datenfluss- und Room-v9-Baseline sowie tatsächliche Migrations-/Schema-Testinfrastruktur. Hier noch keine SQLCipher-Umstellung durchführen.
-6. **D02–D03** – SQLCipher-ADR und gemeinsame Schlüsselarchitektur anhand der nachgewiesenen Datenbank-/Migrationsbasis festlegen und vervollständigen.
-7. **D04–D15 sowie DB05–DB11** – Dokument-/Backup-/Restore-Pfade und dann einzelne FTS-/Query-/Schema-/Cent-Migrationen. Jede Room-Schemamigration bekommt einen eigenen sequenziellen Versionsschritt.
-8. **DB12–DB13**, danach **DB14** – SQLCipher erst nach Abschluss der Schemaänderungen und Schlüssel-/Storage-Tests integrieren; Datenmigration getrennt durchführen; Performance erst danach vergleichen.
-9. **P01–P13** – App2App, PC2App und Browser2App anhand derselben Transport-/Identitäts-/Pairing-Matrix absichern. Keine Klartext-HTTP-Pfade als Übergangslösung.
-10. **C01–C09** – Cloud-Sync baut auf validierten verschlüsselten Containern, SecretStore und belastbarer OAuth-/Transportlogik auf. Google Drive bleibt Produktziel; OAuth wird nicht durch manuell eingegebene Tokens ersetzt.
-11. **S09** – Legacy-Secrets endgültig migrieren/bereinigen, nachdem alle Verbraucher in D/P/C umgestellt sind. Werte erst nach verifiziertem verschlüsseltem Roundtrip entfernen.
-12. **L01 → L02 → L03–L07 → L08A → L09A → L10A → L11A → L12** – Native-Bestand/Produktionsplan bereinigen, Modellquelle/Download/Integrität prüfen und vorhandenen Native-Pfad gezielt verifizieren/härten.
-13. **L16 → L13 → L14 → L15 → L17** – Modellidentität/Lizenz/Integrität vor der Hybridanalyse prüfen; danach kandidatenbasierte Analyse, datensparsames Audit, UI-/Tool-Einbindung und zuletzt Qualitätsbenchmark.
-14. **R01–R24** – ViewModel-/DI-/Repository-/Logging- und Performance-Refactorings erst nach Stabilisierung der jeweiligen Produkt- und Sicherheitsgrenzen.
-
-Die AP-Beschreibungen bleiben fachlich gruppiert. **Für die chronologische Abarbeitung ist diese Liste maßgeblich.** Ein späteres AP wird nur vorgezogen, wenn es hier explizit als Voraussetzung genannt ist.
-
-### Verbindliche Gates und Abhängigkeiten
-
-- **V05 ist entschieden:** Passwort plus zufällige Schlüsseldatei ist der echte kryptografische Zweitfaktor. V06/V06A/V06B müssen konkrete Einrichtung, Unlock und Fehlerpfade nachweisen; keine erneute TOTP-Grundsatzprüfung.
-- **Recovery vor Recovery-Code:** V09 muss die erlaubten Restore-Pfade und Formatversion festlegen, bevor V07/V08/V10/V11 daraus ein inkompatibles Format machen.
-- **SQLCipher-Gate:** DB01–DB04 liefern Schema-/Migrationsbasis; D02/D03 liefern ADR/Key-Boundary. DB12/DB13 dürfen weder unverschlüsselte Fallbacks noch destruktive Datenverluste einführen.
-- **S09-Gate:** Legacy-Passwörter/Token erst entfernen, wenn die konkreten D/P/C-Verbraucher auf sichere Schnittstellen umgestellt und getestet sind.
-- **Transport-Gate:** P2P nutzt aktuell in Teilen http://; WebDAV erzwingt HTTPS, aber TOFU-Pinning ist nicht abgeschlossen. Sicherheitsclaims brauchen echte Client-/Server-Negativtests.
-- **LLM-Gate:** Native CMake/JNI-Dateien existieren und kompilieren in CI. Das beweist keine echte GGUF-Inferenz. L12 darf Grammar nicht blind aktivieren und muss den gepinnten llama.cpp-Sampler/Parser gezielt testen. L13 implementiert dynamische Grammatik aus tatsächlichen Kandidaten-IDs.
-- **Qualitäts-Gate:** L17 muss Golden-Set-, Modell-, Prompt- und Gerätewerte enthalten. Fake-Engine/JVM-Test, erfolgreicher Build und gültiges JSON sind kein Modellqualitätsnachweis.
-
-
----
-
-## 2. Micro-APs
-
-# M00 – Baseline und Bestandsinventar (AUDIT, keine Produktänderung)
-
-**Prompt:** Erfasse lesend die im Workspace vorhandene Dateibasis und führe – sofern in der Umgebung verfügbar – `./gradlew assembleDebug testDebugUnitTest` sowie vorhandene lokale Checks aus (andernfalls als nicht ausführbar kennzeichnen). Erstelle `docs/security/micro-ap-baseline.md` mit tatsächlichem Buildstatus, Grenzen der Umgebung, fehlenden/ungenutzten Tests, relevanten Modulen und offenen Befunden aus den ursprünglichen acht APs. Untersuche nur lesend und füge keine Produktlogik hinzu. Verifiziere insbesondere die aktuellen Implementierungen von VaultHeader/KDF/Recovery, `DocumentStorageService`, P2P-Server, CloudSync, Room-Version, LLM/JNI und Analytics. Markiere jeden Befund als bestätigt, widerlegt oder noch offen und nenne Pfad/Beleg. **Abnahme:** Auditdatei ist reproduzierbar und ehrlich; keine Anwendungslogik geändert. Fehlende Tool-Unterstützung oder Buildfehler werden dokumentiert, nicht kaschiert.
-
----
+## Micro-AP-Prompts
 
 # V – Tresor, Schlüsselableitung und Recovery
 
@@ -688,161 +697,67 @@ Nutze ausschließlich synthetische, frei erfundene deutsche OCR-Texte für autom
 
 ---
 
-## Aktueller Status aller aktiven Micro-APs
+---
 
-**Zählung:** 124 aktive Einträge einschließlich M00. L08B und C04B sind ausdrücklich nicht ausgewählte Alternativen und zählen nicht als aktive Arbeitspakete. „NICHT BEARBEITET“ kennzeichnet unbearbeitete Arbeit. „UMGESETZT – UNGETESTET“ kennzeichnet vorhandenen Code, bei dem der benötigte AP-spezifische Nachweis noch nicht ausgeführt oder belegt ist.
+## 1. Abhängigkeits- und Freigabeplan
 
-| Bearbeitungsstatus | Anzahl aktiver APs |
-|---|---:|
-| ADR FREIGEGEBEN | 1 |
-| AUDIT DOKUMENTIERT | 5 |
-| GETESTET – CI | 14 |
-| IN BEARBEITUNG | 51 |
-| NICHT BEARBEITET | 48 |
-| UMGESETZT – UNGETESTET | 5 |
+Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Testlauf ausgeführt und der tatsächliche Status dokumentiert wurde.
 
-**Pflicht-Testprofil:** B/U/I/M/P/G/Q/D sind im Abschnitt „Testprofile“ definiert. Profile bezeichnen erforderliche Prüfebenen, nicht bereits erfolgte Testergebnisse. Die konkrete Testfolge, erwartete Ergebnisse und Abnahmekriterien stehen im jeweiligen AP-Prompt.
+### Verbindliche Ausführungsreihenfolge
 
-| AP | Bearbeitungsstatus | Pflicht-Testprofil |
-|---|---|---|
-| M00 | AUDIT DOKUMENTIERT | D+B+U |
-| V01 | GETESTET – CI | B+U |
-| V02 | UMGESETZT – UNGETESTET | B+U |
-| V03 | GETESTET – CI | B+U |
-| V04 | GETESTET – CI | B+U |
-| V05 | ADR FREIGEGEBEN | D |
-| V06 | GETESTET – CI | B+U |
-| V06A | IN BEARBEITUNG | B+U+I+M |
-| V06B | IN BEARBEITUNG | B+U+I+M |
-| V07 | UMGESETZT – UNGETESTET | B+U |
-| V08 | UMGESETZT – UNGETESTET | B+U |
-| V09 | IN BEARBEITUNG | B+U |
-| V10 | UMGESETZT – UNGETESTET | B+U |
-| V11 | UMGESETZT – UNGETESTET | B+U |
-| V12 | IN BEARBEITUNG | B+U+I+M |
-| V12B | NICHT BEARBEITET | B+U+I+M |
-| V13 | IN BEARBEITUNG | B+U+I+M+P |
-| V14 | GETESTET – CI | B+U |
-| V15 | GETESTET – CI | B+U+I |
-| V16 | NICHT BEARBEITET | B+U+I+M+P |
-| V17 | NICHT BEARBEITET | B+U+I+M+P |
-| V18 | NICHT BEARBEITET | B+U+I+M+P |
-| S01 | AUDIT DOKUMENTIERT | D |
-| S02 | GETESTET – CI | B+U |
-| S03 | GETESTET – CI | B+U+I |
-| S04 | UMGESETZT – UNGETESTET | B+U |
-| S05 | UMGESETZT – UNGETESTET | B+U |
-| S06 | GETESTET – CI | B+U |
-| S07 | UMGESETZT – UNGETESTET | B+U+I+M |
-| S08 | GETESTET – CI | B+U+I |
-| S09 | IN BEARBEITUNG | B+U+I |
-| S10 | IN BEARBEITUNG | B+U+I+M |
-| D01 | AUDIT DOKUMENTIERT | D |
-| D02 | IN BEARBEITUNG | D |
-| D03 | IN BEARBEITUNG | B+U+I |
-| D04 | NICHT BEARBEITET | B+U+I |
-| D05 | IN BEARBEITUNG | B+U+I |
-| D06 | IN BEARBEITUNG | B+U+I+M |
-| D07 | NICHT BEARBEITET | B+U+I |
-| D08 | NICHT BEARBEITET | B+U+I |
-| D09 | IN BEARBEITUNG | B+U+I |
-| D10 | IN BEARBEITUNG | B+U+I |
-| D11 | GETESTET – CI | B+U+I |
-| D12 | NICHT BEARBEITET | B+U+I |
-| D13 | IN BEARBEITUNG | B+U+I |
-| D14 | IN BEARBEITUNG | B+U+I |
-| D15 | NICHT BEARBEITET | B+U+I |
-| P01 | AUDIT DOKUMENTIERT | D |
-| P02 | NICHT BEARBEITET | B+U+I |
-| P03 | NICHT BEARBEITET | B+U+I+M |
-| P04 | IN BEARBEITUNG | B+U+I |
-| P05 | IN BEARBEITUNG | B+U+I |
-| P06 | IN BEARBEITUNG | B+U+I |
-| P07 | IN BEARBEITUNG | B+U+I |
-| P08 | IN BEARBEITUNG | B+U+I |
-| P09 | IN BEARBEITUNG | B+U+I |
-| P10 | GETESTET – CI | B+U+I |
-| P11 | IN BEARBEITUNG | B+U+I |
-| P12 | NICHT BEARBEITET | B+U+I |
-| P13 | NICHT BEARBEITET | B+U+I+M |
-| L01 | AUDIT DOKUMENTIERT | D+B |
-| L02 | IN BEARBEITUNG | D |
-| L03 | IN BEARBEITUNG | B+U |
-| L04 | IN BEARBEITUNG | B+U+I |
-| L05 | IN BEARBEITUNG | B+U |
-| L06 | NICHT BEARBEITET | B+U |
-| L07 | IN BEARBEITUNG | B+U |
-| L08A | GETESTET – CI | B+U+I |
-| L09A | IN BEARBEITUNG | B+U+I |
-| L10A | IN BEARBEITUNG | B+U+I+G |
-| L11A | IN BEARBEITUNG | B+U+I+G |
-| L12 | NICHT BEARBEITET | B+U+I+G |
-| L13 | NICHT BEARBEITET | B+U |
-| L14 | IN BEARBEITUNG | B+U |
-| L15 | IN BEARBEITUNG | B+U+I+M |
-| L16 | IN BEARBEITUNG | B+U+I+G |
-| L17 | NICHT BEARBEITET | B+U+I+G+Q |
-| C01 | IN BEARBEITUNG | D+B+U |
-| C02 | NICHT BEARBEITET | B+U+I |
-| C03 | IN BEARBEITUNG | B+U+I |
-| C04 | IN BEARBEITUNG | B+U+I+M |
-| C05 | IN BEARBEITUNG | B+U+I |
-| C06 | IN BEARBEITUNG | B+U+I+M |
-| C07 | IN BEARBEITUNG | B+U+I |
-| C08 | IN BEARBEITUNG | B+U+I+M |
-| C09 | NICHT BEARBEITET | B+U+I |
-| DB01 | IN BEARBEITUNG | D+B+U |
-| DB02 | NICHT BEARBEITET | D+B+U |
-| DB03 | GETESTET – CI | B+U+I |
-| DB04 | NICHT BEARBEITET | B+U+I |
-| DB05 | IN BEARBEITUNG | B+U+I |
-| DB06 | IN BEARBEITUNG | B+U |
-| DB07 | NICHT BEARBEITET | B+U |
-| DB08 | NICHT BEARBEITET | B+U+I |
-| DB09 | NICHT BEARBEITET | B+U |
-| DB10 | NICHT BEARBEITET | B+U+I |
-| DB11 | NICHT BEARBEITET | B+U+I |
-| DB12 | NICHT BEARBEITET | B+U+I |
-| DB13 | NICHT BEARBEITET | B+U+I |
-| DB14 | NICHT BEARBEITET | B+U+I+M |
-| R01 | IN BEARBEITUNG | D+B+U |
-| R02 | NICHT BEARBEITET | D+B+U |
-| R03 | NICHT BEARBEITET | B+U |
-| R04 | IN BEARBEITUNG | B+U |
-| R05 | NICHT BEARBEITET | B+U+I+M |
-| R06 | NICHT BEARBEITET | B+U+I+M |
-| R07 | NICHT BEARBEITET | B+U |
-| R08 | NICHT BEARBEITET | B+U+I |
-| R09 | NICHT BEARBEITET | B+U |
-| R10 | NICHT BEARBEITET | B+U |
-| R11 | NICHT BEARBEITET | B+U |
-| R12 | IN BEARBEITUNG | B+U+I |
-| R13 | NICHT BEARBEITET | B+U |
-| R14 | NICHT BEARBEITET | D+B+U |
-| R15 | NICHT BEARBEITET | B+U |
-| R16 | IN BEARBEITUNG | B+U |
-| R17 | IN BEARBEITUNG | B+U |
-| R18 | NICHT BEARBEITET | B+U+I |
-| R19 | NICHT BEARBEITET | B+U+I |
-| R20 | NICHT BEARBEITET | B+U+I+M |
-| R21 | NICHT BEARBEITET | B+U+I+M |
-| R22 | NICHT BEARBEITET | B+U+I+M |
-| R23 | NICHT BEARBEITET | B+U |
-| R24 | NICHT BEARBEITET | B+U+I+M |
+1. **V01–V06B** – V2-Tresor, DEK-Wrapper und der freigegebene Passwort+Keyfile-Faktor. Die TOTP-Entscheidung ist bereits freigegeben; TOTP darf nicht wieder als Tresor-Faktor eingeführt werden.
+2. **V09 → V07/V08 → V10/V11 → V12/V12B → V13/V14/V15 → V16/V17/V18** – zuerst Recovery-Architektur entscheiden, dann passende Mnemonic-/Share-Bausteine implementieren, danach Payload/QR, Notfalldokumente, Laufzeit-/Keystore- und Restore-Optionen.
+3. **S01–S08 und S10** – Lock-/Key-Leases, SecretStore und Intent-Policy. Legacy-Secrets noch nicht endgültig löschen.
+4. **D01 + DB01–DB04** – Datenfluss- und Room-v9-Baseline sowie tatsächliche Migrations-/Schema-Testinfrastruktur. Hier noch keine SQLCipher-Umstellung durchführen.
+5. **D02–D03** – SQLCipher-ADR und gemeinsame Schlüsselarchitektur anhand der nachgewiesenen Datenbank-/Migrationsbasis festlegen und vervollständigen.
+6. **D04–D15 sowie DB05–DB11** – Dokument-/Backup-/Restore-Pfade und dann einzelne FTS-/Query-/Schema-/Cent-Migrationen. Jede Room-Schemamigration bekommt einen eigenen sequenziellen Versionsschritt.
+7. **DB12–DB13**, danach **DB14** – SQLCipher erst nach Abschluss der Schemaänderungen und Schlüssel-/Storage-Tests integrieren; Datenmigration getrennt durchführen; Performance erst danach vergleichen.
+8. **P01–P13** – App2App, PC2App und Browser2App anhand derselben Transport-/Identitäts-/Pairing-Matrix absichern. Keine Klartext-HTTP-Pfade als Übergangslösung.
+9. **C01–C09** – Cloud-Sync baut auf validierten verschlüsselten Containern, SecretStore und belastbarer OAuth-/Transportlogik auf. Google Drive bleibt Produktziel; OAuth wird nicht durch manuell eingegebene Tokens ersetzt.
+10. **S09** – Legacy-Secrets endgültig migrieren/bereinigen, nachdem alle Verbraucher in D/P/C umgestellt sind. Werte erst nach verifiziertem verschlüsseltem Roundtrip entfernen.
+11. **L01 → L02 → L03–L07 → L08A → L09A → L10A → L11A → L12** – Native-Bestand/Produktionsplan bereinigen, Modellquelle/Download/Integrität prüfen und vorhandenen Native-Pfad gezielt verifizieren/härten.
+12. **L16 → L13 → L14 → L15 → L17** – Modellidentität/Lizenz/Integrität vor der Hybridanalyse prüfen; danach kandidatenbasierte Analyse, datensparsames Audit, UI-/Tool-Einbindung und zuletzt Qualitätsbenchmark.
+13. **R01–R24** – ViewModel-/DI-/Repository-/Logging- und Performance-Refactorings erst nach Stabilisierung der jeweiligen Produkt- und Sicherheitsgrenzen.
 
-### Nicht ausgewählte Alternativen
+Die AP-Beschreibungen bleiben fachlich gruppiert. **Für die chronologische Abarbeitung ist diese Liste maßgeblich.** Ein späteres AP wird nur vorgezogen, wenn es hier explizit als Voraussetzung genannt ist.
 
-| Alternative | Regel |
-|---|---|
-| **L08B – LLM-Rückbau** | Nicht ausführen. Nur bei konkret dokumentiertem, schwerwiegendem technischem Blocker und erneuter ausdrücklicher Nutzerfreigabe. |
-| **C04B – Google Drive entfernen** | Nicht ausführen. Google Drive bleibt Produktziel; OAuth-/Transportblocker sind zu beheben oder mit konkretem Befund zu dokumentieren. |
+### Verbindliche Gates und Abhängigkeiten
+
+- **V05 ist entschieden:** Passwort plus zufällige Schlüsseldatei ist der echte kryptografische Zweitfaktor. V06/V06A/V06B müssen konkrete Einrichtung, Unlock und Fehlerpfade nachweisen; keine erneute TOTP-Grundsatzprüfung.
+- **Recovery vor Recovery-Code:** V09 muss die erlaubten Restore-Pfade und Formatversion festlegen, bevor V07/V08/V10/V11 daraus ein inkompatibles Format machen.
+- **SQLCipher-Gate:** DB01–DB04 liefern Schema-/Migrationsbasis; D02/D03 liefern ADR/Key-Boundary. DB12/DB13 dürfen weder unverschlüsselte Fallbacks noch destruktive Datenverluste einführen.
+- **S09-Gate:** Legacy-Passwörter/Token erst entfernen, wenn die konkreten D/P/C-Verbraucher auf sichere Schnittstellen umgestellt und getestet sind.
+- **Transport-Gate:** P2P nutzt aktuell in Teilen http://; WebDAV erzwingt HTTPS, aber TOFU-Pinning ist nicht abgeschlossen. Sicherheitsclaims brauchen echte Client-/Server-Negativtests.
+- **LLM-Gate:** Native CMake/JNI-Dateien existieren und kompilieren in CI. Das beweist keine echte GGUF-Inferenz. L12 darf Grammar nicht blind aktivieren und muss den gepinnten llama.cpp-Sampler/Parser gezielt testen. L13 implementiert dynamische Grammatik aus tatsächlichen Kandidaten-IDs.
+- **Qualitäts-Gate:** L17 muss Golden-Set-, Modell-, Prompt- und Gerätewerte enthalten. Fake-Engine/JVM-Test, erfolgreicher Build und gültiges JSON sind kein Modellqualitätsnachweis.
+
 
 ---
 
+---
+
+## Testprofil-Kürzel
+
+- **B** Build: `./gradlew assembleDebug --stacktrace --no-daemon`
+- **U** JVM-Tests: `./gradlew testDebugUnitTest --stacktrace --no-daemon`
+- **I** Android-Instrumentierung: `./gradlew connectedDebugAndroidTest --stacktrace --no-daemon`
+- **M** manueller App-Test mit dokumentierten Schritten und Ergebnis
+- **P** physisches Gerät/Hardware erforderlich
+- **G** echte native GGUF-Inferenz; Modell-Hash und Gerät dokumentieren
+- **Q** Qualitätsbenchmark auf versioniertem Golden Set
+- **D** statischer Audit/Dokumentationsschritt
+
+Die Profile bezeichnen erforderliche Prüfungen, nicht bereits bestandene Tests. Nicht ausführbare Prüfungen als „nicht ausgeführt“ mit Grund dokumentieren.
+
+## Nicht ausgewählte Alternativen
+
+- **L08B – LLM-Rückbau:** Nicht ausführen. Nur bei konkret dokumentiertem schwerwiegendem technischem Blocker und erneuter ausdrücklicher Freigabe.
+- **C04B – Google Drive entfernen:** Nicht ausführen. Google Drive bleibt Produktziel; OAuth-/Transportblocker beheben oder mit konkretem Befund dokumentieren.
+
 ## Arbeitsregeln für Statuspflege
 
-1. Ein AP wechselt erst auf **GETESTET – CI**, wenn die AP-spezifischen Tests im genannten Workflow/Commit bestanden sind. Ein allgemeiner Build allein reicht nicht.
-2. **GETESTET – APP/GERÄT** erfordert den konkreten Ablauf, Geräte-/Emulatormodell, Android-Version, App-Build/Commit, erwartetes Ergebnis und beobachtetes Ergebnis. Ein bloßer App-Start gilt nur als Smoke-Test.
-3. **ABGENOMMEN** erfordert alle im Testprofil geforderten Ebenen. Ein Profil mit P/G/Q ist nicht durch Emulator-Compile oder allgemeinen CI-Erfolg erfüllt.
-4. Eine nicht verfügbare Testumgebung wird als **nicht ausgeführt** mit konkretem Grund dokumentiert. Sie wird nicht als bestanden oder fehlgeschlagen etikettiert.
-5. Ein vorhandener Testklassename beweist nicht, dass die Akzeptanzkriterien vollständig abgedeckt sind. Quellcode, Testinhalt und konkretes CI-Ergebnis müssen zusammenpassen.
+1. **GETESTET – CI** nur bei bestandenem AP-spezifischem Test im genannten Commit.
+2. **GETESTET – APP/GERÄT** nur mit dokumentiertem Ablauf, Build/Commit, Gerät/Emulator, Android-Version sowie Erwartung und Ergebnis.
+3. **ABGENOMMEN** nur, wenn alle AP-spezifischen Prüfungen einschließlich erforderlicher P/G/Q-Ebenen nachgewiesen sind.
+4. Nicht verfügbare Tests als **nicht ausgeführt** dokumentieren, nie als bestanden.
+5. Vorhandene Testklassennamen allein belegen keine vollständige Abdeckung.
