@@ -1,4 +1,4 @@
-# Aktueller IST-/SOLL-Status – Stabilisierung (22.10.2026)
+# Aktueller IST-/SOLL-Status – Stabilisierung (23.10.2026)
 
 ## Scan-Speicherfluss – aktueller Arbeitsstand
 
@@ -24,10 +24,10 @@
 ## Aktueller Stand und Nachweise
 
 - **Branch:** `main`
-- **Letzter Code-Commit für den aktuellen Scan-Arbeitsblock:** [`158dbf69`](https://github.com/MrLongNight/myDocAnizer_Mobile/commit/158dbf695a9dba37d1f7943aa79b895ac1d615f4) – Live-Quad-Overlay, Auto-Scan-Bereitschaft und Autofokus-Wiederholung.
-- **CI:** Der frühere Lauf `39766676859` gehört zu einem älteren Commit und ist kein Nachweis für die aktuellen Änderungen. Der Workflow für den aktuellen Stand ist nach dem Push separat zu prüfen.
+- **Letzter hier dokumentierter Scan-/Diagnose-Code-Stand:** `c602552a` (`Export diagnostic logs with .log extension`), nach `cb976e48` (`Write scan workflow trace to audit export`). Diese Änderungen ergänzen Diagnose-/Audit-Export, ersetzen aber keinen Scan-Gerätetest.
+- **CI:** Die im Dokument genannten erfolgreichen Läufe gehören zu früheren Commits. Für den aktuellen `main`-Stand ist in diesem Dokument kein bestätigter vollständiger GitHub-Actions-Lauf dokumentiert; deshalb Build, Unit-Tests und Instrumentierung nicht pauschal als aktuell grün ausweisen.
 - **Physischer Gerätetest:** Für Quad-Overlay, FILL_CENTER-Ausrichtung, Autofokus und Wiederfreigabe nach Blattwechsel noch offen.
-- **Wichtig zur Perspektive:** Ein früherer Lauf (`39749143472`) scheiterte weiterhin am Test der schrägen Dokumentecken. Danach wurde die Test-Fixture und schließlich die Pixel-Assertion angepasst. Der aktuelle grüne Lauf bestätigt, dass die aktuelle Test-Suite besteht; er beweist nicht allein die Perspektivqualität echter Fotos.
+- **Wichtig zur Perspektive:** Ein früherer Lauf (`39749143472`) scheiterte am Test der schrägen Dokumentecken. Danach wurden Test-Fixture und Pixel-Assertion angepasst. Die früheren grünen Läufe belegen nur den damaligen Commit, nicht automatisch den aktuellen `main`-Stand und nicht die Perspektivqualität echter Fotos.
 
 ## Letzte Änderungen auf `main`
 
@@ -39,7 +39,9 @@
 | `8d5ef909` | Auto-Scan zusätzlich an Bewegungs- und Helligkeitsgrenzen gebunden; Stabilisierungsfenster verlängert. | In späterem Gesamt-CI enthalten; Grenzwerte nicht auf echtem Gerät validiert. |
 | `e1448cab` | Bei geringer Schärfe wird gedrosselt AF/AE-Messung am Preview-Zentrum angefordert. | In späterem Gesamt-CI enthalten; Kamera-Reaktion nicht physisch validiert. |
 | `6dc6b096` | Perspektiv-Regressionsassertion auf einen inneren Bildpunkt umgestellt, um eine fragile Randpixel-Prüfung zu vermeiden. | Aktuelle Tests grün; prüfen, dass die Teständerung keinen echten Geometriefehler kaschiert. |
-| `c593d26d` | `snapshotFlow` + `collectLatest`: Auto-Scan-Countdown wird abgebrochen, wenn Dokument-, Ausrichtungs-, Schärfe-, Bewegungs- oder Helligkeitsbedingung nicht mehr erfüllt ist. | CI-Lauf `39766676859` erfolgreich; Verhalten mit realem Kamerabild noch offen. |
+| `c593d26d` | `snapshotFlow` + `collectLatest`: Auto-Scan-Countdown wird abgebrochen, wenn Dokument-, Ausrichtungs-, Schärfe-, Bewegungs- oder Helligkeitsbedingung nicht mehr erfüllt ist. | Historischer CI-Lauf `39766676859` erfolgreich; kein aktueller HEAD-Nachweis, Verhalten mit realem Kamerabild noch offen. |
+| `cb976e48` | Scan-Workflow-Trace wird in den Diagnoseexport aufgenommen. | Codeänderung vorhanden; aktueller Gesamt-CI-/Gerätenachweis nicht aus diesem Eintrag ableitbar. |
+| `c602552a` | Diagnoseexport erhält die Dateiendung `.log`. | Codeänderung vorhanden; aktueller Gesamt-CI-/Gerätenachweis nicht aus diesem Eintrag ableitbar. |
 
 ## Arbeitsblock 22.10.2026 – Live-Erkennung, Inferenzstatus und Scan-Verarbeitung
 
