@@ -20,6 +20,16 @@ Pro Gate reicht ein kurzer Nachweis: **Commit/Build + bestanden/fehlgeschlagen +
 | **G8 – Cloud und Geräteverbindungen (nur falls in Beta aktiv)** | Je aktivierter Funktion einzeln: Google Drive Autorisierung/Entzug/Backup/Restore; WebDAV mit gültigem und falschem/geändertem TLS-Zertifikat; App2App/PC2App/Browser2App Pairing, Transfer, Abbruch und falsche Gegenstelle. | Nur verschlüsselte Nutzdaten übertragen; ungültige Identität/Zertifikat, fehlende Konfiguration oder beschädigte Übertragung wird abgelehnt. Jede nicht bestandene Verbindung ist für die Beta tatsächlich deaktiviert/versteckt. | ☐ Nicht getestet · ☐ Bestanden · ☐ Fehler |
 | **G9 – Datenschutz und Play-Console-Freigabe** | Logs und Diagnoseexport mit synthetischen Daten auf OCR-/Dokumentinhalte, Passwörter, Tokens und Schlüssel prüfen. Release-App-Bundle, Signierung, Version, Ziel-API, Datenschutzerklärung und Play-Console-Datensicherheitsangaben prüfen. | Keine sensiblen Inhalte in Logs/Telemetrie; tatsächliches Verhalten, Datenschutzerklärung und Datensicherheitsformular stimmen überein. Abhängige optionale Provider/Analytics sind entweder korrekt dokumentiert oder deaktiviert. | ☐ Nicht getestet · ☐ Bestanden · ☐ Fehler |
 
+## Bekannte offene Freigabepunkte (Quell-/Dokumentationsstand 23.10.2026)
+
+Diese Punkte sind **nicht als bestanden anzusehen**, solange neue Nachweise nichts anderes belegen:
+
+- **G4 – Room-Datenbank:** `app/src/main/java/com/example/data/AppDatabase.kt` verwendet weiter den normalen Room-Builder, Schema-Version 9 und `exportSchema = false`; die SQLCipher-ADR weist ausdrücklich darauf hin, dass noch keine Runtime-Integration vorliegt. G4 kann deshalb aktuell nicht als bestanden gelten. Erst DB12/DB13 plus passende Tests können diesen Status ändern.
+- **G5 – Backup/Restore:** Ein vollständiger erfolgreicher Roundtrip des neuen verschlüsselten Containers in einer frischen Installation ist in der Freigabecheckliste noch nicht nachgewiesen.
+- **Scanner:** `docs/open_tasks.md` führt den physischen Kameratest, ViewModel-Integrationstests, die Entscheidung zum Mehrseiten-Regelvorschlag und die Prüfung der Bitmap-Lebensdauer weiterhin als offen. Der manuelle Scanablauf aus G3 ist deshalb noch tatsächlich durchzuführen.
+- **Lokales LLM:** Quellcode für native llama.cpp/JNI ist vorhanden; echter GGUF-Lauf auf einem physischen Gerät sowie wirksame Grammar-/Cancel-/Timeout-Abnahme sind in den aktuellen Nachweisen nicht bestätigt. Modellantworten nicht als verifizierte Inferenz ausgeben, bevor das belegt ist.
+- **Google Drive, WebDAV und P2P:** Bis die jeweilige Verbindung G8 besteht, muss der betreffende Einstieg in der Beta deaktiviert/versteckt sein. Vorhandener Code oder ein erfolgreiches Build ist kein Ende-zu-Ende-Nachweis.
+
 ## AP-Zuordnung zu den Gates
 
 - **G1:** alle Änderungen des zu veröffentlichenden Commits; aktuelle Build-/CI-Nachweise.
