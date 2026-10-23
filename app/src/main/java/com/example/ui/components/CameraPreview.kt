@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.service.DocumentScanTrace
 import com.example.service.DocumentQuadDetector
 import com.example.service.DocumentTracker
 import com.example.service.LumaChromaFrame
@@ -311,13 +312,13 @@ fun CameraPreview(
                                 val quality = measureFrameQuality(frame, quad)
                                 analyzedFrameCount[0]++
                                 // Diagnostic telemetry only: no image bytes, OCR/text, filenames, URIs or corner coordinates.
-                                Log.i("DocScanTrace", "event=frame seq=${analyzedFrameCount[0]} tMs=$now size=${frame.width}x${frame.height} rotation=${imageProxy.imageInfo.rotationDegrees} confidence=${"%.3f".format(java.util.Locale.US, detection.confidence)} detectorQuad=${detection.quad != null} reject=${detection.rejectReason ?: "none"} locked=${tracking.isLocked} stable=${tracking.isStable} lockAcquired=${tracking.lockJustAcquired} motion=${"%.4f".format(java.util.Locale.US, tracking.cornerMotion)} luminance=${"%.1f".format(java.util.Locale.US, quality.averageLuminance)} sharpness=${"%.1f".format(java.util.Locale.US, quality.sharpnessScore)}")
+                                DocumentScanTrace.info("event=frame seq=${analyzedFrameCount[0]} tMs=$now size=${frame.width}x${frame.height} rotation=${imageProxy.imageInfo.rotationDegrees} confidence=${"%.3f".format(java.util.Locale.US, detection.confidence)} detectorQuad=${detection.quad != null} reject=${detection.rejectReason ?: "none"} locked=${tracking.isLocked} stable=${tracking.isStable} lockAcquired=${tracking.lockJustAcquired} motion=${"%.4f".format(java.util.Locale.US, tracking.cornerMotion)} luminance=${"%.1f".format(java.util.Locale.US, quality.averageLuminance)} sharpness=${"%.1f".format(java.util.Locale.US, quality.sharpnessScore)}")
 
                                 // Focus only when a temporal lock is newly acquired, and throttle
                                 // requests so AF/AE does not restart continuously.
                                 if (tracking.lockJustAcquired && now - lastAutoFocusAt[0] >= 1500L) {
                                     lastAutoFocusAt[0] = now
-                                    Log.i("DocScanTrace", "event=autofocus_request tMs=$now reason=tracker_lock")
+                                    DocumentScanTrace.info("event=autofocus_request tMs=$now reason=tracker_lock")
                                     val centerX = quad?.map { it.x }?.average()?.toFloat() ?: 0.5f
                                     val centerY = quad?.map { it.y }?.average()?.toFloat() ?: 0.5f
                                     val focusQuad = mapQuadToPreview(
@@ -374,7 +375,7 @@ fun CameraPreview(
                                 )
                                 mainHandler.post { onFrameAnalysis(result) }
                             } catch (e: Exception) {
-                                Log.e("DocScanTrace", "event=frame_analysis_error type=${e.javaClass.simpleName}")
+                                DocumentScanTrace.error("event=frame_analysis_error type=${e.javaClass.simpleName}")
                             } finally {
                                 imageProxy.close()
                             }
@@ -396,18 +397,18 @@ fun CameraPreview(
                                 imageAnalysis
                             )
                             cameraControl = camera.cameraControl
-                            Log.i("DocScanTrace", "event=camera_bound selector=${if (selector == CameraSelector.DEFAULT_BACK_CAMERA) "back" else "front"} analysisTargetLongEdge=160 targetIntervalMs=110")
+                            DocumentScanTrace.info("event=camera_bound selector=${if (selector == CameraSelector.DEFAULT_BACK_CAMERA) "back" else "front"} analysisTargetLongEdge=160 targetIntervalMs=110")
                             isCameraHardwareAvailable = true
                             onCameraAvailableChanged(true)
                             onImageCaptureCreated(imageCapture)
                         } else {
-                            Log.e("DocScanTrace", "event=camera_unavailable reason=no_camera_selector")
+                            DocumentScanTrace.error("event=camera_unavailable reason=no_camera_selector")
                             isCameraHardwareAvailable = false
                             errorMessage = "Kein Kameragerät gefunden (Emulator-Modus aktiv)"
                             onCameraAvailableChanged(false)
                         }
                     } catch (exc: Exception) {
-                        Log.e("DocScanTrace", "event=camera_bind_error type=${exc.javaClass.simpleName}")
+                        DocumentScanTrace.error("event=camera_bind_error type=${exc.javaClass.simpleName}")
                         isCameraHardwareAvailable = false
                         errorMessage = "Kamera-Initialisierung fehlgeschlagen (${exc.localizedMessage})"
                         onCameraAvailableChanged(false)
