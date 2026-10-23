@@ -35,7 +35,7 @@ Die konkrete KeyProvider-Implementierung gehört in D03 und muss vor DB12 freige
 - Room 2 verwendet die vom Projekt bereitgestellte `SupportSQLiteOpenHelper.Factory` über `openHelperFactory(SupportOpenHelperFactory(...))`. Nicht gleichzeitig auf Room-3-`setDriver` umstellen.
 - Haupttabellen, Indizes, Trigger, `documents_fts` und sämtliche Room-Migrationen müssen innerhalb derselben SQLCipher-Datenbank liegen. Es darf kein unverschlüsselter FTS-/OCR-Nebenindex entstehen.
 - WAL/SHM sind zusammen mit der DB-Öffnungs-, Checkpoint- und Schließungssequenz zu testen. Bei Migration: Schreibzugriffe stoppen, `RoomDatabase.close()`, Checkpoint/sauberes Schließen durchführen und nicht blind eine DB ohne zugehörige Sidecars kopieren. Nach erfolgreicher Verschlüsselung dürfen keine alten plaintext-WAL-Dateien verbleiben.
-- `fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)` in `AppDatabase` ist mit der geforderten Datenerhaltung nicht vereinbar. DB03 muss diesen Löschpfad entfernen; ein nicht unterstützter Downgrade muss kontrolliert scheitern und Recovery erklären, nicht eine leere Datenbank öffnen.
+- Der frühere `fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)`-Löschpfad wurde aus `AppDatabase` entfernt (DB03). Die Entfernung muss durch Regressionstests gegen unbeabsichtigtes Löschen abgesichert bleiben; ein nicht unterstützter Downgrade darf nicht still eine leere Datenbank öffnen.
 - `exportSchema = false` ist aktuell gesetzt. DB01/DB02 müssen zuerst eine belegte Schema-v9-Baseline bzw. reproduzierbare Room-Schemaexporte sichern, bevor Migrationen umgestellt werden.
 
 ## 5. Migration von SQLite-Klartext zur verschlüsselten Datenbank
