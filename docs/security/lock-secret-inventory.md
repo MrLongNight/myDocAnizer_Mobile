@@ -51,6 +51,6 @@ Die Produktionsaufrufstellen im `DocAnizerViewModel`, `DmsManager` und `Document
 
 1. Der veraltete öffentliche `getActiveDek()`-Kompatibilitäts-Getter bleibt vorhanden; Folgearbeiten sollen ihn nach Umstellung der Tests entfernen.
 2. Die neuen Lease-/Lock-/Biometriepfade müssen lokal getestet und auf echten Geräten validiert werden.
-3. Die atomare v1→v2-Laufzeitmigration ist separat in `docs/security/v14-migration-blocker.md` blockiert.
+3. Verbindliche aktuelle Vorgabe: V2 ist das einzige unterstützte Vault-Format. Es darf keine V1→V2-Laufzeitmigration, keinen V1-Fallback und keine neue V1-Kompatibilität geben. Ältere Verweise auf `docs/security/v14-migration-blocker.md` sind historische Notizen und dürfen nicht als Arbeitsauftrag ausgeführt werden.
 5. Klartext-Legacy-Secret-Migration in einen Keystore-basierten SecretStore: S08/S09.
 6. Die TOTP-Entscheidung ist in `docs/security/adr-002-totp-decision.md` abgeschlossen: TOTP ist kein kryptografischer Tresor-Faktor; die Laufzeitbereinigung ist in Commit `d509ebb` umgesetzt.
