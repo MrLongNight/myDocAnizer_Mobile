@@ -1,74 +1,65 @@
 # myDocAnizer-Mobile – Micro-AP-Arbeitsplan
 
-## Statusübersicht
+## Aktueller Code- und Teststand
 
-> **Status-/Testnachweis zuletzt geprüft:** `main` bei Commit `c0564c1ad3af5cdb8d996475b41db6906b518640`. Diese Dokumentationsänderung ist kein Nachweis dafür, dass die gesamte Codebasis oder alle 125 Micro-APs erneut getestet wurden.
+**Codebasis:** main; Anwendungscode zuletzt vollständig geprüft unter Commit c0564c1ad3af5cdb8d996475b41db6906b518640. Die späteren Commits 07ee48ce, c6a32f16 und e545bc3c änderten Dokumentation, nicht den Anwendungscode. Geprüft wurden die den Micro-APs zugehörigen Produktivdateien, native Buildquellen, Sync-/Speicherpfade, Testdateien und die CI-Konfiguration. Das ist eine statische Codeanalyse mit überprüften CI-Nachweisen – keine physische Geräte- oder echte Modellqualitätsprüfung.
 
-| Kennzahl | Aktueller Stand |
-|---|---|
-| Geplante Micro-APs | **125** |
-| Statusangaben historisch dokumentiert | **52** (noch nicht vollständig anhand des aktuellen Codes neu verifiziert) |
-| Statusabgleich offen | **73** |
-| Build-/Testnachweis aus früherem Commit | GitHub Actions Run `39633700992` auf `d509ebb`; erfolgreich gemeldet für `assembleDebug`, `testDebugUnitTest`, `connectedDebugAndroidTest`, APK-Metadatenprüfung und Artefakt-Upload. **Gilt nicht als Nachweis für den aktuellen Commit.** |
+| Prüfebene | Letzter verifizierter Stand | Aussage |
+|---|---|---|
+| **Build** | GitHub Actions Run [39944020065](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39944020065), Commit c0564c1: assembleDebug erfolgreich | Debug-APK wurde gebaut und als Artefakt hochgeladen; allein kein Funktionsnachweis. |
+| **JVM-Unit-Tests** | Derselbe Run: testDebugUnitTest erfolgreich | Nur vorhandene automatisierte JVM-Tests; Lücken ohne passenden Test bleiben bestehen. |
+| **Android-Instrumentierung** | Derselbe Run: connectedDebugAndroidTest erfolgreich | Emulator-/Android-Integrationstests bestanden; kein physischer Gerätetest. |
+| **Manueller App-/Gerätetest** | Kein vollständiger Nachweis für alle Produktpfade | Nur bei APs mit Profil M/P erforderlich; nicht pauschal für jedes AP. |
+| **Echte native GGUF-Inferenz** | Kein reproduzierbarer Geräte-/Modelllauf im CI-Nachweis | Native Quellintegration und erfolgreicher Build beweisen nicht, dass ein konkretes GGUF-Modell auf dem Zielgerät läuft. |
+| **Dokumentenqualität / Benchmark** | Kein aktueller Golden-Set-Bericht mit Modell-, Prompt- und Geräteangaben nachgewiesen | Keine Modellfreigabe oder Qualitätsquote ohne tatsächliche Messung. |
 
-### Einheitliche Statusbezeichnungen
+Die Workflow-Befehle lauten ./gradlew assembleDebug --stacktrace --no-daemon, ./gradlew testDebugUnitTest --stacktrace --no-daemon und ./gradlew connectedDebugAndroidTest --stacktrace --no-daemon. Der Instrumentierungslauf hängt davon ab, ob Emulator/KVM verfügbar sind. Run 39944020065 belegt den allgemeinen CI-Erfolg dieser Codebasis, nicht die Erfüllung sämtlicher AP-spezifischer Abnahmekriterien.
 
-Jedes AP erhält genau **einen Umsetzungsstatus** und getrennte Nachweise für die jeweils relevanten Testebenen. Ein Status darf nicht aus einer älteren Notiz oder allein aus vorhandenem Code abgeleitet werden.
+### Bestätigte aktuelle Codebefunde
+
+| Bereich | Aktueller Ist-Stand aus dem Quelltext | Konsequenz für die Micro-APs |
+|---|---|---|
+| **Native Engine / Build** | Native Dateien sind vorhanden: app/src/main/cpp/CMakeLists.txt, llama_android.cpp, llama_android_stub.cpp und das auf Commit 2da668617612d2df773f966e3b0ee22dc2beef7b gepinnte llama.cpp-Submodul. Gradle verwendet NDK 27.2.12479018, minSdk 24 und vier ABI-Filter. Echter llama.cpp-Code wird für arm64-v8a/x86_64 gebaut; 32-Bit-ABIs erhalten einen Stub/Fallback. Konfiguration ist CPU-only. | Der alte L01-Befund „keine C/C++-/CMake-/JNI-Implementierung vorhanden“ ist überholt. Die offene Arbeit ist Verifikation/Härtung, nicht die Engine ungeprüft neu einzubauen. |
+| **Native Inferenz** | llama_android.cpp enthält Modellladen, Chat-Template, Token-Generierung und native Zeit-/Tokenmetriken. Der Kontext ist fest auf 2048 gesetzt. Der Sampler fügt top-k/top-p/temperature vor dem Grammar-Sampler ein. Kotlin hält lastInferenceMode/lastInferenceMetrics als gemeinsam veränderlichen Zustand; eine native Cancel-Funktion, belastbares finish_reason und ein nativer Abbruch-Callback sind im aktuellen Pfad nicht vorhanden. Triage/Second-Run schalten Grammar teilweise ausdrücklich auf null. | L08A–L11A müssen vorhandenen Code verifizieren und tatsächliche Lücken schließen. L12 härtet verbleibende Abbruch-, Kontext-, Grammar- und Ergebnisverträge. Die Sampler-Reihenfolge wird erst nach Test gegen den gepinnten llama.cpp-Stand geändert. |
+| **Analyse und Scan** | LlmService.kt enthält weiterhin feste Confidence-Werte, buildModelReasoning, den Fallback-Absender „Deutsche Post“ und heuristische Wege in generateRulesFromPrompt/Dokumenten-Assistant. DocAnizerViewModel.kt nutzt im Scan-Bestätigungspfad matchingRules.singleOrNull() ?: buildFastRuleSuggestion(ocrText); der Hauptscan läuft damit nicht automatisch durch eine echte LLM-Analyse. | L13/L15 müssen eine gemeinsame Hybrid-Pipeline anbinden; Regel-/Heuristikresultate dürfen nicht als LLM ausgegeben werden. |
+| **Promptbestand** | Die konkreten Platzhalter keyword1 und dynamisches_feld_1 stehen nicht in LlmPrompts.kt; _reasoning steht dagegen in den Prompt-/Response-Definitionen der Engine. | Prompts gegen tatsächliche Schema- und Parserstellen ändern, nicht auf ältere Befundlisten vertrauen. |
+| **OCR/Audit** | OcrService.kt besitzt bereits OCR-Timeout und Audit-Aufrufe. AppAuditLogger hält höchstens 300 In-Memory-Einträge und rollt eine Logdatei ab 2 MiB in eine alte Datei. Gleichzeitig kann logOcr im DEVELOP-Modus Textproben ausgeben; OcrService übergibt die ersten 120 OCR-Zeichen und logAiInference protokolliert u. a. Absender/Typ/Reasoning. Eine durchgehende scanId über alle Schritte ist nicht nachgewiesen. | L14 soll das existierende Logging gezielt härten und ergänzen, nicht so tun, als existiere noch kein OCR-/Auditpfad. PII-Freiheit und End-to-End-Korrelation müssen mit gezielten Tests belegt werden. |
+| **Dokumentspeicher und Datenbank** | DocumentStorageService besitzt bereits verschlüsselte Speicherpfade, temporäre Dateien und Legacy-Overloads mit Passwort-/Schlüsselparametern; das beweist keine vollständige, einheitliche Tresor-Key-Integration aller Dateien. AppDatabase verwendet Room-Version 9 und exportSchema = false; vollständige SQLCipher-Öffnung ist im gecheckten Builder nicht implementiert. | D-/DB-APs müssen vorhandenen Bestand ergänzen; DB01–DB04 liefern die Baseline, bevor DB12/DB13 SQLCipher integrieren. |
+| **Secrets / Einstellungen** | SecretStore und VaultKeyProvider existieren. SettingsRepository verwendet aber weiterhin viele SharedPreferences-Werte. Die Secret-Migration wurde für einzelne Sync-Secrets ergänzt; nicht alle Verbraucher sind migriert. | S09 darf Legacy-Werte nicht endgültig löschen, bevor die Verbraucher aus D/P/C nachweislich umgestellt sind. D15 und R13 bleiben eigenständige Aufgaben. |
+| **P2P / Cloud** | P2P-Clients enthalten weiterhin http://-URLs; der Server verwendet einen eigenen TCP-/HTTP-Parser mit Socket-Timeout, kein flächendeckendes TLS. Header-Token-Härtung ist teilweise vorhanden, Replay-Cache/Rate-Limits sind nicht vollständig. WebDAV lehnt explizites HTTP ab und deaktiviert Redirects; TOFU-Fingerprintbindung ist nicht abgeschlossen. Google Drive nimmt ein Access-Token entgegen, ein vollständiger OAuth-Flow ist nicht belegt; der Sync-Einstieg ist kein CoroutineWorker. | P01–P13 und C01–C09 enthalten echte Restarbeiten/Teilimplementierungen. Klassen-/Client-Existenz gilt nicht als End-to-End-Sicherheitsnachweis. |
+| **Modellkatalog** | Der Katalog lebt im Code. LIFT 4B Structured PDF Extractor verweist aktuell auf dieselbe Phi-3.5-GGUF-Datei wie der Phi-Eintrag; ein verlässlicher Katalogvertrag mit überprüfter Dateiidentität, Größe, Hash, Lizenz und Qualitätsfreigabe ist nicht nachgewiesen. | L16 muss den aktuellen Katalog prüfen. Frühere Namensbeispiele, die nicht mehr vorkommen, dürfen nicht blind als aktuelle Befunde weitergeführt werden. |
+
+### Einheitliche Bearbeitungsstatus
+
+Jedes aktive AP erhält genau einen Status. NICHT BEARBEITET heißt, dass dieses AP noch nicht umgesetzt wurde. UMGESETZT – UNGETESTET heißt, dass die Umsetzung im Code vorhanden scheint, aber der benötigte AP-spezifische Nachweis noch nicht ausgeführt oder belegt ist. Teilumsetzungen erhalten IN BEARBEITUNG statt fälschlich als erledigt oder nur ungetestet zu gelten.
 
 | Status | Verbindliche Bedeutung |
 |---|---|
-| **NICHT GESTARTET** | Noch keine konkrete Bearbeitung nachgewiesen. |
-| **AUDIT OFFEN** | Ist-Code/Abhängigkeiten noch nicht ausreichend geprüft; keine Implementierungsbehauptung. |
-| **IN UMSETZUNG** | Änderungen laufen; noch kein übernehmbarer, vollständiger Patch. |
-| **PATCH BEREIT** | Vollständiger Diff erstellt, aber noch nicht als integriert/verifiziert bestätigt. |
-| **BLOCKIERT** | Konkreter technischer oder umgebungsbedingter Blocker mit Beleg und nächstem Schritt dokumentiert. |
-| **UMGESETZT – TESTS OFFEN** | Implementierung im betrachteten Commit vorhanden; passende Tests fehlen oder wurden nicht ausgeführt. |
-| **VERIFIZIERT** | Relevante statische/automatisierte Prüfungen bestanden; die tatsächlich ausgeführten Befehle und Ergebnisse sind dokumentiert. |
-| **ABGENOMMEN** | Alle für dieses AP als erforderlich begründeten Prüfungen bestanden und fachliche Abnahmekriterien nachgewiesen. |
-| **ADR FREIGEGEBEN** | Architekturentscheidung abgeschlossen; Implementierung ist dadurch ausdrücklich nicht automatisch erledigt. |
-| **AUDIT DOKUMENTIERT** | Nur lesender Befundbericht erstellt; kein Umsetzungsstatus. |
+| **NICHT BEARBEITET** | Das Arbeitspaket selbst wurde noch nicht umgesetzt; vorhandene allgemeine Infrastruktur zählt nicht als Umsetzung dieses APs. |
+| **IN BEARBEITUNG** | Ein Teil des Sollumfangs existiert, aber mindestens ein fachlicher oder technischer Teil fehlt. |
+| **PATCH BEREIT** | Vollständiger Patch/Diff liegt vor, ist aber noch nicht in den betrachteten Code integriert. |
+| **UMGESETZT – UNGETESTET** | Umsetzung ist im Code vorhanden; der geforderte AP-spezifische Nachweis wurde noch nicht ausgeführt oder belegt. |
+| **GETESTET – CI** | Zum genannten Code-Commit existiert ein erfolgreicher CI-Lauf mit Tests, die das AP tatsächlich abdecken. Allgemeiner Build-Erfolg allein genügt nicht. |
+| **GETESTET – APP/GERÄT** | Der konkrete App-Ablauf wurde auf dem dokumentierten Emulator/Gerät und Build ausgeführt; die Umgebung wird im Testbericht genannt. |
+| **ABGENOMMEN** | Alle für dieses AP begründeten Prüfungen bestanden; relevante reale App-/Geräte-/Qualitätsprüfungen sind ebenfalls belegt. |
+| **AUDIT DOKUMENTIERT** | Das AP ist ein lesender Audit und der Befundbericht ist erstellt; kein Implementierungsstatus. |
+| **ADR FREIGEGEBEN** | Architekturentscheidung ist beschlossen; das implementierende AP bleibt davon getrennt. |
+| **BLOCKIERT** | Ein konkreter technischer/umgebungsbedingter Blocker verhindert die Arbeit; Ursache und nächster Schritt sind angegeben. |
 
-Historische Statusformulierungen in den einzelnen APs sind im Zuge des Statusabgleichs auf diese Bezeichnungen umzustellen. Zusätzliche Erläuterungen gehören in ein separates Feld „Befund/Restarbeit“, nicht in neue Varianten des Statusnamens.
+### Testprofile: nur die für das jeweilige AP erforderlichen Ebenen
 
-### Getrennte Testebenen – niemals zusammenfassen
+| Kürzel | Ebene und exakter Ablauf |
+|---|---|
+| **B** | Build: ./gradlew assembleDebug --stacktrace --no-daemon. Bestätigt nur den Build der Debug-APK. |
+| **U** | JVM-Tests: ./gradlew testDebugUnitTest --stacktrace --no-daemon. Testklassen und Ergebnis müssen im Bericht benannt werden. |
+| **I** | Android-Instrumentierung: ./gradlew connectedDebugAndroidTest --stacktrace --no-daemon auf verfügbarem Emulator/Gerät. Nicht ausführbar ist nicht gleich bestanden. |
+| **M** | Manueller App-Test nur bei UI-/Lifecycle-/Import-/Exportverhalten, das nicht ausreichend automatisch abgedeckt ist. Nummerierte Schritte, Erwartung, Ergebnis, APK/Commit, Android-Version und Emulator-/Gerätemodell notieren. |
+| **P** | Physisches Gerät/Hardware zwingend, z. B. echte Biometrie, portabler Passkey/Authenticator oder hardwareabhängige Laufzeit. Ein Emulator ist kein Ersatz, sofern die Funktion dort nicht unterstützt wird. |
+| **G** | Echte native GGUF-Ausführung auf unterstützter ABI. Testmodell, SHA-256, Modellversion, ABI/Gerät und tatsächliches Ergebnis dokumentieren. Ein Build oder Fake-Engine-Test genügt nicht. |
+| **Q** | Qualitätsbenchmark auf versioniertem Golden Set; Modell-/Hash-/Promptversion, Kennzahlen und Gerät dokumentieren. |
+| **D** | Statischer Audit/Dokumentationsschritt ohne Produktcode-Änderung. Build/App-Test nur, wenn das AP ihn ausdrücklich erfordert. |
 
-| Ebene | Was sie nachweist | Was sie **nicht** nachweist |
-|---|---|---|
-| **Build** | Konkretes Build-Kommando erzeugt erfolgreich die angeforderte Variante. | Kein Nachweis, dass Tests laufen, die App startet oder ein Feature fachlich funktioniert. |
-| **Unit-Tests** | Benannte JVM-Tests liefen und bestanden. | Keine Android-Systemintegration, native ABI, echte Modellinferenz oder Geräte-UI. |
-| **Instrumentierungs-/Integrationstests** | Benannte Tests liefen in Emulator/Gerät und prüften Android-/JNI-/Datenbankintegration. | Kein physischer Geräte- oder Modellqualitätsnachweis, sofern dieser nicht ausdrücklich Teil des Laufs war. |
-| **Manueller App-/Gerätetest** | Ein konkreter Ablauf wurde auf einem benannten Gerät/Build mit beobachtetem Ergebnis ausgeführt. | Keine allgemeine Freigabe für andere Geräte, Modelle oder nicht getestete Pfade. |
-| **Qualitäts-/Leistungstest** | Gemessene fachliche Kennzahlen auf dokumentiertem Golden Set, Modell, Prompt und Gerät. | JSON-/Grammar-Gültigkeit allein beweist keine fachliche Richtigkeit. |
-
-Für **jedes AP individuell** ist vor dem Testen festzuhalten: (1) prüfbare Akzeptanzkriterien, (2) passender Testtyp, (3) exakter Befehl oder nummerierte manuelle Schritte, (4) erwartetes Ergebnis, (5) tatsächliches Ergebnis und (6) Umgebung/Commit. Wenn ein App-Test nicht möglich oder für eine reine Bibliotheksänderung nicht sinnvoll ist, muss das begründet werden; er darf weder pauschal verlangt noch als bestanden behauptet werden.
-
-Fehlende Einzelstatus sind eine Dokumentationslücke, kein Beweis dafür, dass ein Arbeitspaket nicht umgesetzt wurde. Ebenso sind vorhandene Implementierungen, Testklassen und alte CI-Erfolge allein kein aktueller Abnahmenachweis.
-
-### Aktueller Codeabgleich – LLM/Dokumentenverarbeitung (statische Prüfung)
-
-Geprüfte Dateien im aktuellen `main`-Stand:
-
-- `app/src/main/java/com/example/service/LlmService.kt`
-- `app/src/main/java/com/example/service/LlamaCppInferenceEngine.kt`
-- `app/src/main/java/com/example/service/llm/LlmPrompts.kt`
-- `app/src/main/java/com/example/ui/DocAnizerViewModel.kt`
-- `app/src/main/java/com/example/service/OcrService.kt`
-- `app/src/main/java/com/example/service/DocumentStorageService.kt`
-- `app/src/main/java/com/example/service/AppAuditLogger.kt`
-- `app/src/main/cpp/llama_android.cpp`
-- `docs/open_tasks.md` und `docs/coding-agent_documentation.md`
-
-**Bestätigte Befunde im Quelltext, noch keine Laufzeitmessungen:**
-
-1. `LlmService.kt` enthält weiterhin fest eingetragene Konfidenzwerte `0.94f`/`0.98f`, `buildModelReasoning`, den Fallback-Absender `Deutsche Post` und vier Aufrufstellen mit `grammar = null`. `generateRulesFromPrompt` hat einen eigenen regel-/keywordbasierten Ablauf. Die vorhandene Prüfung von `lastInferenceMode` in einem Benchmarkpfad beweist nicht, dass alle Klassifikationspfade den tatsächlichen Inferenzmodus korrekt ausweisen.
-2. `LlamaCppInferenceEngine.kt` verwendet den gemeinsam veränderlichen Zustand `lastInferenceMode` und `lastInferenceMetrics`. In dieser Datei wurden keine Treffer für `nativeCancelInference`, `finishReason`, `prompt_tokens` oder `withTimeout` gefunden. Das ist ein statischer Suchbefund, kein Beweis für das Fehlen jeder alternativen Abbruchmöglichkeit.
-3. `llama_android.cpp` baut die Sampler-Kette mit top-k/top-p/temperature vor dem Grammar-Sampler auf; eine native Funktion namens `nativeCancelInference` und `llama_set_abort_callback` wurden nicht gefunden. Die Sampler-Hypothese ist durch einen gezielten Test gegen den tatsächlich gepinnten llama.cpp-Stand zu verifizieren, nicht nur durch Umstellen der Reihenfolge.
-4. `DocAnizerViewModel.kt` verwendet im Scan-Bestätigungsablauf `matchingRules.singleOrNull() ?: buildFastRuleSuggestion(ocrText)`. Der Hauptpfad ist damit nicht automatisch eine echte LLM-Analyse. Andere Pfade rufen `classifyDocumentText` auf; diese Aufrufpfade müssen im AP separat zusammengeführt werden.
-5. `LlmPrompts.kt` enthält nicht die zuvor genannten konkreten Platzhalterstrings `keyword1`, `dynamisches_feld_1` oder `_reasoning`. Promptänderungen müssen vom tatsächlichen aktuellen Schema ausgehen und dürfen veraltete Behauptungen nicht blind reproduzieren.
-6. `OcrService.kt` enthält bereits einen OCR-Zeitlimit-/Auditpfad. Daher muss L14 vorhandene Ereignisse erweitern bzw. Lücken belegen, statt pauschal zu behaupten, OCR-Logging fehle vollständig.
-7. Die statische Prüfung von `AppAuditLogger.kt` zeigte keine offensichtliche Rotation über den Begriff `rotate`; tatsächliche Speichergrenzen, Export, Redaktion und PII-Sicherheit sind durch Lesen der vollständigen Implementierung und gezielte Tests zu prüfen, nicht aus einer Textsuche abzuleiten.
-
-**Konsequenz für die APs:** L12, L13, L14 und L15 bleiben fachlich begründet, müssen aber vor Umsetzung gegen diese konkreten Ist-Befunde und die aktuellen Signaturen aktualisiert werden. Die Prompts sind eine Soll-Spezifikation, kein Beleg dafür, dass der jeweilige Mangel schon behoben ist. Dieser Codeabgleich ist statisch; Build, Unit-Tests, Instrumentierung und physische App-/Modelltests wurden in diesem Audit nicht ausgeführt.
+Die Testprofile sind pro AP individuell festgelegt. Ein AP ohne M/P benötigt nicht automatisch einen manuellen App-Test. Ein Profil mit M/P/G/Q darf nicht auf „CI grün“ reduziert werden. Die nummerierten Testschritte und erwarteten Ergebnisse stehen im jeweiligen AP-Prompt. Nicht verfügbare Prüfungen werden als „nicht ausgeführt“ mit Grund dokumentiert, nie als bestanden.
 
 ## Verbindliche Produktvorgaben
 
@@ -95,33 +86,41 @@ Geprüfte Dateien im aktuellen `main`-Stand:
 
 Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Testlauf ausgeführt und der tatsächliche Status dokumentiert wurde.
 
-### Reihenfolge
+### Verbindliche Ausführungsreihenfolge
 
-1. **M00** – Projekt-/Buildbaseline und Befundinventar.
-2. **V01–V18** – Tresor, Schlüssel, optionale Zwei-Faktor-Absicherung und Wiederherstellung.
-3. **S01–S10** – Lockzustand und SecretStore. Legacy-Schlüsselzugriff bleibt kompatibel, bis alle Verbraucher einzeln migriert und geprüft sind.
-4. **D01–D15** – Datenfluss, Schlüsselarchitektur, Dokumentverschlüsselung, Backup/Restore und Verschlüsselung aller App-Einstellungen.
-5. **DB01–DB14** – vollständige SQLCipher-Datenbankverschlüsselung, Migrationen, FTS, Geldbeträge und Performance. Datenbankversionen strikt sequenziell erhöhen.
-6. **P01–P13** – sichere App2App-, PC2App- und Browser2App-Verbindungen; alle drei anhand einer gemeinsamen Sicherheitsmatrix prüfen.
-7. **C01–C09** – Google-Drive-/WebDAV-Sync. Backupcontainer und sensible Metadaten vor dem Upload clientseitig verschlüsseln; manueller/automatischer Sync ist eine Nutzeroption.
-8. **L01–L12** – zuerst native Inferenz und ihre Abbruch-/Mess-/Kontextgrenzen stabilisieren. L08B ist kein regulärer Pfad und darf nicht ohne technischen Befund und erneute ausdrückliche Produktfreigabe anstelle der nativen Engine ausgeführt werden.
-   Danach in dieser Reihenfolge: **L16 → L13 → L14 → L15 → L17**. Modellidentität, Datei-Integrität und Lizenzdaten werden vor dem fachlichen Qualitätsbenchmark bereinigt; L13 baut danach die kandidatenbasierte Analyse, L14 macht sie datensparsam nachvollziehbar, L15 bindet sie in alle UI-Aufrufpfade ein und L17 misst die resultierende Qualität. L16 bleibt von L13 unabhängig genug, um direkt nach L12 bearbeitet zu werden; L17 kommt zuletzt, weil es die vorangehenden Komponenten und den echten Modellkatalog benötigt.
-9. **R01–R24** – Refactoring nach Stabilisierung der Sicherheitsgrenzen, Persistenzformate und Integrationspfade.
+1. **M00** – aktuelle Baseline aus dem tatsächlich vorliegenden Code-/Build-/Teststand erstellen. Keine Produktänderungen in diesem AP.
+2. **V01–V06B** – V2-Tresor, DEK-Wrapper und der freigegebene Passwort+Keyfile-Faktor. Die TOTP-Entscheidung ist bereits freigegeben; TOTP darf nicht wieder als Tresor-Faktor eingeführt werden.
+3. **V09 → V07/V08 → V10/V11 → V12/V12B → V13/V14/V15 → V16/V17/V18** – zuerst Recovery-Architektur entscheiden, dann passende Mnemonic-/Share-Bausteine implementieren, danach Payload/QR, Notfalldokumente, Laufzeit-/Keystore- und Restore-Optionen.
+4. **S01–S08 und S10** – Lock-/Key-Leases, SecretStore und Intent-Policy. Legacy-Secrets noch nicht endgültig löschen.
+5. **D01 + DB01–DB04** – Datenfluss- und Room-v9-Baseline sowie tatsächliche Migrations-/Schema-Testinfrastruktur. Hier noch keine SQLCipher-Umstellung durchführen.
+6. **D02–D03** – SQLCipher-ADR und gemeinsame Schlüsselarchitektur anhand der nachgewiesenen Datenbank-/Migrationsbasis festlegen und vervollständigen.
+7. **D04–D15 sowie DB05–DB11** – Dokument-/Backup-/Restore-Pfade und dann einzelne FTS-/Query-/Schema-/Cent-Migrationen. Jede Room-Schemamigration bekommt einen eigenen sequenziellen Versionsschritt.
+8. **DB12–DB13**, danach **DB14** – SQLCipher erst nach Abschluss der Schemaänderungen und Schlüssel-/Storage-Tests integrieren; Datenmigration getrennt durchführen; Performance erst danach vergleichen.
+9. **P01–P13** – App2App, PC2App und Browser2App anhand derselben Transport-/Identitäts-/Pairing-Matrix absichern. Keine Klartext-HTTP-Pfade als Übergangslösung.
+10. **C01–C09** – Cloud-Sync baut auf validierten verschlüsselten Containern, SecretStore und belastbarer OAuth-/Transportlogik auf. Google Drive bleibt Produktziel; OAuth wird nicht durch manuell eingegebene Tokens ersetzt.
+11. **S09** – Legacy-Secrets endgültig migrieren/bereinigen, nachdem alle Verbraucher in D/P/C umgestellt sind. Werte erst nach verifiziertem verschlüsseltem Roundtrip entfernen.
+12. **L01 → L02 → L03–L07 → L08A → L09A → L10A → L11A → L12** – Native-Bestand/Produktionsplan bereinigen, Modellquelle/Download/Integrität prüfen und vorhandenen Native-Pfad gezielt verifizieren/härten.
+13. **L16 → L13 → L14 → L15 → L17** – Modellidentität/Lizenz/Integrität vor der Hybridanalyse prüfen; danach kandidatenbasierte Analyse, datensparsames Audit, UI-/Tool-Einbindung und zuletzt Qualitätsbenchmark.
+14. **R01–R24** – ViewModel-/DI-/Repository-/Logging- und Performance-Refactorings erst nach Stabilisierung der jeweiligen Produkt- und Sicherheitsgrenzen.
 
-### Technische Freigabe- und Stopp-Punkte
+Die AP-Beschreibungen bleiben fachlich gruppiert. **Für die chronologische Abarbeitung ist diese Liste maßgeblich.** Ein späteres AP wird nur vorgezogen, wenn es hier explizit als Voraussetzung genannt ist.
 
-- **V05/V06B – optionale Zwei-Faktor-Absicherung:** Das Ziel ist entschieden; offen ist nur die technische Machbarkeit eines echten kryptografischen zweiten Faktors. Eine sechsstellige TOTP-Prüfung darf nicht als Schutz gelten, wenn ein Offline-Angreifer dadurch den DEK durch Ausprobieren freischalten kann.
-- **V09/V16–V18 – Wiederherstellung:** Passwort- und Passkey-Pfade müssen auf unterstützten Geräten/Authenticators tatsächlich wiederherstellbar sein. Ein Passkey, der nur die Identität bestätigt, aber keinen geeigneten Schlüssel für die Entschlüsselung liefert, ist kein eigenständiger Verschlüsselungsschlüssel.
-- **D02/DB12–DB13 – Datenbank:** vollständige SQLCipher-Verschlüsselung ist festgelegt. Vor Migration müssen Room-Kompatibilität, Schlüsselbereitstellung, native ABIs, WAL/SHM, FTS, Backups und Rückkehrpfad technisch belegt sein.
-- **P01/P12 – Verbindungen:** kein Kanal gilt als sicher, nur weil TLS-Klassen oder Auditdokumente existieren. Die echten Produktpfade sind für App2App, PC2App und Browser2App mit Negativtests zu belegen.
-- **L01/L02 – lokale KI:** erst Bestandsaudit, dann nativen Engine-Pfad umsetzen. Bei einem konkreten Build-/Lizenz-/Geräteblocker Befund samt Alternativen vorlegen, statt kommentarlos auf Heuristiken zurückzufallen.
-- **C01/C04–C09 – Google Drive:** echte Autorisierung, minimale passende OAuth-Berechtigungen, verschlüsselte Nutzdaten und wählbarer manueller/automatischer Sync. Erfolg erst nach vollständiger Übertragung und Integritätsprüfung melden.
+### Verbindliche Gates und Abhängigkeiten
+
+- **V05 ist entschieden:** Passwort plus zufällige Schlüsseldatei ist der echte kryptografische Zweitfaktor. V06/V06A/V06B müssen konkrete Einrichtung, Unlock und Fehlerpfade nachweisen; keine erneute TOTP-Grundsatzprüfung.
+- **Recovery vor Recovery-Code:** V09 muss die erlaubten Restore-Pfade und Formatversion festlegen, bevor V07/V08/V10/V11 daraus ein inkompatibles Format machen.
+- **SQLCipher-Gate:** DB01–DB04 liefern Schema-/Migrationsbasis; D02/D03 liefern ADR/Key-Boundary. DB12/DB13 dürfen weder unverschlüsselte Fallbacks noch destruktive Datenverluste einführen.
+- **S09-Gate:** Legacy-Passwörter/Token erst entfernen, wenn die konkreten D/P/C-Verbraucher auf sichere Schnittstellen umgestellt und getestet sind.
+- **Transport-Gate:** P2P nutzt aktuell in Teilen http://; WebDAV erzwingt HTTPS, aber TOFU-Pinning ist nicht abgeschlossen. Sicherheitsclaims brauchen echte Client-/Server-Negativtests.
+- **LLM-Gate:** Native CMake/JNI-Dateien existieren und kompilieren in CI. Das beweist keine echte GGUF-Inferenz. L12 darf Grammar nicht blind aktivieren und muss den gepinnten llama.cpp-Sampler/Parser gezielt testen. L13 implementiert dynamische Grammatik aus tatsächlichen Kandidaten-IDs.
+- **Qualitäts-Gate:** L17 muss Golden-Set-, Modell-, Prompt- und Gerätewerte enthalten. Fake-Engine/JVM-Test, erfolgreicher Build und gültiges JSON sind kein Modellqualitätsnachweis.
+
 
 ---
 
 ## 2. Micro-APs
 
-# M00 – Baseline und Bestandsinventar (AUDIT, keine Produktänderung) — **[ERLEDIGT]**
+# M00 – Baseline und Bestandsinventar (AUDIT, keine Produktänderung)
 
 **Prompt:** Erfasse lesend die im Workspace vorhandene Dateibasis und führe – sofern in der Umgebung verfügbar – `./gradlew assembleDebug testDebugUnitTest` sowie vorhandene lokale Checks aus (andernfalls als nicht ausführbar kennzeichnen). Erstelle `docs/security/micro-ap-baseline.md` mit tatsächlichem Buildstatus, Grenzen der Umgebung, fehlenden/ungenutzten Tests, relevanten Modulen und offenen Befunden aus den ursprünglichen acht APs. Untersuche nur lesend und füge keine Produktlogik hinzu. Verifiziere insbesondere die aktuellen Implementierungen von VaultHeader/KDF/Recovery, `DocumentStorageService`, P2P-Server, CloudSync, Room-Version, LLM/JNI und Analytics. Markiere jeden Befund als bestätigt, widerlegt oder noch offen und nenne Pfad/Beleg. **Abnahme:** Auditdatei ist reproduzierbar und ehrlich; keine Anwendungslogik geändert. Fehlende Tool-Unterstützung oder Buildfehler werden dokumentiert, nicht kaschiert.
 
@@ -132,19 +131,19 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## V01 – V2-only Vault-Krypto-Inventar und Negativtests
 **Prompt:** Inventarisiere ausschließlich den V2-Header, die V2-Argon2id-/AEAD-Ableitung, Unlock-/Recovery-Pfade, Biometrie, Keyfile/2FA, TOTP, `activeDek` und alle Aufrufer. Keine V1-Fixtures, V1-Deserialisierung, V1-Rückfalllogik oder Migration. Lege synthetische V2-Tests für falsches Passwort, ungültige Header und manipulierte verschlüsselte DEK-Daten an. **Abnahme:** nur V2 wird gelesen und geschrieben; ungültige/alte Formate scheitern geschlossen.
 
-## V02 – Geprüfte Argon2id-Implementierung — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
+## V02 – Geprüfte Argon2id-Implementierung
 **Abhängigkeit:** V01.  
 **Prompt:** Verwende ausschließlich die versionsfixierte Argon2id-Implementierung im V2-Pfad. Für V2 gelten mindestens `m=19 MiB`, `t=2`, `p=1`; Einheiten und API-Semantik verifizieren. Begrenze/validiere Parameter vor der speicherintensiven Ableitung und schütze vor parallelen RAM-Spitzen. Füge bekannte Referenzvektoren und Negativtests hinzu. Entferne Alt-Ableitungspfade, die nur dem alten Header dienten. **Abnahme:** korrekte Referenzvektoren; ungültige/überzogene Parameter werden früh abgelehnt; kein V1-KDF-Pfad bleibt in der Tresorlogik.
 
-## V03 – VaultHeader v2: Datenmodell und Parser — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
+## V03 – VaultHeader v2: Datenmodell und Parser
 **Abhängigkeit:** V01, V02.  
 **Prompt:** V2 ist das einzige unterstützte persistierte Vault-Format. Der typisierte Header samt strengem Parser/Validator muss Formatversion, KDF-/Algorithmus-ID, Parameter, Salt, IV/Nonce- und Taglängen, Vault-ID sowie Recovery-/Biometrie-/Faktor-Metadaten validieren. Unbekannte Versionen, abgeschnittene Daten, unmögliche Längen und ungültige Parameter müssen abgewiesen werden. Der Parser darf keine V1-Daten lesen oder rückwärtskompatible Defaults dafür einsetzen. **Abnahme:** V2-Roundtrips und Negativtests; keine V1-Referenztests oder V1-Lesepfade.
 
-## V04 – Header-Authentifizierung und AAD — **[PATCH ERSTELLT – CI OFFEN]**
+## V04 – Header-Authentifizierung und AAD
 **Abhängigkeit:** V03.  
 **Prompt:** Implementiere ausschließlich die AEAD-Operationen zum Verpacken/Öffnen des zufälligen 256-Bit-DEK im v2-Header. Nutze geprüfte AES-GCM/JCA- oder gleichwertige AEAD-Primitiven korrekt; pro Verschlüsselung neuen zufälligen Nonce/IV generieren und niemals wiederverwenden. Lege fest und teste, welche Vault-ID-, Versions- und KDF-Metadaten als AAD gebunden werden. Falscher Schlüssel, falscher AAD oder veränderter Tag müssen fehlschlagen, ohne Teilresultat auszugeben. Keine automatische Migration. **Abnahme:** gültiger Roundtrip; Manipulations- und Nonceformattests; keine geheime Materialausgabe in Logs.
 
-## V05 – Optionale echte Zwei-Faktor-Absicherung (ARCHITEKTUR) — **[ADR FREIGEGEBEN]**
+## V05 – Optionale echte Zwei-Faktor-Absicherung (ARCHITEKTUR)
 **Status:** Abschließend entschieden in `docs/security/adr-002-totp-decision.md`. Keine erneute Grundsatzprüfung. Für echten Zwei-Faktor-Modus gilt ausschließlich Passwort + zufällige 256-Bit-Schlüsseldatei; der Passwort-only-Modus bleibt separat verfügbar. TOTP ist kein kryptografischer Tresor-Faktor und darf den DEK-Unlock nicht freigeben oder blockieren.
 ## V06 – Zweiten Faktor technisch absichern und testen
 **Abhängigkeit:** V05.  
@@ -155,18 +154,21 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## V06B – Optionalen zweiten Faktor an die echte DEK-Freigabe binden
 **Abhängigkeit:** V05, V06 und V06A.  
 **Prompt:** Binde den freigegebenen zweiten Faktor in den echten Vault-Unlock-/DEK-Freigabepfad ein. Ist die Funktion aktiviert, darf Passwort/erster Faktor allein den geschützten DEK nicht freigeben. Alle öffentlichen APIs, Hintergrunddienste und UI-Callbacks müssen denselben Gatekeeper verwenden. Der Recovery-Weg muss funktionieren, ohne heimlich den zweiten Faktor zu umgehen. **Abnahme:** End-to-End-Negativtests für fehlenden/falschen/abgelaufenen Faktor, korrekte Kombination, Lock/Unlock, Neustart und Recovery; die UI behauptet erst danach echte Zwei-Faktor-Absicherung.
-## V07 – BIP-39-Mnemonic-Validierung — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
-**Prompt:** Isoliere die BIP-39-Funktionalität und prüfe Wortliste (genau 2048 Wörter), Entropie, Checksumme und Mnemonic-Validierung anhand offizieller Referenzvektoren. Korrigiere ausschließlich Fehler in diesem Modul; wenn Eigenbau-Logik die Referenzvektoren nicht zuverlässig erfüllt, ersetze sie durch eine geprüfte, kompatible Bibliothek. Erzeuge nur synthetische Testdaten. **Nicht tun:** Shamir, PDF/QR oder Headerformat verändern. **Abnahme:** gültige/ungültige Mnemonics, Grenzfälle und offizielle Vektoren sind getestet.
-
-## V08 – Shamir-Share-Konsistenz — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
-**Prompt:** Prüfe den vorhandenen Shamir-2-aus-3-Code und seine Hashspeicherung. Stelle durch Tests sicher, dass die drei gehashten Shares exakt dieselben Bytefolgen sind, die später an den Nutzer ausgegeben werden, und dass jedes zulässige Paar den ursprünglichen synthetischen DEK reproduziert. Verwende offizielle oder klar bezeichnete Referenzvektoren. Ersetze den Eigenbau, falls er nicht belastbar gegen Referenzen besteht. **Nicht tun:** Recovery-PDF oder Verschlüsselungsformat in diesem Schritt ändern. **Abnahme:** jedes gültige Paar rekonstruiert exakt denselben Schlüssel; vertauschte, gekürzte und manipulierte Shares scheitern.
-
 ## V09 – Recovery-Format und Wiederherstellungsoptionen festlegen (ADR)
 **Prompt:** Definiere ein versioniertes Wiederherstellungskonzept für drei getrennte Wege: (1) Tresorpasswort **oder** Passkey; (2) optional zusätzlich konfigurierte Sicherheitsfragen für den Passwort-/Passkey-Pfad; (3) ein optionales, eigenständig nutzbares Notfalldokument mit eigenem hochentropischem Recovery-Geheimnis. Das Notfalldokument muss den Tresor ohne das ursprüngliche Passwort/Passkey wiederherstellen können; Sicherheitsfragen dürfen diesen unabhängigen Notfallweg nicht versehentlich blockieren. Erstelle klar erkennbare und unauffällige Druckvarianten. Definiere KDF, AEAD, AAD, Nonce, Salt, Version, Prüfsumme, Normalisierung, Fehlerbehandlung und Kompatibilität. Beurteile die Passkey-PRF-/Schlüsselverfügbarkeit bei Gerätewechseln; ein bloßer Passkey-Login ohne nutzbares Schlüsselmaterial reicht nicht. Sicherheitsfragen dürfen keine alleinige starke Verschlüsselung versprechen; geringe Entropie und Offline-Risiken müssen in UI und Tests berücksichtigt werden. Tarnung ist keine kryptografische Sicherheit. **Abnahme:** ADR deckt alle drei Wege, Wiederherstellung auf neuem Gerät, Verlustszenarien und Grenzen ab.
+
+## V07 – BIP-39-Mnemonic-Validierung
+**Abhängigkeit:** V09.
+**Prompt:** Isoliere die BIP-39-Funktionalität und prüfe Wortliste (genau 2048 Wörter), Entropie, Checksumme und Mnemonic-Validierung anhand offizieller Referenzvektoren. Korrigiere ausschließlich Fehler in diesem Modul; wenn Eigenbau-Logik die Referenzvektoren nicht zuverlässig erfüllt, ersetze sie durch eine geprüfte, kompatible Bibliothek. Erzeuge nur synthetische Testdaten. **Nicht tun:** Shamir, PDF/QR oder Headerformat verändern. **Abnahme:** gültige/ungültige Mnemonics, Grenzfälle und offizielle Vektoren sind getestet.
+
+## V08 – Shamir-Share-Konsistenz
+**Abhängigkeit:** V09; die Nutzung von Shamir muss zum freigegebenen Recovery-Format passen.
+**Prompt:** Prüfe den vorhandenen Shamir-2-aus-3-Code und seine Hashspeicherung. Stelle durch Tests sicher, dass die drei gehashten Shares exakt dieselben Bytefolgen sind, die später an den Nutzer ausgegeben werden, und dass jedes zulässige Paar den ursprünglichen synthetischen DEK reproduziert. Verwende offizielle oder klar bezeichnete Referenzvektoren. Ersetze den Eigenbau, falls er nicht belastbar gegen Referenzen besteht. **Nicht tun:** Recovery-PDF oder Verschlüsselungsformat in diesem Schritt ändern. **Abnahme:** jedes gültige Paar rekonstruiert exakt denselben Schlüssel; vertauschte, gekürzte und manipulierte Shares scheitern.
+
 ## V10 – Versionierten Recovery-Payload-Kern umsetzen
 **Abhängigkeit:** V09.  
 **Prompt:** Implementiere Encode/Decode für das freigegebene Recovery-Payload als isolierte Komponente. Erzeuge ein zufälliges, ausreichend hochentropisches Recovery-Geheimnis, das einen verpackten Tresorschlüssel freigeben kann; exportiere niemals den rohen DEK. Nutze etablierte KDF-/AEAD-Bibliotheken, versionsgebundene AAD, sichere Nonces, Salt, Längenlimits und Integritätsprüfung. Unterstütze zuerst den passwortbasierten Payload-Pfad; Passkey-PRF und Sicherheitsfragen werden separat in V16/V17 integriert. Falsches Geheimnis, manipulierte Bytes, ungültiger Tag, unbekannte Version oder abgeschnittener Payload müssen sicher scheitern. **Abnahme:** bytegenaue Roundtrips, Negativtests und keine Secrets in Meldungen/Logs.
-## V11 – Standardkonforme QR-Kodierung — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
+## V11 – Standardkonforme QR-Kodierung
 **Abhängigkeit:** V10.  
 **Prompt:** Ersetze ausschließlich die derzeitige QR-Matrix-Erzeugung durch eine etablierte QR-Encoding-Bibliothek. Kodiert wird nur das freigegebene verschlüsselte Recovery-Payload, nie der Roh-DEK oder ein unverschlüsselter Schlüssel. Teste, dass ein unabhängiger QR-Decoder das Payload bytegenau zurückliest und beschädigte/zu große Inhalte kontrolliert behandelt werden. **Abnahme:** unabhängiger Decode-Roundtrip im Test; kein selbst gebautes Hash-Bit-Muster als QR-Code.
 
@@ -198,40 +200,40 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 **Prompt:** Baue die Einstellungs- und Restore-Oberfläche für die gewählten Optionen: Tresorpasswort oder Passkey; optionale Sicherheitsfragen als Zusatz für diesen Pfad; optionales, eigenständig nutzbares Notfalldokument in klarer oder unauffälliger Gestaltung. Zeige Voraussetzungen, unterstützte Geräte, Folgen bei Verlust und verlange einen erfolgreichen Test-Restore, bevor die Konfiguration aktiv gilt. Erkläre in einfacher Sprache, dass das gedruckte Notfalldokument selbst ein hochsensibles Wiederherstellungsgeheimnis enthält und die unauffällige Gestaltung keine Verschlüsselung ersetzt. Keine Option darf einen unsicheren Bypass oder falsche Erfolgsmeldung ermöglichen. **Abnahme:** UI-/Robolectric-Tests für Auswahlkombinationen, Geräte ohne Passkey-Unterstützung, Abbruch, Fehlkonfiguration und Restore.
 # S – LockManager, sichere Sitzung und SecretStore
 
-## S01 – Lock- und Secret-Inventar (AUDIT) — **[ERLEDIGT – AUDIT DOKUMENTIERT]**
+## S01 – Lock- und Secret-Inventar (AUDIT)
 **Prompt:** Inventarisiere alle App-/Vault-Lock-Flags, `unlockApp`, `unlockVault`, `lockVault`, automatische Sperrung, Biometrie, `activeDek`-Zugriffe und geheime Werte in Prefs/DB/Dateien. Zeichne den bestehenden Zustandsfluss mit Aufrufstellen auf und schlage eine eindeutige Trennung bzw. Beziehung zwischen App-Lock und Vault-Lock vor. Noch keine produktive Änderung. **Abnahme:** Datei `docs/security/lock-secret-inventory.md`; jeder gefundene Geheimnisspeicher und jeder Unlock-Pfad ist referenziert.
 
-## S02 – LockManager als Zustandsautomat — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
+## S02 – LockManager als Zustandsautomat
 **Abhängigkeit:** S01.  
 **Prompt:** Implementiere einen testbaren `LockManager` mit typisiertem, zentralem Zustand und ausdrücklich erlaubten Übergängen. Beginne beim Prozessstart fail-closed, wenn ein Vault eingerichtet ist. Activity/ViewModel dürfen keine konkurrierenden Wahrheits-Flags mehr für denselben Vault-Lock erzeugen; halte vorhandene APIs über Adapter kompatibel. Noch keine automatische Hintergrundsperre und keine SecretStore-Migration. **Abnahme:** reine Unit-Tests der Zustandsübergänge; kein unkoordinierter zweiter Manager.
 
-## S03 – Auto-Lock-Lifecycle — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
+## S03 – Auto-Lock-Lifecycle
 **Abhängigkeit:** S02.  
 **Prompt:** Verbinde den LockManager mit `ProcessLifecycleOwner` und der vorhandenen Auto-Lock-Einstellung. Messe Zeit mit `SystemClock.elapsedRealtime`; definiere und teste `0` als sofortige Sperre entsprechend der Produktsemantik. Bei Rückkehr aus dem Hintergrund muss vor Anzeige sensibler Inhalte der aktuelle Lockzustand abgefragt werden. Keine Speicherung von DEK oder Passphrase, um die Rückkehr zu beschleunigen. **Abnahme:** Tests für ON_STOP/ON_START, Timeoutgrenze und Prozessneustart; keine UI-Freigabe vor Lockprüfung.
 
-## S04 – Unlock-Bypässe entfernen — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
+## S04 – Unlock-Bypässe entfernen
 **Abhängigkeit:** S02 und V13.  
 **Prompt:** Verfolge `AppLockScreen`, `unlockApp()` und alle Aufrufer. Entferne Pfade, die ohne erfolgreiches, überprüfbares Authentifizierungsresultat entsperren – insbesondere Null-Activity-/Boolean-Default-/UI-only-Pfade. Erfolg muss aus dem tatsächlich erfolgreichen Passwort-/Vault- oder `BiometricPrompt.CryptoObject`-Vorgang kommen. Ändere nur Authentifizierungsübergänge und ergänze Negativtests. **Abnahme:** kein erfolgreicher Unlock bei abgebrochener, fehlgeschlagener oder fehlender Authentifizierung.
 
-## S05 – DEK-Leases an Lockstatus binden — **[IMPLEMENTIERUNG ERLEDIGT – TESTLAUF OFFEN]**
+## S05 – DEK-Leases an Lockstatus binden
 **Abhängigkeit:** V04 und S02.  
 **Prompt:** Ersetze unkontrollierte öffentliche DEK-Getter schrittweise durch eine begrenzte `withUnlockedKey`-/Key-Lease-Schnittstelle oder ein gleichwertig überprüftes Modell. Schlüsselmaterial darf nur während gültigem Unlock-Zustand genutzt werden; mutable Kopien soweit technisch möglich nach Gebrauch bereinigen. Synchronisiere zusammengesetzte Operationen mit `Mutex`/gleichwertiger Koordination. Definiere, was bei Lock während einer Dateioperation geschieht. Migriere nur die Aufrufstellen, die für den Build dieses Schritts nötig sind, und liste verbleibende Verbraucher auf. **Abnahme:** Tests, dass gesperrter Vault keine Entschlüsselung erlaubt und paralleler Lock/Unlock keinen alten Schlüsselzugriff hinterlässt.
 
-## S06 – Fehlversuche und Backoff — **[IMPLEMENTIERUNG ERGÄNZT – TESTLAUF OFFEN]**
+## S06 – Fehlversuche und Backoff
 **Abhängigkeit:** S02.  
 **Prompt:** Implementiere nur die gemeinsame Backoff-Logik für Passwort-/TOTP-/Recovery-Fehlversuche, wobei vorhandene Authentifizierungswege nicht umgangen werden dürfen. Schreibe persistent und atomar die notwendigen Zähler/Deadline-Informationen; nutze monotone Zeit während einer Sitzung und definiere konservatives Verhalten nach Prozess-/Geräteneustart. Teste die festgelegte Folge: nach fünf Fehlversuchen 30 Sekunden, danach 1, 5 und 15 Minuten. **Abnahme:** Grenzwerte, parallele Fehlversuche, Neustart und Restzeit getestet; Dokumentation, dass lokaler Backoff Defense-in-Depth ist.
 
-## S07 – FLAG_SECURE und sensitive Screens — **[IMPLEMENTIERUNG VORHANDEN – GERÄTETEST OFFEN]**
+## S07 – FLAG_SECURE und sensitive Screens
 **Prompt:** Setze `FLAG_SECURE` rechtzeitig vor dem Rendern sensibler Inhalte und steuere Debug-Ausnahmen ausschließlich über ein explizites Build-Flag bzw. `BuildConfig.DEBUG`, nicht über Emulatorerkennung. Sorge dafür, dass Recents/Screenshots und offene Detailansichten nach Sperrung keine sensiblen Inhalte mehr zeigen. Keine Navigation oder Sicherheitsarchitektur nebenbei refactoren. **Abnahme:** dokumentierter manueller Testplan für Screenshot, Recents, App-Hintergrund, Activity-Neustart und Lock auf einer offenen Detailseite.
 
-## S08 – SecretStore-Grundkomponente — **[CI-TESTS BESTANDEN – PHYSISCHER GERÄTETEST OFFEN]**
+## S08 – SecretStore-Grundkomponente
 **Prompt:** Baue einen testbaren `SecretStore` für langlebige Geheimnisse. Verwende AES-GCM mit einem nicht exportierbaren Android-Keystore-Key, eindeutiger Nonce, Formatversion und Integritätsprüfung. Dokumentiere die Authentifizierungsbindung des Keys und API-Level-Fallbacks. Ungültiger Tag oder Keystore-Fehler darf niemals Klartextfallback auslösen. In diesem Schritt nur API und Kernkomponente samt synthetischen Tests erstellen; bestehende Prefs noch nicht migrieren. **Abnahme:** Roundtrip, falscher Tag, fehlender/invalidierter Key und Fehlerpfade getestet.
 
-## S09 – Legacy-Secrets verlustfrei migrieren — **[IN ARBEIT – sync_master_password und WebDAV-Passwort verschlüsselt; CI erfolgreich]**
+## S09 – Legacy-Secrets verlustfrei migrieren
 **Abhängigkeit:** S08.  
 **Prompt:** Migriere alle in S01 konkret aufgelisteten und durch den Code-Audit gefundenen Klartext-Secrets in den SecretStore. Der Audit hat zusätzlich `cloud_sync_webdav_pass` als Klartextpräferenz identifiziert. Pro Wert: erkennen, verschlüsselt schreiben, entschlüsselten Roundtrip verifizieren und erst danach Original entfernen. Migration muss idempotent sein und bei Fehler den ursprünglichen Wert erhalten, ohne unkontrollierte doppelte Klartextkopien zu hinterlassen. `sync_master_password` erst entfernen, wenn die in D/P/C betroffenen Verbraucher nachweislich umgestellt sind; sonst nur dokumentierte Zwischenstufe mit klarer Restabhängigkeit. **Abnahme:** erster Start, zweiter Start, Prozessabbruch und Keyfehler getestet. Instrumentationstests müssen insbesondere idempotente Wiederinitialisierung und den Erhalt des Legacy-Werts bei fehlgeschlagener SecretStore-Schreiboperation nachweisen.
 
-## S10 – Externe Navigationsextras validieren — **[IMPLEMENTIERT – BUILD/UNIT-TESTS VOM NUTZER BESTÄTIGT]**
+## S10 – Externe Navigationsextras validieren
 **Prompt:** Prüfe die exportierte `MainActivity` sowie Widget-/Intent-Aufrufstellen. Validiere `EXTRA_START_TAB`, `EXTRA_OPEN_ACTION`, URIs und weitere externe Extras gegen feste Whitelists. Während der Vault gesperrt ist, dürfen externe Aktionen höchstens sicher zwischengespeichert und erst nach erfolgreichem Unlock verarbeitet werden. Ungültige Extras ignorieren und nicht später wiederverwenden. **Abnahme:** Tests für gültige, unbekannte, fehlerhafte und während Lock eintreffende Extras; kein Lock-Bypass.
 
 **Umsetzung direkt auf `main`:** `ExternalIntentPolicy.consume()` liest nur unterstützte Navigationswerte aus, verwirft unbekannte Extras und entfernt anschließend alle Extras, `data` und `clipData` aus dem Intent. `MainActivity` konsumiert den Payload **vor** der Lock-/Unlock-Prüfung; bei gesperrtem Zustand bleibt daher kein externer Befehl zur späteren Wiederholung an der Activity hängen. Ein Deep-Link-/URI-Schema wird derzeit nicht unterstützt und wird verworfen. `ExternalIntentPolicyInstrumentedTest` deckt gültige Werte, unbekannte Extras, ungültige Werte, falsch typisierte Boolean-Extras und das Entfernen von URI-/ClipData ab. Der Nutzer bestätigt erfolgreichen Build, `:app:testDebugUnitTest` und App-Start im Streaming-Emulator. Ein separater `connectedDebugAndroidTest`-Lauf sowie ein gezielter Widget-Cold-Start-/Lock-Replay-Test wurden in der Rückmeldung nicht ausdrücklich benannt und bleiben als spezifische Abnahme offen.
@@ -244,7 +246,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## D02 – Vollständige Datenbankverschlüsselung (SQLCipher) technisch festlegen
 **Produktentscheidung:** vollständige Datenbankverschlüsselung ist gewählt.  
 **Prompt:** Prüfe den tatsächlichen AppDatabase-/Room-2.7-Aufbau, Öffnungspfade, FTS, WAL/SHM, Export/Restore und Versionskatalog. Prüfe aktuelle SQLCipher-for-Android-Integration auf Room-Kompatibilität, minSdk 24, native ABIs, 16-KB-Kompatibilität, Wartung und Lizenz. Erstelle eine technische ADR mit konkreter Bibliotheksversion, Schlüsselbereitstellung, FTS-/WAL-Verhalten, Migration, Tests und Rollback. Feldverschlüsselung ist nicht der gewählte Ersatz. **Abnahme:** nachweislich kompatibler Weg für vollständig verschlüsselte Room-Datenbank; kein Rückfall auf unverschlüsseltes SQLite.
-## D03 – Gemeinsame Schlüsselarchitektur für DB, Dokumente, Settings und Backups — **[TEILIMPLEMENTIERT – TESTLAUF OFFEN]**
+## D03 – Gemeinsame Schlüsselarchitektur für DB, Dokumente, Settings und Backups
 **Abhängigkeit:** V04 und D02.  
 **Bisher umgesetzt:** `CryptoKeyDerivation` stellt HKDF-SHA-256 und zweckgebundene Ableitungskontexte für Datenbank, Dokument-Streams, Einstellungen und Backupcontainer bereit. RFC-5869-Referenztest sowie Tests auf Vault-/Purpose-Isolation und ungültige Eingaben wurden ergänzt.  
 **Zusätzlich umgesetzt (Testlauf offen):** `VaultKeyProvider` leitet einen zweckgebundenen Schlüssel ausschließlich innerhalb eines `VaultSecurityManager.withUnlockedKey`-Leases ab und überschreibt den abgeleiteten Schlüssel auch bei Callback-Fehlern. Isolierte Tests decken Purpose-/Vault-Isolation, gesperrten Tresor und Zeroing ab. Noch keine Verbraucher umgestellt.  
@@ -271,7 +273,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## D10 – Vollständig verschlüsselter Backupcontainer für alle Nutzdaten
 **Abhängigkeit:** D03/D04 und SQLCipher-Aufbau aus DB12.  
 **Prompt:** Implementiere versionierten streamenden AEAD-Backupcontainer mit verschlüsselter Datenbank, allen wiederherzustellenden App-Einstellungen, Dokumenten, OCR-/Suchdaten und nötigen nicht gerätegebundenen Recovery-Metadaten. Manifest, Dateinamen und sensible Metadaten innerhalb des Containers verschlüsseln. Keine Klartext-ZIP-/JSON-/Indexzwischenablage. Android-Keystore- und Google-OAuth-Zugangsdaten bleiben gerätegebunden bzw. werden beim Restore neu autorisiert; nicht in den Backupcontainer aufnehmen. **Abnahme:** kompletter Restore in frischer Installation, große Dateien ohne OOM, Integritätsfehler, falscher Schlüssel, abgeschnittener Container und unbekannte Version.
-## D11 – Restore: Archive und Pfade validieren — **[PATCH ERSTELLT – CI OFFEN; INDEX-PREFLIGHT UND IMPORTLIMIT ERGÄNZT]**
+## D11 – Restore: Archive und Pfade validieren
 **Abhängigkeit:** D10.  
 **Prompt:** Implementiere ausschließlich die Vorabvalidierung beim Restore. Normalisiere Pfade und erzwinge, dass jeder Eintrag kanonisch im Zielverzeichnis verbleibt. Lehne absolute Pfade, `..`, Separatorvarianten, kodierte Traversalversuche, doppelte IDs, übergroße Einträge, zu viele Einträge und unzulässige Kompressionsverhältnisse ab. Daten nicht vor Abschluss der Validierung in die produktive Datenbank übernehmen. **Abnahme:** Zip-Slip-/Zip-Bomb-/Traversal- und Größenbegrenzungstests.
 
@@ -279,7 +281,7 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 **Abhängigkeit:** D11.  
 **Prompt:** Sorge dafür, dass Restorevalidierung und Schreiben transaktional bzw. über einen Staging-Bereich erfolgen. Ein beschädigter AEAD-Tag, fehlendes Manifest oder fehlerhafte Metadaten darf keinen Teilimport in der Produktivdatenbank hinterlassen. Vermeide blindes `REPLACE`; definiere Konfliktregeln über neue IDs/Merge. UI erhält `wiederhergestellt / übersprungen / fehlgeschlagen` plus nicht sensitive Ursachen. **Abnahme:** erzwungene Fehler in jeder Phase hinterlassen keinen inkonsistenten Zwischenstand.
 
-## D13 – Unverschlüsselte Mirrors entfernen und Backupregeln prüfen — **[IMPLEMENTIERUNG ERGÄNZT – TESTLAUF OFFEN]**
+## D13 – Unverschlüsselte Mirrors entfernen und Backupregeln prüfen
 **Abhängigkeit:** D05–D12.  
 **Prompt:** Suche und entferne produktive Klartext-Mirrors, Fallbacks, Cachekopien und Backup-Pfade, die Verschlüsselung umgehen. Prüfe backup_rules, data_extraction_rules, Manifest, Auto Backup und Device Transfer. Nur ausdrücklich vom Nutzer exportierte Dateien dürfen als Klartext außerhalb des Tresors landen. **Abnahme:** Code-/Dateisuche und Backup-/Restore-Regressionstests weisen keine unbeabsichtigte dauerhafte Klartextkopie nach.
 ## D14 – PDF-Textlayer und OCR-Ausgaben vollständig prüfen
@@ -340,17 +342,20 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## L01 – Laufzeit- und APK-Inventur (AUDIT)
 **Prompt:** Prüfe aktuell `LlamaCppInferenceEngine`, `LlmService`, JNI-Aufrufe, `System.loadLibrary`, CMake/NDK, `jniLibs`, Gradle-Artefakte, Modellkatalog, Downloads und tatsächlichen APK-Inhalt. Dokumentiere, was wirklich kompiliert und ladbar ist, und unterscheide echte Inferenz von regelbasierten Heuristiken. Noch keine Native-Bibliotheken hinzufügen und keine Funktion entfernen. **Abnahme:** reproduzierbares Inventar mit bestätigten Dateien/ABIs und offenen Punkten.
 
-**Status (21.10.2026): AUDIT IM REPOSITORY ABGESCHLOSSEN – APK/Device noch offen.**
-- `app/build.gradle.kts`: `minSdk = 24`; keine `externalNativeBuild`-/CMake-Konfiguration und keine ABI-Filter.
-- Vollständiger getrackter Dateibaum: keine C/C++-JNI-Implementierung, `CMakeLists.txt`, `jniLibs/` oder `.so`-Datei; `gradle/libs.versions.toml` enthält keine llama.cpp-/NDK-Abhängigkeit.
-- `LlamaCppInferenceEngine` ruft `System.loadLibrary("llama_android")` auf und deklariert `nativeExecuteLlamaWithGrammar`, deren native Implementierung im Repository nicht vorhanden ist. Fehlende Bibliothek bzw. Inferenzfehler führen in Kotlin-Heuristiken; diese ignorieren den Modellprompt teilweise und sind keine LLM-Inferenz.
-- `LlmService.generateRulesFromPrompt()` nutzt feste Themenzweige statt Modellinferenz; `queryDocumentAssistant()` ruft regelbasierte `LlmToolExecutor`-Logik direkt auf. Weitere LLM-Aufrufpfade können ebenfalls in den Engine-Fallback wechseln.
-- Noch nicht geprüft: Inhalt der tatsächlich gebauten APK/AAB, transitive native Artefakte und Laufzeit auf Gerät.
-- Quellen für L02: offizielles [llama.cpp Android-Beispiel](https://github.com/ggml-org/llama.cpp/tree/master/examples/llama.android) und [Build-Dokumentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md). Das Beispiel darf nicht unverändert übernommen werden: dessen aktueller Gradle-Stand hat andere SDK-Anforderungen als dieses Projekt (`minSdk 24`).
+**Aktueller Codeabgleich (23.10.2026): AUDIT DOKUMENTIERT.**
+- Native Quell- und Buildintegration ist vorhanden: app/src/main/cpp/CMakeLists.txt, llama_android.cpp, llama_android_stub.cpp, Gradle externalNativeBuild, NDK 27.2.12479018, minSdk 24, ABI-Filter für armeabi-v7a/arm64-v8a/x86/x86_64 und auf Commit 2da668617612d2df773f966e3b0ee22dc2beef7b gepinntes llama.cpp-Submodul.
+- CMake baut echte JNI-Engine-Bibliotheken für arm64-v8a/x86_64 und einen Stub für 32-Bit-ABIs. CPU-only; Vulkan/GPU ist nicht aktiviert. 16-KB-Linkeroptionen sind vorhanden; tatsächliche ELF-/APK-Ausrichtung und Verhalten auf jedem Zielgerät sind gesondert nachzuweisen.
+- LlamaCppInferenceEngine.kt lädt llama_android und ruft nativeExecuteLlamaWithGrammar auf; die zugehörige JNI-Implementierung existiert in llama_android.cpp. Echte Token-Generierung und native Laufzeit-/Tokenmetriken sind im Quelltext vorhanden.
+- Der letzte vollständig erfolgreiche Workflow für diese unveränderte Codebasis ist Run 39944020065 auf Commit c0564c1: Build, JVM-Tests und Android-Instrumentierung erfolgreich. Kein Nachweis eines realen GGUF-Modelllaufs oder eines physischen Gerätetests.
+- Weiterhin fehlend bzw. zu verifizieren sind native Cancel-Funktion/Abort-Callback, finish_reason, belastbarer Ergebnisvertrag statt gemeinsamem lastInferenceMode/lastInferenceMetrics, wirksames Grammar-Schema in den tatsächlichen Klassifikationspfaden und Kontextbudget auf Basis des echten Tokenizers.
+- LlmService nutzt in der Hauptscan-Bestätigung teilweise buildFastRuleSuggestion statt zwingend das LLM; Fallback-/Vorlagenpfade für Regelgenerator und Dokumenten-Assistant existieren. Diese Resultate müssen ehrlich von nativer Inferenz unterschieden werden.
+- Die Aufnahme-/OCR-Telemetrie ist nicht vollständig datensparsam: OcrService übergibt bis zu 120 OCR-Zeichen an AppAuditLogger.logOcr; im DEVELOP-Modus wird eine Textprobe persistiert. logAiInference protokolliert u. a. Absender, Dokumenttyp und Reasoning. Die existierende Größenbegrenzung/Rotation beseitigt diese PII-Risiken nicht.
+- Kein reproduzierbarer Geräte-/GGUF-Qualitätsbericht liegt vor. Die frühere Behauptung, Native-/JNI-Implementierung fehle, ist durch den aktuellen Repositoryzustand widerlegt.
 
-## L02 – Native lokale KI-Integration verbindlich vorbereiten
-**Produktentscheidung:** echte native Modellinferenz lokal auf dem Gerät.  
-**Prompt:** Verwende das L01-Audit, um den nativen Integrationspfad für llama.cpp zu bestimmen: fest versionierter Upstream, passende NDK/CMake-Version, unterstützte ABIs, Modellformat/Lizenz, RAM-/Kontextgrenzen, APK-Größe und 16-KB-Alignment. Erstelle den Implementierungsplan für L08A–L11A. Die Wahl echter nativer Inferenz ist getroffen; nicht auf einen weiteren Nutzerentscheid warten und regelbasierte Heuristiken nicht als Ersatz-KI deklarieren. Bei belegtem technischen Blocker Befund und Alternativen vorlegen, bevor ein Rückbau erwogen wird. **Abnahme:** reproduzierbarer Native-Integrationsplan und klarer Build-/Geräteumfang.
+## L02 – Native-Produktionsplan mit dem tatsächlichen Bestand abgleichen
+**Abhängigkeit:** L01.  
+**Prompt:** Aktualisiere docs/LLM_NATIVE_PRODUCTION_PLAN.md anhand der aktuellen Native-/JNI-/Gradle-Dateien und des neuesten verifizierten CI-Laufs. Entferne veraltete Aussagen, wonach CMake, llama.cpp, JNI oder die native Implementierung fehlten. Trenne exakt: (a) Quell-/Buildintegration vorhanden, (b) durch CI kompiliert, (c) auf ABI installiert, (d) echtes GGUF geladen und Inferenzen erzeugt, (e) Qualität auf realem Gerät gemessen. Vergib für jede Ebene getrennte Nachweise. Verknüpfe verbleibende Punkte mit L08A–L12, ohne deren Arbeit doppelt zu formulieren. **Abnahme:** Der Produktionsplan stimmt mit tatsächlichen Dateien und Tests überein; kein fehlender Datei- oder Gerätetest wird als bestanden gemeldet.
+
 ## L03 – Modellkatalog und Quellenbelege
 **Prompt:** Konsolidiere nur den Modellkatalog. Jeder Eintrag muss belastbare Quelle, exakte Dateigröße, SHA-256, Version, Lizenz, unterstützte Architektur und Dateiformat enthalten. Erfinde fehlende Werte nicht; unvollständige Einträge dürfen nicht aktiviert/heruntergeladen werden. Konsolidiere Duplikate ohne Modell-IDs/URLs unbemerkt zu verändern. **Abnahme:** Tests für Duplikate, fehlende Lizenz, fehlenden Hash und ungültige Größen.
 
@@ -369,22 +374,23 @@ Ein Micro-AP ist erst abgeschlossen, wenn der Patch übernommen, der passende Te
 ## L07 – Ehrliche Laufzeitmodi und Datenschutz
 **Prompt:** Stelle sicher, dass UI, APIs, Logs und Telemetrie klar zwischen `Regelbasiert` und `Lokales Modell` unterscheiden. Keine Konfidenz wie `0.98`, Token-/Durchsatzmetriken oder „verifiziert“-Meldungen ohne echte Messung/Prüfung. Tokens/s nur aus real gezählten Tokens und gemessener Zeit. Keine Dokument-/OCR-Inhalte an entfernte Provider oder Telemetrie senden, ohne separat gekennzeichnete und ausdrückliche Nutzerfreigabe. **Abnahme:** Tests prüfen sichtbaren Modus, Heuristik-Fallback und fehlende/gescheiterte Engine; keine irreführende Inferenzbehauptung.
 
-## L08A – Native Build reproduzierbar einbinden
+## L08A – Vorhandene Native-Buildintegration reproduzierbar verifizieren
 **Abhängigkeit:** L01/L02.  
-**Prompt:** Binde ein geprüftes, fest versioniertes llama.cpp-Commit/Submodul mit dokumentierten Lizenzen, CMake/NDK-Konfiguration und reproduzierbarem Build ein. Keine undokumentierten vorgefertigten .so-Dateien. Beginne mit den nötigen ABIs und prüfe minSdk 24 sowie aktuelle Packaging-/16-KB-Anforderungen. Dokumentiere Upstream-Commit, Lizenznotices, Buildbefehle und Artefakte. **Abnahme:** reproduzierbarer Gradle-/Native-Build und belegte Paketierung; noch keine Behauptung funktionierender Inferenz.
+**Prompt:** Der native Build ist im aktuellen Code bereits vorhanden: gepinntes llama.cpp-Submodul, CMakeLists.txt, llama_android.cpp, 32-Bit-Stub, Gradle-NDK-Konfiguration und vier ABI-Filter. Füge diese Dateien nicht nochmals hinzu. Prüfe das exakte Upstream-Commit, Lizenzdateien, den reproduzierbaren CI-Build, gelinkte Bibliotheken pro ABI, transitive Artefakte und aktuelle 16-KB-Packaging-/ELF-Anforderungen. Korrigiere ausschließlich nachgewiesene Lücken. **Abnahme:** exakt benannter Workflow/Commit, angeforderte ABIs und Paketprüfungen belegt; „Build erfolgreich“ ist kein Modelllauf.
+
 ## L09A – JNI-Modelllebenszyklus
 **Abhängigkeit:** L08A.  
 **Prompt:** Implementiere den minimalen JNI-Lebenszyklus für Modell laden/entladen, Fehler zurückmelden und Ressourcen freigeben. Schütze vor parallelem Laden und ungültigen Modellpfaden; native Fehler dürfen nicht unkontrolliert den Prozess beenden. Tokenstreaming, Toolrouting und UI bleiben außerhalb dieses Micro-AP. **Abnahme:** instrumentierte Tests für erfolgreiches Laden/Entladen, ungültige Datei, doppeltes Laden und Cleanup.
 
-## L10A – Echte Inferenz, Abbruch und Ressourcenlimits
+## L10A – Vorhandene echte Inferenz verifizieren und sicher begrenzen
 **Abhängigkeit:** L09A.  
-**Prompt:** Ergänze tatsächliche Token-Inferenz mit Callback/Streaming, Abbruch, Grenzen für Kontext, Tokenzahl, Threads und RAM sowie real gemessene Metriken. Keine Heuristik darf als Engineergebnis erscheinen. Native Ressourcen in allen Fehler-/Cancelpfaden freigeben. **Abnahme:** instrumentierter Test lädt ein kleines, klar lizenziertes und gehashtes Testmodell und erzeugt validiertes JSON; Metriken stammen von realem Decoder.
+**Prompt:** Der vorhandene llama_android.cpp-Code enthält bereits Modellladen, Chat-Template-Verarbeitung, Token-Generierung sowie native Token-/Zeitmetriken. Baue keine zweite Inferenzengine. Prüfe Modell-/Tokenizer-/Chat-Template-Kompatibilität, tatsächliche Output-Tokenzählung, Fehlerbehandlung, Max-Token-Grenze, Thread- und Kontextgrenzen sowie Freigabe von Modell-/Sampler-/Context-Ressourcen bei Erfolg und Fehler. Implementiere hier nur Lücken, die nicht in L12 als Cancel-/Timeout-/Ergebnisvertrag behandelt werden. Regelbasierte Fallbacks müssen außerhalb des Ergebnisses echter nativer Inferenz bleiben. **Abnahme:** kleines, lizenziertes und gehashtes GGUF wird auf unterstützter ABI geladen und erzeugt überprüfbare Modellantwort; tatsächliche Decoder-Messwerte liegen vor oder der Geräteschritt wird als nicht ausgeführt dokumentiert.
 
 ## L11A – ABI-/16-KB-/Geräteprüfung
 **Abhängigkeit:** L08A–L10A.  
 **Prompt:** Prüfe alle nativen Bibliotheken inklusive transitiver Abhängigkeiten auf ABI-Abdeckung sowie 16-KB-ELF- und APK/AAB-Alignment. Teste nur die zugesagten ABIs, einschließlich `arm64-v8a` und `x86_64` nur sofern tatsächlich paketiert/unterstützt, auf passenden Emulatoren oder Geräten. Dokumentiere Geräte, API-Level und Resultate. **Abnahme:** kein pauschales „kompatibel“ ohne Artefakt-/Gerätenachweis.
 
-## L08B – LLM-Rückbau (nicht ausgewählt; nur Notfall-Alternative)
+### L08B – LLM-Rückbau (nicht ausgewählte Alternative; nicht automatisch ausführen)
 **Abhängigkeit:** Nur nach dokumentiertem schwerwiegendem technischem Blocker und erneuter ausdrücklicher Nutzerentscheidung.  
 **Prompt:** Diesen Auftrag nicht automatisch ausführen. Erst nach konkretem Befund und Nutzerfreigabe einen Rückbau umsetzen. Regelbasierte Funktionen transparent kennzeichnen; keine Modellbytes ohne Freigabe laden. **Abnahme:** Entscheidung und Auswirkungen dokumentiert; kein stillschweigender Austausch echter KI gegen Heuristiken.
 
@@ -406,7 +412,7 @@ Du arbeitest ausschließlich im tatsächlich vorhandenen lokalen Workspace von m
 2. Ersetze gemeinsam veränderliche Zustandsfelder wie lastInferenceMode/lastInferenceMetrics durch einen Rückgabewert InferenceResult mit Text/Antwort, tatsächlichem Modus, finishReason (stop, length, abort, error), gemessenen Prompt- und Generierungs-Tokens, Kürzungsstatus, Modell-Ladezeit und optionalen Fehlerdetails. Fehlt eine Messgröße im Native-API-Stand, liefere sie nicht als erfundenen Wert. _isGenerating muss parallele Aufrufe korrekt abbilden (Zähler oder echte Job-Identität statt ein einzelnes Boolean).
 3. Setze konfigurierbare Watchdogs: Triage bis 20 s, Tiefenanalyse bis 45 s, Chat bis 30 s. Timeout und Nutzerabbruch müssen denselben sicheren Cleanup-Pfad verwenden; ein blockierter nativer Aufruf darf den Mutex nicht dauerhaft festhalten. Baue einen reproduzierbaren Test für den bisherigen Hänger bei einer simplen Begrüßung ein. Entferne etwaige Begrüßungs-Sonderfälle erst, wenn Timeout/Abbruch samt Logs belegt funktionieren.
 4. Extraktion und Kandidaten-ID-Auswahl verwenden Temperatur 0 und einen festen Seed, soweit die gepinnte native API das garantiert. Chat darf eine getrennt konfigurierte Temperatur verwenden. Berichte deterministisches Verhalten nicht, solange gleiche Eingabe/Modellversion nicht ausreichend reproduzierbar getestet wurde.
-5. Baue GBNF ausschließlich für die kleine Auswahlantwort: feste Dokumenttyp- und Kategorie-IDs sowie für jeden Lauf nur tatsächlich verfügbare Kandidaten-IDs oder null. Keine frei generierten Feldwerte, kein _reasoning und keine Platzhalter wie keyword1, wert oder dynamisches_feld_1. Prüfe Grammatik und Parser gegen den echten gepinnten llama.cpp-Code. Ändere die Sampler-Reihenfolge nicht nur aufgrund einer Hypothese: dokumentiere den tatsächlich verwendeten Sampler-Aufbau und vergleiche in einem gezielten Test die zulässigen Outputs vor/nach der Änderung. Die Grammatik muss ungültige Kandidaten-IDs verhindern; sie garantiert ausdrücklich keine semantisch richtige Auswahl.
+5. Härte die native Grammar-Schnittstelle zunächst mit einer isolierten Testgrammatik und JSON-Fixtures. Prüfe Grammar-Konstruktion, Fehlerweitergabe und Sampler-Reihenfolge gegen den gepinnten llama.cpp-Code. Ändere die Reihenfolge nicht nur aufgrund einer Hypothese: vergleiche in einem gezielten Test die zulässigen Outputs vor/nach der Änderung. Die dynamische Grammatik für tatsächlich erlaubte Kandidaten-IDs gehört zu L13, nachdem dort das Kandidatenschema feststeht. Bis Grammatik und Parser im echten Native-Pfad getestet sind, grammar=null in produktiven Klassifikationsaufrufen nicht blind entfernen.
 6. Berechne das Kontextbudget mit dem tatsächlichen Tokenizer. System-Prompt, Chat-Template und Antwortschema dürfen nicht abgeschnitten werden. Kürze ausschließlich den OCR-Teil vor dem Chat-Template, erhalte einen definierten Anteil vom Anfang und Ende und kennzeichne die Kürzung. Begrenze n_ctx nach geprüftem Hardware-Tier und nie oberhalb des Modellkontexts. Threadzahl, Modellfreigabe bei onTrimMemory/Modellwechsel und Freigabe bei längerem Hintergrundzustand nur mit belegtem Ressourcenpfad implementieren.
 7. Metriken dürfen nur echte Zähler und Zeitmessungen abbilden: keine geschätzten Tokens/s, fest eingetragenen RAM-Werte oder erfundenen Denkprotokolle. Modus, Metriken und Fehler gehören in das einzelne InferenceResult statt in konkurrierende globale Seiteneffekte.
 8. Tests: (a) 50 reale Durchläufe mit einem kleinen, gehashten GGUF und ausschließlich gültigen, zur Laufzeit erlaubten Kandidaten-IDs, (b) Abbruch unter 1 s soweit das Referenzgerät dies zulässt, (c) Timeout gibt Engine-Sperre frei, (d) langer OCR-Text kürzt ausschließlich OCR, (e) native Fehler führen nicht zu einem als LLM ausgewiesenen Heuristikergebnis. Kann ein Lauf nicht in CI stattfinden, als offenen Geräte-/Instrumentierungstest in docs/open_tasks.md dokumentieren; nicht als bestanden markieren.
@@ -480,7 +486,7 @@ Arbeite nur am lokalen Modellkatalog, Downloader, Import und der dazugehörigen 
 
 **Prompt:**
 1. Verifiziere jeden Eintrag gegen das tatsächliche Repository des Herstellers/Modellinhabers und die konkrete heruntergeladene Datei: ID, Name, Organisation, URL, Dateiname, exakte Größe, SHA-256, GGUF-Format/Architektur, quantisierte Variante, Lizenz/Version, Mindest-RAM und nachgewiesene Fähigkeiten. Nutze soweit möglich die offizielle Hugging-Face-API bzw. die ursprüngliche Downloadquelle; dokumentiere Quelle und Abrufdatum. Ein Modellname allein ist kein Beweis, dass die Datei dahinter dieses Modell ist.
-2. Korrigiere oder entferne die bekannten irreführenden Duplikate/Etiketten: „Distil-Qwen 0.8B Invoice Triage“ mit Qwen2.5-0.5B-Datei, „LIFT 4B Structured PDF Extractor“ mit derselben Datei wie Phi-3.5 sowie ungeprüfte Behauptungen zu Ministral 3B, NuExtract 2.0 und Danube3 100M. Behalte Einträge mit unbestätigter Existenz, Lizenz oder passendem GGUF nicht als aktivierbare Empfehlungen. Für kommerzielle Nutzbarkeit und Redistribution ausschließlich die tatsächliche Modelllizenz/Primärquelle prüfen; rechtliche Unklarheit als offen markieren, nicht selbst als Freigabe interpretieren.
+2. Gleiche frühere Warnungen zuerst mit dem heutigen Katalog ab. „LIFT 4B Structured PDF Extractor“ steht aktuell weiterhin im Code und verweist auf dieselbe Phi-3.5-mini-instruct-Q4_K_M.gguf-URL/Datei wie der Phi-3.5-Eintrag; korrigiere oder entferne diese irreführende Modellidentität. „Distil-Qwen 0.8B Invoice Triage“ und „Danube3 100M“ sind nicht als aktuelle Einträge bestätigt; nicht blind wieder hinzufügen. Der aktuelle Katalog enthält u. a. Ministral-3B und NuExtract-2-2B-Einträge; verifiziere deren konkrete Repository-, Format-, Lizenz- und Lade-Kompatibilität statt sie nur aufgrund des Namens zu akzeptieren. Für kommerzielle Nutzbarkeit/Redistribution muss die tatsächliche Lizenz belegt sein.
 3. Speichere Katalogeinträge als versionierte Daten mit Quelle, erwarteter exakter Dateigröße und SHA-256. Unvollständige Werte bedeuten nicht „unbekannt akzeptieren“, sondern nicht verifiziert/nicht aktivierbar. Keine zwei unterschiedlichen Modell-IDs dürfen dieselbe Datei mit widersprüchlicher Beschreibung als verschiedene Modelle ausgeben.
 4. Vor Aktivierung eines Downloads müssen exakte Größe, SHA-256 und überprüfte GGUF-Magic/Grundstruktur stimmen. Falsche Signatur, Hash, Länge, Redirect oder unzureichender Speicher führen zu eindeutigem Fehler und Entfernen einer unvollständigen Datei; eine Warnung mit trotzdem aktiviertem Modell ist nicht zulässig. Ein vorhandenes Modell darf nur per exaktem Hash und passender Größe automatisch verknüpft werden, nicht über Teilstrings im Dateinamen.
 5. Die Standardempfehlung darf nur Modelle berücksichtigen, deren Integrität, Lizenzmetadaten, RAM-Tauglichkeit und tatsächliches Benchmarkprofil bekannt sind. Modelle ohne vollständig gemessenen Qualitäts-/Gerätenachweis werden in der UI als „Experimentell“ bezeichnet. Kein Modell wird allein nach Parameterzahl oder geschätzten Tokens/s empfohlen. Vorhandene Kandidaten wie Qwen2.5-1.5B können Testkandidaten sein, sind aber ohne eigene Geräteergebnisse nicht automatisch für den Produktivbetrieb freigegeben.
@@ -528,13 +534,13 @@ Nutze ausschließlich synthetische, frei erfundene deutsche OCR-Texte für autom
 ## C04 – Google-Drive-OAuth sicher integrieren
 **Produktentscheidung:** Google Drive unterstützen; kein manuell eingetragener Access-Token.  
 **Prompt:** Implementiere echten Android-OAuth-/Authorization-Flow mit gepflegter Google-Autorisierungsbibliothek. Nutze die engste Scope-Kombination, die den Backupablauf unterstützt. Für vom Nutzer sichtbare Backupdateien den drive.file-Pfad und passenden Datei-/Ordnerfluss prüfen; appDataFolder nur nutzen, wenn ausdrücklich versteckte App-Daten gewünscht sind. Access-/Refresh-Tokens sicher lokal im SecretStore/Keystore speichern, niemals loggen oder in Backups aufnehmen. Consent, Neuautorisierung, Widerruf und Konto-/Netzfehler sauber behandeln. **Abnahme:** echte Autorisierung, minimale Berechtigung, Revocation-/401-Tests und verständliche Statusmeldungen.
-## C04B – Google Drive entfernen (nicht ausgewählt)
+### C04B – Google Drive entfernen (nicht ausgewählte Alternative; nicht automatisch ausführen)
 **Abhängigkeit:** Nur falls die aktuelle Produktentscheidung nach einem belegten schwerwiegenden technischen Blocker erneut geändert wird.  
 **Prompt:** Diesen Auftrag nicht automatisch ausführen. Erst konkreten Befund, Alternativen und Empfehlung vorlegen und erneute ausdrückliche Entscheidung abwarten. Kein Provider darf stillschweigend entfernt werden.
 ## C05 – Google-Drive-Client und Transfers absichern
 **Abhängigkeit:** C04; Uploads ausschließlich aus D10-verschlüsselten Containern.  
 **Prompt:** Implementiere zuverlässige Drive-Uploads/Downloads großer Container mit Resumable Upload, begrenzten Retries und Retry-After bei geeigneten 429/5xx, getrennten Auth-/Quota-/Netz-/Formatfehlern und sicherem Abbruch. Prüfe Containerintegrität vor dem Anwenden eines Downloads. Bei 401 kontrolliert stoppen und Neuautorisierung anfordern. Logs dürfen keine Tokens, Inhalte, Klartextnamen oder Recovery-Secrets enthalten. **Abnahme:** Tests für Resume, 401, 403, 429, 5xx, Netzabbruch, ungültigen Container und Abbruch.
-## C06 – WebDAV-HTTPS und Zertifikatsvertrauen — **[PATCH ERSTELLT – CI OFFEN; TOFU OFFEN]**
+## C06 – WebDAV-HTTPS und Zertifikatsvertrauen
 **Prompt:** Erzwinge HTTPS und Hostnamenprüfung. Beziehe Anmeldedaten ausschließlich aus S08-SecretStore. Für bewusst unterstützte selbstsignierte NAS-Zertifikate nur explizites Trust-on-first-use mit SHA-256-Fingerprint pro Host; geändertes Zertifikat blockieren, bis der Nutzer bewusst erneut prüft. Keine globale Trust-all-Implementierung oder stille HTTP-Ausnahme. **Abnahme:** Tests für gültiges, falsches, abgelaufenes/geändertes Zertifikat und fehlende Zugangsdaten.
 
 ## C07 – Verschlüsseltes Sync-Manifest und Differenzabgleich
@@ -683,52 +689,161 @@ Nutze ausschließlich synthetische, frei erfundene deutsche OCR-Texte für autom
 
 ---
 
-## Einzelstatus – 40 erfasste von 119 Micro-APs
+## Aktueller Status aller aktiven Micro-APs
 
-**Hinweis zur Vollständigkeit:** Die Tabelle bildet 40 protokollierte Einzelstände ab. Weitere 79 im Dokument definierte Micro-APs haben hier noch keinen expliziten Status. Das ist eine Dokumentationslücke, keine Aussage darüber, ob sie bereits umgesetzt wurden.
+**Zählung:** 124 aktive Einträge einschließlich M00. L08B und C04B sind ausdrücklich nicht ausgewählte Alternativen und zählen nicht als aktive Arbeitspakete. „NICHT BEARBEITET“ kennzeichnet unbearbeitete Arbeit. „UMGESETZT – UNGETESTET“ kennzeichnet vorhandenen Code, bei dem der benötigte AP-spezifische Nachweis noch nicht ausgeführt oder belegt ist.
 
+| Bearbeitungsstatus | Anzahl aktiver APs |
+|---|---:|
+| ADR FREIGEGEBEN | 1 |
+| AUDIT DOKUMENTIERT | 5 |
+| GETESTET – CI | 14 |
+| IN BEARBEITUNG | 51 |
+| NICHT BEARBEITET | 48 |
+| UMGESETZT – UNGETESTET | 5 |
 
+**Pflicht-Testprofil:** B/U/I/M/P/G/Q/D sind im Abschnitt „Testprofile“ definiert. Profile bezeichnen erforderliche Prüfebenen, nicht bereits erfolgte Testergebnisse. Die konkrete Testfolge, erwartete Ergebnisse und Abnahmekriterien stehen im jeweiligen AP-Prompt.
 
-| Micro-AP | Status | Patch-Datei | Lokal übernommen | Lokale Tests | Nächster Schritt |
-|---|---|---|---|---|---|
-| M00 | ABGENOMMEN | micro-ap-M00.patch | Ja | Bestanden | V01 |
-| V01 | GETESTET (CI) | VaultSecurityManager.kt, VaultV2OnlyTest.kt | Ja | GitHub Actions Run [39644923474](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/39644923474) erfolgreich: Debug-APK-Build, Android-Instrumentierungstests und Artefaktprüfung; Regressionstest für fehlgeschlagene Neuinitialisierung enthalten. `pre-commit.ci` meldet separat einen Fehler; dessen Ursache ist nicht durch den erfolgreichen Android-Workflow abgedeckt. | V01–V04 als gemeinsame Sicherheitsbasis abgleichen; pre-commit-Befund separat klären |
-| V02 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V03 |
-| V03 | IN ARBEIT – INT-RANGE-VALIDIERUNG | VaultHeaderV2.kt, VaultHeaderV2Test.kt | Ja | Der Parser prüfte numerische Felder bislang nur auf Darstellbarkeit als `Long`, obwohl mehrere anschließend mit `optInt()` gelesen werden. Sehr große Ganzzahlen können dadurch in gültige Werte überlaufen. Der Parser prüft nun `Int`-Zielfelder vor jeder Konvertierung im passenden Wertebereich; gezielte Negativtests für Version, KDF-Parameter, Taglänge und Auto-Lock sind ergänzt. CI für diesen zusätzlichen Fix ist offen. | Overflow-Negativtests im CI bestätigen; danach V01–V04 gemeinsam auf Parser, DEK-Wrapper, Metadaten-HMAC und sämtliche Recovery-Pfade abnehmen |
-| V04 | IN ARBEIT – LEGACY-WRAPPER-REWRAP | VaultHeaderCryptoV2.kt, VaultSecurityManager.kt, VaultV2OnlyTest.kt, ExampleRobolectricTest.kt | Ja | Die Metadaten-HMAC ist in BIP-39-/Recovery-Code-/Shamir-Pfaden ergänzt. Die End-to-End-Prüfung fand, dass das bloße Signieren eines alten V2-Headers den AAD-Versionsmarker ändert, aber den DEK-Wrapper nicht neu verschlüsselt; ein späterer Passwort-Unlock würde scheitern. Der Passwortpfad rewrapped alte V2-Wrapper mit frischem Salt/Nonce und AAD-Version 1 und authentifiziert anschließend die kopierten Recovery-/Biometrie-Metadaten. Recovery-/Biometriepfade akzeptieren keinen Header ohne Metadaten-HMAC, da andernfalls Entfernen der HMAC-Version plus Metadatenmanipulation als Legacy-Upgrade missbraucht werden könnte. Regressionstests decken Passwortmigration inkl. Neustart und fail-closed Recovery bis zur Migration ab. Zusätzlich prüft `generated recovery credentials recover the exact original DEK` jetzt alle drei zulässigen Shamir-Paare gegen den ursprünglichen DEK sowie die Zurückweisung eines duplizierten Shares; CI für diese Ergänzung steht noch aus. | CI muss Legacy-Wrapper-Migration, Downgrade-Negativtests und sämtliche Recovery-Pfade bestehen; danach V01–V04 gemeinsam abnehmen |
-| V05 | ADR FREIGEGEBEN | docs/security/adr-002-totp-decision.md | Ja | Optionale 2FA: Passwort + zufällige Schlüsseldatei; TOTP ist kein kryptografischer Faktor | V06 |
-| V06 | GETESTET (CI) | main, Commit `d509ebb` (PR #3) | Ja | Legacy-TOTP wird nicht mehr als Vault-Faktor akzeptiert; neue Header serialisieren kein TOTP-Secret, bestehende Klartextfelder werden beim Laden entfernt. GitHub Actions Run `39633700992`: Build, Unit-, Instrumentierungs- und APK-Prüfschritte erfolgreich | V06A/V06B separat abnehmen; manuelle Geräteprüfung bleibt offen |
-| V06A | PATCH ERSTELLT | direkt in main | Ja | Wizard bietet nur Passwort+Keyfile als neue kryptografische 2FA; `.key`-Export ergänzt; Gesamt-CI grün, gezielte UI-/Geräteabnahme des Exports noch offen | V06B |
-| V06B | PATCH ERSTELLT | direkt in main | Ja | Manager verlangt beide Faktoren und prüft Keyfile-Hash; `.key`-Import und Negativtests ergänzt; Gesamt-CI grün, gezielte Import-/Geräteabnahme bleibt offen | V06A/V06B gezielt auf Gerät prüfen |
-| V07 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V08 |
-| V08 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V09 |
-| V09 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V10 |
-| V10 | PATCH ERSTELLT | direkt in main | Ja | Relevante Testklassen laut Statusbericht verifiziert; AP-Abnahme separat prüfen | V11 |
-| V11 | PATCH ERSTELLT | direkt in main | Ja | QrEncodingTest laut Statusbericht verifiziert; AP-Abnahme separat abgleichen | V12 |
-| V12 | PATCH ERSTELLT | direkt in main | Ja | PDF-Regressionstest ergänzt; explizites Notfalldokument und Geräterestore abzunehmen | V12B/V13 |
-| V12B | NICHT GESTARTET | – | Nein | Unauffällige Druckvariante erstellen | V12 |
-| V13 | PATCH ERSTELLT | direkt in main | Ja | CryptoObject-Instrumented-Test ergänzt; Gerätetest offen | V14 |
-| V14 | GETESTET (CI) | VaultSecurityManager.kt, VaultHeaderV2.kt, VaultV2OnlyTest.kt | Ja | V2-only-Headerpfad und Negativ-Regressionstest für alte Header-Schlüssel liefen in GitHub Actions Run `39633700992` erfolgreich. Keine Migration/Fallbacks | Gesamtstatus V01–V04 separat abnehmen |
-| V15 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; weitere AP-Abnahme separat prüfen | S01 |
-| V16 | NICHT GESTARTET | – | Nein | Passkey muss echte Wiederherstellung ermöglichen | V09/V10 |
-| V17 | NICHT GESTARTET | – | Nein | Sicherheitsfragen nur zusätzlicher, begrenzt starker Faktor | V10/V16 |
-| V18 | NICHT GESTARTET | – | Nein | Restore-Auswahl/Einrichtung in der App | V12/V12B/V16/V17 |
-| S01 | GETESTET | docs/security/lock-secret-inventory.md | Ja | Audit dokumentiert | S02 |
-| S02 | PATCH ERSTELLT | direkt in main | Ja | LockManagerTest laut Statusbericht verifiziert | S03 |
-| S03 | PATCH ERSTELLT | direkt in main | Ja | VaultAutoLockObserverTest laut Statusbericht verifiziert | S04 |
-| S04 | PATCH ERSTELLT | direkt in main | Ja | Bypass-Pfade entfernt; Negativtests/Build offen | S05 |
-| S05 | PATCH ERSTELLT | direkt in main | Ja | Produktionsaufrufe auf Key-Leases migriert; Testlauf offen | S06 |
-| S06 | PATCH ERSTELLT | direkt in main | Ja | AuthenticationBackoffManagerTest laut Statusbericht verifiziert | S07 |
-| S07 | PATCH ERSTELLT | direkt in main | Ja | Screenshot-/Recents-Gerätetest offen | S08 |
-| S08 | GETESTET | direkt in main | Ja | GitHub Actions am 21.10.2026: assembleDebug, testDebugUnitTest und connectedDebugAndroidTest erfolgreich; Emulator API 35/x86_64. Separater Test auf physischem Gerät offen. | S09 |
-| S09 | IN ARBEIT | direkt in main | Ja | GitHub Actions für Commit `1d593056` erfolgreich: Build, Unit-Tests und connectedDebugAndroidTest. Secret-/Token-Abgleich, physischer Gerätetest und Migration-Fehlerpfade bleiben offen. | S09-Instrumentation und verbleibende S01-Secrets abgleichen |
-| S10 | GETESTET (Nutzerbestätigung) | direkt in main | Ja | Nutzer bestätigt erfolgreichen Build, `:app:testDebugUnitTest` und App-Start im Streaming-Emulator. Separater `connectedDebugAndroidTest`-Lauf und gezielter Widget-Cold-Start-/Lock-Replay-Test sind nicht ausdrücklich ausgewiesen. | S09-Secret-Inventar abschließen, anschließend D01/D02-Abhängigkeiten prüfen |
-| D01 | AUDIT DOKUMENTIERT | docs/security/document-data-flow.md | Ja | Codepfad-Inventar erstellt; dynamische Geräte-/Share-/Restore-Abnahme bleibt für Folge-APs offen | D02 |
-| D02 | ADR ERSTELLT | docs/security/adr-003-sqlcipher-room-database.md | Ja | SQLCipher for Android 4.19.1 / Room 2.7.0 als technischer Vorschlag; Runtime bleibt bis D03 und DB01–DB04 blockiert | D03 || DB03 | PATCH ERSTELLT | AppDatabase.kt / DatabaseDowngradeSafetyTest.kt | Ja | Destruktiven Downgrade-Fallback entfernt; Emulator-Abnahme dieses Commits steht noch aus | DB04 |
-| D13 | PATCH ERSTELLT | direkt in main | Ja | BackupRulesSecurityTest laut Statusbericht verifiziert; Restore-/Geräteabnahme separat prüfen | D14 |
-| D11 | PATCH ERSTELLT | DocumentStorageService.kt / BackupRestoreArchiveValidationTest.kt | Ja | Größenlimits, Duplikat-/Unexpected-Entry-Prüfung, Pflichtindex, Pfadsegmentprüfung, Index-Vorprüfung und Größenlimit schon beim Import aus einer Content-URI; keine Restore-Fallbacks auf im Backup gespeicherte Gerätepfade. Backup-Erstellung bricht bei fehlenden Dokumenten oder nicht lesbaren Vault-Metadaten ab statt ein unvollständiges Archiv zu markieren. CI offen; atomare DB-/Datei-Wiederherstellung bleibt D12 | D12 |
-| D14 | PATCH ERSTELLT | direkt in main | Ja | PDFBox-Textlayer-Instrumentationstest ergänzt; Lauf offen; Scan-OCR wird nicht in PDF eingebettet | D15 || D15 | NICHT GESTARTET | – | Nein | Alle dauerhaft gespeicherten Einstellungen verschlüsseln | DB/Persistenztests |
-| P01 | PATCH ERSTELLT | direkt in main | Ja | Bestehende Audit-/TLS-ADR dokumentiert; alle drei Verbindungstypen müssen im Code bestätigt werden | Sicherheitsmatrix vor P02 |
-| P07 | PATCH ERSTELLT (TEILFIX – REST OFFEN) | P2pSyncServer.kt / P2pWebSessionHeaderPolicyTest.kt | Ja | Web-Sessions akzeptieren kein Token mehr aus Queryparametern; globale Wildcard-CORS-Header entfernt. Der gesamte P07-Umfang (Nonce-Replay-Cache, Rate-Limits, Session-Inaktivitätsablauf) ist nicht abgeschlossen und TLS fehlt weiterhin | P07 vollständig mit Replay-/Session-/Rate-Limit-Tests umsetzen; TLS-P02 bleibt eigenständiges Gate |
-| P10 | PATCH ERSTELLT | direkt in main | Ja | SHA-256-Ersatzschlüssel-Fallback entfernt; P2pSyncSecurityTest laut Statusbericht verifiziert; Aufrufer-Audit separat prüfen | Testlauf und Aufrufer-Audit prüfen |
-| C06 | PATCH ERSTELLT | WebDavClient.kt / WebDavTransportSecurityTest.kt | Ja | HTTP explizit abgewiesen; Bare-Host wird HTTPS; Redirects deaktiviert; URL-Zugangsdaten, Query/Fragment und Path-Traversal-Namen abgewiesen. CI/Unit-Tests sowie Zertifikats-TOFU-/Fingerprint-Pinning stehen noch aus | CI prüfen, dann TOFU pro Host mit SHA-256-Fingerprint implementieren und testen |
+| AP | Bearbeitungsstatus | Pflicht-Testprofil |
+|---|---|---|
+| M00 | AUDIT DOKUMENTIERT | D+B+U |
+| V01 | GETESTET – CI | B+U |
+| V02 | UMGESETZT – UNGETESTET | B+U |
+| V03 | GETESTET – CI | B+U |
+| V04 | GETESTET – CI | B+U |
+| V05 | ADR FREIGEGEBEN | D |
+| V06 | GETESTET – CI | B+U |
+| V06A | IN BEARBEITUNG | B+U+I+M |
+| V06B | IN BEARBEITUNG | B+U+I+M |
+| V07 | UMGESETZT – UNGETESTET | B+U |
+| V08 | UMGESETZT – UNGETESTET | B+U |
+| V09 | IN BEARBEITUNG | B+U |
+| V10 | UMGESETZT – UNGETESTET | B+U |
+| V11 | UMGESETZT – UNGETESTET | B+U |
+| V12 | IN BEARBEITUNG | B+U+I+M |
+| V12B | NICHT BEARBEITET | B+U+I+M |
+| V13 | IN BEARBEITUNG | B+U+I+M+P |
+| V14 | GETESTET – CI | B+U |
+| V15 | GETESTET – CI | B+U+I |
+| V16 | NICHT BEARBEITET | B+U+I+M+P |
+| V17 | NICHT BEARBEITET | B+U+I+M+P |
+| V18 | NICHT BEARBEITET | B+U+I+M+P |
+| S01 | AUDIT DOKUMENTIERT | D |
+| S02 | GETESTET – CI | B+U |
+| S03 | GETESTET – CI | B+U+I |
+| S04 | IN BEARBEITUNG | B+U |
+| S05 | IN BEARBEITUNG | B+U |
+| S06 | GETESTET – CI | B+U |
+| S07 | IN BEARBEITUNG | B+U+I+M |
+| S08 | GETESTET – CI | B+U+I |
+| S09 | IN BEARBEITUNG | B+U+I |
+| S10 | IN BEARBEITUNG | B+U+I+M |
+| D01 | AUDIT DOKUMENTIERT | D |
+| D02 | IN BEARBEITUNG | D |
+| D03 | IN BEARBEITUNG | B+U+I |
+| D04 | NICHT BEARBEITET | B+U+I |
+| D05 | IN BEARBEITUNG | B+U+I |
+| D06 | IN BEARBEITUNG | B+U+I+M |
+| D07 | NICHT BEARBEITET | B+U+I |
+| D08 | NICHT BEARBEITET | B+U+I |
+| D09 | IN BEARBEITUNG | B+U+I |
+| D10 | IN BEARBEITUNG | B+U+I |
+| D11 | GETESTET – CI | B+U+I |
+| D12 | NICHT BEARBEITET | B+U+I |
+| D13 | IN BEARBEITUNG | B+U+I |
+| D14 | IN BEARBEITUNG | B+U+I |
+| D15 | NICHT BEARBEITET | B+U+I |
+| P01 | AUDIT DOKUMENTIERT | D |
+| P02 | NICHT BEARBEITET | B+U+I |
+| P03 | NICHT BEARBEITET | B+U+I+M |
+| P04 | IN BEARBEITUNG | B+U+I |
+| P05 | IN BEARBEITUNG | B+U+I |
+| P06 | IN BEARBEITUNG | B+U+I |
+| P07 | IN BEARBEITUNG | B+U+I |
+| P08 | IN BEARBEITUNG | B+U+I |
+| P09 | IN BEARBEITUNG | B+U+I |
+| P10 | GETESTET – CI | B+U+I |
+| P11 | IN BEARBEITUNG | B+U+I |
+| P12 | NICHT BEARBEITET | B+U+I |
+| P13 | NICHT BEARBEITET | B+U+I+M |
+| L01 | AUDIT DOKUMENTIERT | D+B |
+| L02 | IN BEARBEITUNG | D |
+| L03 | IN BEARBEITUNG | B+U |
+| L04 | IN BEARBEITUNG | B+U+I |
+| L05 | IN BEARBEITUNG | B+U |
+| L06 | NICHT BEARBEITET | B+U |
+| L07 | IN BEARBEITUNG | B+U |
+| L08A | GETESTET – CI | B+U+I |
+| L09A | IN BEARBEITUNG | B+U+I |
+| L10A | IN BEARBEITUNG | B+U+I+G |
+| L11A | IN BEARBEITUNG | B+U+I+G |
+| L12 | NICHT BEARBEITET | B+U+I+G |
+| L13 | NICHT BEARBEITET | B+U |
+| L14 | IN BEARBEITUNG | B+U |
+| L15 | IN BEARBEITUNG | B+U+I+M |
+| L16 | IN BEARBEITUNG | B+U+I+G |
+| L17 | NICHT BEARBEITET | B+U+I+G+Q |
+| C01 | IN BEARBEITUNG | D+B+U |
+| C02 | NICHT BEARBEITET | B+U+I |
+| C03 | IN BEARBEITUNG | B+U+I |
+| C04 | IN BEARBEITUNG | B+U+I+M |
+| C05 | IN BEARBEITUNG | B+U+I |
+| C06 | IN BEARBEITUNG | B+U+I+M |
+| C07 | IN BEARBEITUNG | B+U+I |
+| C08 | IN BEARBEITUNG | B+U+I+M |
+| C09 | NICHT BEARBEITET | B+U+I |
+| DB01 | IN BEARBEITUNG | D+B+U |
+| DB02 | NICHT BEARBEITET | D+B+U |
+| DB03 | GETESTET – CI | B+U+I |
+| DB04 | NICHT BEARBEITET | B+U+I |
+| DB05 | IN BEARBEITUNG | B+U+I |
+| DB06 | IN BEARBEITUNG | B+U |
+| DB07 | NICHT BEARBEITET | B+U |
+| DB08 | NICHT BEARBEITET | B+U+I |
+| DB09 | NICHT BEARBEITET | B+U |
+| DB10 | NICHT BEARBEITET | B+U+I |
+| DB11 | NICHT BEARBEITET | B+U+I |
+| DB12 | NICHT BEARBEITET | B+U+I |
+| DB13 | NICHT BEARBEITET | B+U+I |
+| DB14 | NICHT BEARBEITET | B+U+I+M |
+| R01 | IN BEARBEITUNG | D+B+U |
+| R02 | NICHT BEARBEITET | D+B+U |
+| R03 | NICHT BEARBEITET | B+U |
+| R04 | IN BEARBEITUNG | B+U |
+| R05 | NICHT BEARBEITET | B+U+I+M |
+| R06 | NICHT BEARBEITET | B+U+I+M |
+| R07 | NICHT BEARBEITET | B+U |
+| R08 | NICHT BEARBEITET | B+U+I |
+| R09 | NICHT BEARBEITET | B+U |
+| R10 | NICHT BEARBEITET | B+U |
+| R11 | NICHT BEARBEITET | B+U |
+| R12 | IN BEARBEITUNG | B+U+I |
+| R13 | NICHT BEARBEITET | B+U |
+| R14 | NICHT BEARBEITET | D+B+U |
+| R15 | NICHT BEARBEITET | B+U |
+| R16 | IN BEARBEITUNG | B+U |
+| R17 | IN BEARBEITUNG | B+U |
+| R18 | NICHT BEARBEITET | B+U+I |
+| R19 | NICHT BEARBEITET | B+U+I |
+| R20 | NICHT BEARBEITET | B+U+I+M |
+| R21 | NICHT BEARBEITET | B+U+I+M |
+| R22 | NICHT BEARBEITET | B+U+I+M |
+| R23 | NICHT BEARBEITET | B+U |
+| R24 | NICHT BEARBEITET | B+U+I+M |
+
+### Nicht ausgewählte Alternativen
+
+| Alternative | Regel |
+|---|---|
+| **L08B – LLM-Rückbau** | Nicht ausführen. Nur bei konkret dokumentiertem, schwerwiegendem technischem Blocker und erneuter ausdrücklicher Nutzerfreigabe. |
+| **C04B – Google Drive entfernen** | Nicht ausführen. Google Drive bleibt Produktziel; OAuth-/Transportblocker sind zu beheben oder mit konkretem Befund zu dokumentieren. |
+
+---
+
+## Arbeitsregeln für Statuspflege
+
+1. Ein AP wechselt erst auf **GETESTET – CI**, wenn die AP-spezifischen Tests im genannten Workflow/Commit bestanden sind. Ein allgemeiner Build allein reicht nicht.
+2. **GETESTET – APP/GERÄT** erfordert den konkreten Ablauf, Geräte-/Emulatormodell, Android-Version, App-Build/Commit, erwartetes Ergebnis und beobachtetes Ergebnis. Ein bloßer App-Start gilt nur als Smoke-Test.
+3. **ABGENOMMEN** erfordert alle im Testprofil geforderten Ebenen. Ein Profil mit P/G/Q ist nicht durch Emulator-Compile oder allgemeinen CI-Erfolg erfüllt.
+4. Eine nicht verfügbare Testumgebung wird als **nicht ausgeführt** mit konkretem Grund dokumentiert. Sie wird nicht als bestanden oder fehlgeschlagen etikettiert.
+5. Ein vorhandener Testklassename beweist nicht, dass die Akzeptanzkriterien vollständig abgedeckt sind. Quellcode, Testinhalt und konkretes CI-Ergebnis müssen zusammenpassen.
