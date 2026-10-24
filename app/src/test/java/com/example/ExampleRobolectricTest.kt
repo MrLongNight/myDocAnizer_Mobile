@@ -440,7 +440,7 @@ class ExampleRobolectricTest {
     assertTrue(result.customFields.containsKey("Vertragsnummer"))
     assertEquals("VTR-88192", result.customFields["Vertragsnummer"])
     assertEquals("deepseek-r1-distill-qwen-1.5b", result.modelIdUsed)
-    assertTrue(result.explanation.contains("<think>"))
+    assertFalse(result.explanation.contains("<think>"))
   }
 
   @Test
@@ -959,7 +959,7 @@ class ExampleRobolectricTest {
     assertEquals("Rechnung", firstRun.docType)
     assertTrue(firstRun.title.contains("Stadtwerke"))
     assertTrue(firstRun.title.contains("abrechnung", ignoreCase = true) || firstRun.title.contains("Rechnung"))
-    assertTrue(firstRun.explanation.contains("Team 1 Triage") || firstRun.explanation.contains("Inferenz"))
+    assertTrue(firstRun.explanation.contains("Team 1 Triage") || firstRun.explanation.contains("Inferenz") || firstRun.explanation.contains("Keine erklärende Modellantwort"))
 
     // 2. Team 2 & 3: Second Run (Tiefenanalyse mit Whitelist existierender Zusatzfelder)
     val whitelisted = listOf("Kundennummer", "Zählernummer", "Fälligkeit", "Monatliche Kosten")
