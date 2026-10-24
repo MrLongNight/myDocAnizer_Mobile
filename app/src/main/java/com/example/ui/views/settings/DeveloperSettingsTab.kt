@@ -50,9 +50,8 @@ fun DeveloperSettingsTab(viewModel: DocAnizerViewModel) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (com.example.BuildConfig.DEBUG) {
-            LlmDiagnosticScreen(viewModel)
-        }
+        // Diagnose und Stresstest auch in der installierten Release-Variante sichtbar halten.
+        LlmDiagnosticScreen(viewModel)
 
         // 1. BASIS-INTEGRITÄT (AUTO-RUN)
         Card(
