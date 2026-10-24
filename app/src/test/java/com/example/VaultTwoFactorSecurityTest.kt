@@ -1,11 +1,14 @@
 package com.example
 
 import android.app.Application
+import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import com.example.service.AuthenticationBackoffManager
 import com.example.service.VaultFactorType
 import com.example.service.VaultRecoveryMethod
 import com.example.service.VaultSecurityManager
 import com.example.service.VaultSecurityTier
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -30,7 +33,14 @@ class VaultTwoFactorSecurityTest {
     private fun resetVaultManagerSingleton() {
         val instanceField = VaultSecurityManager::class.java.getDeclaredField("INSTANCE")
         instanceField.isAccessible = true
+        val previous = instanceField.get(null) as? VaultSecurityManager
+        runCatching { previous?.lockVault() }
         instanceField.set(null, null)
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        context.getSharedPreferences(
+            AuthenticationBackoffManager.PREFERENCES_NAME,
+            Context.MODE_PRIVATE
+        ).edit().clear().commit()
     }
 
     @Test
@@ -67,6 +77,50 @@ class VaultTwoFactorSecurityTest {
         assertFalse("Wrong key file must not unlock", manager.unlockVault(password, wrongToken))
         assertTrue("Correct factors should still work after a failed attempt", manager.unlockVault(password, keyFileToken))
         manager.lockVault()
+    }
+
+    @Test
+    fun vaultUnlockFailureThresholdBlocksEvenAValidPasswordUntilBackoffExpires() {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val manager = VaultSecurityManager.getInstance(context)
+        val password = "VaultBackoffIntegrationPassword2026!"
+        val setup = manager.initializeVault(
+            masterPassword = password,
+            enableBiometrics = false,
+            recoveryMethod = VaultRecoveryMethod.NONE,
+            securityTier = VaultSecurityTier.ONE_FACTOR,
+            factorType = VaultFactorType.PASSWORD
+        )
+        val backoffPrefs = context.getSharedPreferences(
+            AuthenticationBackoffManager.PREFERENCES_NAME,
+            Context.MODE_PRIVATE
+        )
+        try {
+            setup.dek.fill(0)
+            manager.lockVault()
+
+            repeat(5) { attempt ->
+                assertFalse(
+                    "Wrong password attempt ${attempt + 1} must fail",
+                    manager.unlockVault(password = "IncorrectIntegrationPassword$attempt")
+                )
+            }
+            assertEquals(5, backoffPrefs.getInt("failure_count", 0))
+
+            assertFalse(
+                "A correct password must still be rejected while the real vault backoff is active",
+                manager.unlockVault(password = password)
+            )
+            assertEquals(
+                "A blocked request must not increment the failure count",
+                5,
+                backoffPrefs.getInt("failure_count", 0)
+            )
+            assertFalse("Failed/blocked authentication must not leave the Vault unlocked", manager.isUnlocked())
+        } finally {
+            setup.dek.fill(0)
+            manager.lockVault()
+        }
     }
 
     @Test
