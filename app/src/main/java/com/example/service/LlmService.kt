@@ -1645,7 +1645,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#kfz", "#versicherung", "#auto")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "kfz", "versicherung")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Versicherung", "A04", "B4.01", customFields, 0f)
+                    val explanation = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1676,7 +1676,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#versicherung", "#police", "#vorsorge")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "versicherung", "police")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Versicherung", "A04", "B4.01", customFields, 0f)
+                    val explanation = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1709,7 +1709,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#energie", "#strom", "#stadtwerke", "#fixkosten")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "energie", "strom", "verbrauch")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Rechnung", "A02", "B2.02", customFields, 0f)
+                    val explanation = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1741,7 +1741,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#mobilfunk", "#internet", "#telekommunikation")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "rechnung", "mobilfunk")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Rechnung", "A02", "B2.01", customFields, 0f)
+                    val explanation = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1772,7 +1772,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#rechnung", "#abrechnung", "#finanzen")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "rechnung", "betrag")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Rechnung", "A02", "B2.01", customFields, 0f)
+                    val explanation = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1801,7 +1801,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#vertrag", "#vereinbarung")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "vertrag")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Vertrag", "A02", "B2.03", customFields, 0f)
+                    val explanation = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1832,7 +1832,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#behörde", "#bescheid", "#amtlich", "#steuern")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "bescheid", "finanzamt")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Bescheid", "A03", "B3.04", customFields, 0f)
+                    val explanation = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1860,7 +1860,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#gehalt", "#finanzen", "#einkommen")
                     val smartKeywords = listOf("gehalt", "lohnabrechnung", "netto")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Gehaltsabrechnung", "A03", "B3.02", customFields, 0f)
+                    val explanation = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1887,7 +1887,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#quittung", "#beleg", "#kassenzettel", "#ausgaben")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "kassenbon", "beleg")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Beleg", "A03", "B3.03", customFields, 0f)
+                    val explanation = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1918,7 +1918,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#scan", "#dokument")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "dokument")
 
-                    val explanation = buildModelReasoning(activeModel, cleanTitle, sender, "Sonstiges", "A01", "B1.01", customFields, 0f)
+                    val explanation = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
                     LlmClassificationResult(
                         title = cleanTitle,
                         sender = sender,
@@ -2116,16 +2116,6 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
         }
     }
 
-    private fun buildModelReasoning(
-        activeModel: HuggingFaceModelInfo,
-        title: String,
-        sender: String,
-        docType: String,
-        mainCatId: String,
-        subCatId: String,
-        fields: Map<String, String>,
-        confidence: Float
-    ): String = LlmPrompts.buildModelReasoning(activeModel, title, sender, docType, mainCatId, subCatId, fields, confidence)
 
     /**
      * Team 2: Fachabteilungs-Tiefenanalyse (Second Run).

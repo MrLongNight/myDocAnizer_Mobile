@@ -158,7 +158,7 @@ Ein AP darf erst auf **„Umgesetzt / geprüft“** wechseln, wenn alle Punkte f
 Das kann keine mathematische Fehlerfreiheit garantieren. Es verhindert aber, dass ein Punkt nur wegen vorhandenen Codes, einer alten CI-Ausführung oder eines gelungenen Builds als abgeschlossen gilt. Die Release-Checkliste ist der kurze Nachweis für den Betatest; die 123 Prompts bleiben Arbeitsanweisungen, nicht 123 gleichzeitige Release-Blocker.
 
 
-**Aktueller Prüfhinweis (25.10.2026):** Der LLM-Auditpfad speichert keine OCR-/Reasoning-Auszüge, Absender-/Dokumenttypwerte oder vollständigen Chatfragen. Nicht kalibrierte Confidence wird nicht mehr als Prozentwert an Firebase Analytics übertragen. Das Klassifikationsergebnis führt intern weiterhin `confidence = 0f` als „nicht verfügbar“-Sentinel; UI- und API-Anzeigen bleiben zu prüfen. CI für die letzten Änderungen: [Run 40137078831 erfolgreich](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40137078831); der Folge-Commit ist noch nicht verifiziert.
+**Aktueller Prüfhinweis (25.10.2026):** Der LLM-Auditpfad speichert keine OCR-/Reasoning-Auszüge, Absender-/Dokumenttypwerte oder vollständigen Chatfragen. Nicht kalibrierte Confidence wird nicht mehr als Prozentwert an Firebase Analytics übertragen. Das Klassifikationsergebnis führt intern weiterhin `confidence = 0f` als „nicht verfügbar“-Sentinel; UI- und API-Anzeigen bleiben zu prüfen. Der generische Reasoning-Helper und alle Aufrufe sind aus dem Produktionscode entfernt; ohne echte Modell-Erklärung wird nur ein transparenter Hinweis ausgegeben. CI für diese jüngsten Änderungen ist noch ausstehend.
 
 ## Arbeitspakete
 
