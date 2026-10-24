@@ -2655,7 +2655,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                 category = LogCategory.AI_INFERENCE,
                 tag = "Chatbot",
                 message = "KI-Chatbot wird abgefragt (${activeModel.name})",
-                details = "Frage: $question | Modell: ${activeModel.id} | Kontext: ${documentContextSummary.length} Zeichen"
+                details = "Modell: ${activeModel.id.take(80)} | Kontextlänge: ${documentContextSummary.length} Zeichen"
             )
             
             if (modelFile.exists() && modelFile.length() > 1024 * 1024) {

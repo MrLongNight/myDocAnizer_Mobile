@@ -158,6 +158,8 @@ Ein AP darf erst auf **„Umgesetzt / geprüft“** wechseln, wenn alle Punkte f
 Das kann keine mathematische Fehlerfreiheit garantieren. Es verhindert aber, dass ein Punkt nur wegen vorhandenen Codes, einer alten CI-Ausführung oder eines gelungenen Builds als abgeschlossen gilt. Die Release-Checkliste ist der kurze Nachweis für den Betatest; die 123 Prompts bleiben Arbeitsanweisungen, nicht 123 gleichzeitige Release-Blocker.
 
 
+**Aktueller Prüfhinweis (24.10.2026):** Der LLM-Auditpfad wurde datensparsamer gemacht: keine OCR-/Reasoning-Auszüge, keine Absender-/Dokumenttypwerte und keine vollständige Chatfrage im Audit. Die Änderung wartet auf den zugehörigen CI-Nachweis. Nicht kalibrierte Confidence-Werte in Klassifikationsergebnissen sind damit ausdrücklich noch nicht behoben.
+
 ## Arbeitspakete
 
 # V – Tresor, Schlüsselableitung und Recovery

@@ -196,28 +196,29 @@ object AppAuditLogger {
         fullReasoning: String = "",
         tokensPerSecond: Float = 0f
     ) {
+        // Do not persist document-derived sender/type/reasoning or OCR excerpts in audit logs.
+        // Current callers may pass heuristics/estimates, so do not store them as confidence,
+        // RAM or TPS measurements.
         val entry = AuditLogEntry(
             category = LogCategory.AI_INFERENCE,
             tag = "InferenceEngine",
-            message = "Dokument als '$docType' ($sender) eingestuft (${(confidence * 100).toInt()}% Konfidenz)",
-            details = "Modell: $modelId | Latenz: ${latencyMs}ms | TPS: ${if (tokensPerSecond > 0f) tokensPerSecond else "-"} | RAM-Δ: ${ramDeltaMb}MB | Felder: $customFieldsCount | Auszug: $reasoningSnippet",
+            message = "Lokale Dokumentanalyse abgeschlossen",
+            details = "Modell: ${modelId.take(80)} | Latenz: ${latencyMs}ms | Anzahl Zusatzfelder: ${customFieldsCount.coerceAtLeast(0)}",
             modelId = modelId,
             latencyMs = latencyMs,
-            ramDeltaMb = ramDeltaMb,
-            reasoningTrace = if (fullReasoning.isNotBlank()) fullReasoning else reasoningSnippet,
-            tokensPerSecond = tokensPerSecond
+            ramDeltaMb = 0f,
+            reasoningTrace = "",
+            tokensPerSecond = 0f
         )
 
         _logs.update { list ->
             val current = list.toMutableList()
             current.add(0, entry)
-            if (current.size > MAX_MEMORY_LOGS) {
-                current.removeAt(current.size - 1)
-            }
+            if (current.size > MAX_MEMORY_LOGS) current.removeAt(current.size - 1)
             current
         }
 
-        // Benchmark-Statistik pro Modell aktualisieren
+        // Keep only values that are measured in this path.
         _modelBenchmarks.update { map ->
             val currentBenchmarks = map.toMutableMap()
             val prev = currentBenchmarks[modelId] ?: ModelBenchmarkStats(
@@ -226,32 +227,19 @@ object AppAuditLogger {
             )
             val newTotal = prev.totalInferences + 1
             val newAvgLatency = ((prev.avgLatencyMs * prev.totalInferences) + latencyMs) / newTotal
-            val newAvgConf = ((prev.avgConfidence * prev.totalInferences) + confidence) / newTotal
-            val newAvgFields = ((prev.avgFieldsExtracted * prev.totalInferences) + customFieldsCount) / newTotal
-            val newAvgTps = if (tokensPerSecond > 0f) {
-                if (prev.avgTokensPerSecond <= 0f) tokensPerSecond
-                else ((prev.avgTokensPerSecond * prev.totalInferences) + tokensPerSecond) / newTotal
-            } else prev.avgTokensPerSecond
-            val peakRam = maxOf(prev.peakRamDeltaMb, ramDeltaMb)
-
+            val newAvgFields = ((prev.avgFieldsExtracted * prev.totalInferences) + customFieldsCount.coerceAtLeast(0)) / newTotal
             currentBenchmarks[modelId] = prev.copy(
                 totalInferences = newTotal,
                 avgLatencyMs = newAvgLatency,
-                avgConfidence = newAvgConf,
                 avgFieldsExtracted = newAvgFields,
-                peakRamDeltaMb = peakRam,
-                lastUsedTimestamp = System.currentTimeMillis(),
-                tokensPerSecond = tokensPerSecond,
-                avgTokensPerSecond = ((newAvgTps * 10).toInt() / 10f)
+                lastUsedTimestamp = System.currentTimeMillis()
             )
             currentBenchmarks
         }
 
         val ctx = appContext
         if (ctx != null) {
-            scope.launch {
-                appendToFile(ctx, entry)
-            }
+            scope.launch { appendToFile(ctx, entry) }
         }
     }
 

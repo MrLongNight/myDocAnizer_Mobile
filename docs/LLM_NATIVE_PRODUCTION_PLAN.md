@@ -5,6 +5,8 @@
 
 ## Arbeitsprotokoll – erledigte Änderungen und Nachweise
 
+| 24.10.2026 | aktueller HEAD nach `fa127a80` | LLM-Audit speichert keine Absender-/Dokumenttyp-/Reasoning-/OCR-Auszüge mehr; Chat-Audit speichert nicht mehr die vollständige Nutzerfrage. Nicht kalibrierte Confidence- und geschätzte RAM/TPS-Werte werden von diesem Auditpfad nicht mehr als Messwerte gespeichert. | CI für diesen Code-Commit nach Änderung noch ausstehend. |
+
 | Datum (UTC) | Commit | Erledigt | CI-Nachweis |
 |---|---|---|---|
 | 21.10.2026 | `cc372dc3` | Mehrdeutige Regel-Treffer werden an die Auswahlentscheidung weitergereicht, statt still eine Regel zu bevorzugen. | Dieser Lauf wurde durch einen nachfolgenden Commit abgebrochen; kein eigener grüner Nachweis. |
@@ -62,7 +64,7 @@ Alle vorgesehenen KI-Funktionen laufen wirklich lokal über das ausgewählte `.g
 
 - [ ] **L01 – Laufzeit-/APK-Inventur:** Kotlin-/JNI-Aufrufpfad, CMake, gepinntes llama.cpp-Submodul und Aufrufer sind im Repository vorhanden. Die APK-Inhalte, die tatsächlich paketierten ABI-Bibliotheken und echte GGUF-Inferenz sind noch nicht vollständig nachgewiesen.
 - [ ] **P0 – Native Wahrheit nachweisen:** Die native CMake/JNI-Integration mit gepinntem llama.cpp-Submodul ist im Quellstand vorhanden. Offen bleiben der aktuelle reproduzierbare CI-/NDK-Nachweis, tatsächliche Paketierung/Installation pro unterstützter ABI, echte GGUF-Inferenz auf `arm64-v8a` und `x86_64`, Grammar-Negativtests, wiederholte Modellaufrufe sowie der 32-Bit-Stub-/Fallback-Test.
-- [ ] **P1 – Ehrliche Laufzeit:** `LOCAL_LLM` und `RULE_FALLBACK` sind im Engine-Status getrennt; noch offen: UI/Diagnostik anbinden und verbleibende feste Confidence-/TPS-Angaben außerhalb dieser Engine prüfen.
+- [ ] **P1 – Ehrliche Laufzeit:** `LOCAL_LLM` und `RULE_FALLBACK` sind im Engine-Status getrennt; LLM-Audit persistiert keine OCR-/Dokumenttext-Auszüge und keine geschätzten RAM/TPS-/Confidence-Messwerte mehr. Offen: feste Confidence-Werte in `LlmClassificationResult`/Erklärungen entfernen, echte native TPS/RAM an die UI anbinden und aktuellen CI-/Gerätenachweis erbringen.
 - [x] **Sicherer Regel-Treffer:** mehrere gleichzeitig passende Regeln führen nicht mehr zur willkürlichen Auswahl der zuerst gespeicherten Regel.
 - [x] **Konflikte vorbeugen:** neue, geänderte oder erneut aktivierte Regeln werden nicht gespeichert/aktiviert, wenn die Definitionen auf demselben OCR-Text gleichzeitig greifen könnten. Bereits vorhandene widersprüchliche Regeln werden beim Runtime-Matching sicher abgewiesen, müssen aber noch bereinigt werden.
 - [ ] **P2 – Smarte Regeln:** echten LLM-Regelentwurf und -verfeinerung implementieren; vorhandene Regeln semantisch berücksichtigen; freigegebene Regeln automatisch, neue/konfliktbehaftete Änderungen kontrolliert anwenden.
