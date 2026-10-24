@@ -4,6 +4,7 @@ import com.example.service.HuggingFaceModelInfo
 
 object LlmPrompts {
 
+    @Deprecated("Model reasoning must come from the actual model output; do not fabricate a chain of thought.")
     fun buildModelReasoning(
         activeModel: HuggingFaceModelInfo,
         title: String,
@@ -13,47 +14,7 @@ object LlmPrompts {
         subCatId: String,
         fields: Map<String, String>,
         confidence: Float
-    ): String {
-        return when {
-            activeModel.id.contains("deepseek") -> {
-                buildString {
-                    append("<think>\n")
-                    append("1. Modell-Inferenz: DeepSeek-R1 Distill (${activeModel.parameterSize} ${activeModel.quantFormat})\n")
-                    append("2. Dokument-Typisierung: $docType ($title) mit ${(confidence * 100).toInt()}% Konfidenz\n")
-                    append("3. Absender-Validierung: '$sender'\n")
-                    if (fields.isNotEmpty()) {
-                        append("4. Extrahierte Schlüsselattribute: ${fields.entries.joinToString(", ") { "${it.key}: ${it.value}" }}\n")
-                    }
-                    append("5. Strukturierte Zielablage: Hauptkategorie $mainCatId -> Unterkategorie $subCatId\n")
-                    append("</think>\n")
-                    append("Präzise als '$title' ($docType) von '$sender' klassifiziert.")
-                }
-            }
-            activeModel.id.contains("coder") -> {
-                buildString {
-                    append("[Qwen 2.5 Coder 1.5B] Tabellen- und Rechnungsprüfung:\n")
-                    append("• Typ: $docType | Absender: $sender\n")
-                    append("• Validierte Attribute: ${fields.size} Felder (${fields.keys.joinToString(", ")})\n")
-                    append("• Zuordnung: $mainCatId / $subCatId")
-                }
-            }
-            activeModel.id.contains("qwen") -> {
-                "[Qwen 2.5 Instruct] Dokument als '$title' klassifiziert. Absender: '$sender' ($docType). ${fields.size} strukturierte Zusatzfelder präzise zugeordnet."
-            }
-            activeModel.id.contains("ministral") -> {
-                "[Ministral 3B Instruct] Multilinguale Dokumenten-Inferenz: '$title' ($sender) als $docType zugeordnet."
-            }
-            activeModel.id.contains("phi") -> {
-                "[Phi-3.5 Mini Instruct] Strukturierte Prüfung: '$title' ($sender) verifiziert."
-            }
-            activeModel.id.contains("smol") -> {
-                "[SmolLM2] Schnelle On-Device Inferenz: '$title' ($sender) verarbeitet."
-            }
-            else -> {
-                "[${activeModel.name}] Inferenz abgeschlossen: '$title' ($sender). ${fields.size} Zusatzfelder erfasst."
-            }
-        }
-    }
+    ): String = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
 
     fun extractAmountFromText(text: String): String {
         val highPriorityPattern = Regex(

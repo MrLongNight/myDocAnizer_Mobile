@@ -5,6 +5,8 @@
 
 ## Arbeitsprotokoll – erledigte Änderungen und Nachweise
 
+| 24.10.2026 | in Vorbereitung | Entfernt: erfundene Modell-Erklärungen und das feste Confidence-Default; chronologische Ablage nimmt ein Jahr nur aus OCR-Text, andernfalls `Jahr_unbekannt`. | CI-Nachweis folgt nach Commit; kein Gerätetest behauptet. |
+
 | 24.10.2026 | aktueller HEAD nach `fa127a80` | LLM-Audit speichert keine Absender-/Dokumenttyp-/Reasoning-/OCR-Auszüge mehr; Chat-Audit speichert nicht mehr die vollständige Nutzerfrage. Nicht kalibrierte Confidence- und geschätzte RAM/TPS-Werte werden von diesem Auditpfad nicht mehr als Messwerte gespeichert. | CI für diesen Code-Commit nach Änderung noch ausstehend. |
 
 | Datum (UTC) | Commit | Erledigt | CI-Nachweis |

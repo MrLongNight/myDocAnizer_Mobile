@@ -2305,7 +2305,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
             val fallbackPath = when (effectiveStrategy) {
                 FolderStrategy.BY_SENDER -> "$finalSender/${baseResult.docType}"
                 FolderStrategy.BY_CATEGORY -> "${baseResult.mainCategoryId}/${baseResult.docType}"
-                FolderStrategy.CHRONOLOGICAL -> "2026/${baseResult.docType}"
+                FolderStrategy.CHRONOLOGICAL -> "${Regex("\\b(?:19|20)\\d{2}\\b").find(ocrText)?.value ?: "Jahr_unbekannt"}/${baseResult.docType}"
                 FolderStrategy.FLAT -> "Dokumente"
             }
 

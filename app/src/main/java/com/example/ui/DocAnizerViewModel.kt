@@ -2121,7 +2121,7 @@ class DocAnizerViewModel(application: Application) : AndroidViewModel(applicatio
                         when (settingsRepo.folderStrategy.value) {
                             com.example.model.FolderStrategy.BY_SENDER -> "$snd/$typ"
                             com.example.model.FolderStrategy.BY_CATEGORY -> "${aiClass.mainCategoryId}/$typ"
-                            com.example.model.FolderStrategy.CHRONOLOGICAL -> "2026/$typ"
+                            com.example.model.FolderStrategy.CHRONOLOGICAL -> "${Regex("\\b(?:19|20)\\d{2}\\b").find(ocrText)?.value ?: "Jahr_unbekannt"}/$typ"
                             com.example.model.FolderStrategy.FLAT -> "Dokumente"
                         }
                     }

@@ -43,7 +43,8 @@ data class LlmClassificationResult(
     val tags: List<String>,
     val explanation: String,
     val customFields: Map<String, String> = emptyMap(),
-    val confidence: Float = 0.95f,
+    // 0f means unavailable/un-calibrated; never present this as a probability.
+    val confidence: Float = 0f,
     val smartKeywords: List<String> = emptyList(),
     val modelIdUsed: String = "",
     val suggestedFolderPath: String = ""
