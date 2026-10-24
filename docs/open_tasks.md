@@ -151,3 +151,10 @@ Dieses Dokument enthält den aktuellen Status der Modularisierung und Dateigrö�
 - Diagnosemesswerte für parallele Aufrufe lesen weiterhin globale „last inference“-Felder; dadurch können Finish-Reason/Tokenzahlen zwischen gleichzeitig laufenden Tasks verwechselt werden. Das ist selbst ein zu prüfender Befund und muss vor belastbarer paralleler Metrikzuordnung behoben werden.
 - Der native Abbruch prüft das Signal pro generiertem Token. Prompt-Evaluation via `llama_decode` ist synchron und lässt sich damit nicht mitten in diesem einzelnen Aufruf unterbrechen; Abbruch kann erst nach Rückkehr aus dieser Phase greifen.
 - Geräteabnahme und CI für den Diagnosepfad offen. Keine Ergebnisse als gelöst melden.
+
+
+## LLM-Diagnoseoberfläche – Sichtbarkeit auf installierter App (24.10.2026)
+
+- **Ursache eingegrenzt:** `DeveloperSettingsTab.kt` zeigte `LlmDiagnosticScreen` ausschließlich bei `BuildConfig.DEBUG`. In einer Release-Variante war die Oberfläche daher trotz vorhandener Implementierung ausgeblendet; sichtbar blieben die regulären Entwickler-Routinen (u. a. Routine 1 & 2).
+- **Korrektur auf `main`:** Commit [`56eaa1e`](https://github.com/MrLongNight/myDocAnizer_Mobile/commit/56eaa1e54b8c74f7d11917bcde8a27c0e904368b) entfernt diese Sichtbarkeitssperre. Ein neuer Build und die Sichtprüfung auf dem Gerät stehen noch aus.
+- **Offen:** Nach Installation des neuen APK prüfen, dass die Diagnosekarte oberhalb von Routine 1 erscheint und die Aktionen erreichbar sind. Die 20-Dokumente-, Parallel- und Abbruchläufe sowie Heap-Grenze bleiben bis zum Gerätetest unbestätigt.
