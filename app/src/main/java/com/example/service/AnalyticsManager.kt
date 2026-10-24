@@ -66,7 +66,6 @@ class AnalyticsManager(context: Context, private val analyticsEnabled: StateFlow
         modelId: String,
         latencyMs: Long,
         tokensPerSecond: Float,
-        confidence: Float,
         preferenceMode: String,
         devicePerfTier: String = "STANDARD"
     ) {
@@ -76,7 +75,6 @@ class AnalyticsManager(context: Context, private val analyticsEnabled: StateFlow
                 putLong("latency_ms", latencyMs)
                 putFloat("tps", tokensPerSecond)
                 putString("tps_bucket", getTpsBucket(tokensPerSecond))
-                putInt("confidence_pct", (confidence * 100).toInt().coerceIn(0, 100))
                 putString("pref_mode", preferenceMode)
             }
             logEvent("llm_inference_completed", bundle)

@@ -1611,7 +1611,6 @@ class LlmService(private val context: Context) {
                     modelId = activeModel.id,
                     latencyMs = latency,
                     tokensPerSecond = finalTps,
-                    confidence = 0f,
                     preferenceMode = currentPreferenceMode.id
                 )
 
@@ -1960,7 +1959,6 @@ class LlmService(private val context: Context) {
                 modelId = activeModel.id,
                 latencyMs = latency,
                 tokensPerSecond = finalTps,
-                confidence = finalResult.confidence,
                 preferenceMode = currentPreferenceMode.id
             )
 

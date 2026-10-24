@@ -5,12 +5,13 @@
 
 ## Arbeitsprotokoll – erledigte Änderungen und Nachweise
 
-| 24.10.2026 | in Vorbereitung | Entfernt: erfundene Modell-Erklärungen und das feste Confidence-Default; chronologische Ablage nimmt ein Jahr nur aus OCR-Text, andernfalls `Jahr_unbekannt`. | CI-Nachweis folgt nach Commit; kein Gerätetest behauptet. |
+| 24.10.2026 | `5cba4ebf` / `2b0f91ab` | Erfundenes Reasoning entfernt, Confidence-Default auf „nicht verfügbar“ gesetzt, hartkodiertes Ablagejahr entfernt; veraltete Tests an die ehrliche Erklärung angepasst. | Run [40137078831](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40137078831) erfolgreich: APK, Unit-Tests und Instrumentierungstests. Kein physischer Gerätetest behauptet. |
 
-| 24.10.2026 | aktueller HEAD nach `fa127a80` | LLM-Audit speichert keine Absender-/Dokumenttyp-/Reasoning-/OCR-Auszüge mehr; Chat-Audit speichert nicht mehr die vollständige Nutzerfrage. Nicht kalibrierte Confidence- und geschätzte RAM/TPS-Werte werden von diesem Auditpfad nicht mehr als Messwerte gespeichert. | CI für diesen Code-Commit nach Änderung noch ausstehend. |
+| 24.10.2026 | `ea7e853c` | LLM-Audit speichert keine Absender-/Dokumenttyp-/Reasoning-/OCR-Auszüge mehr; Chat-Audit speichert nicht mehr die vollständige Nutzerfrage. | CI erfolgreich in Run [40116381900](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40116381900). |
 
 | Datum (UTC) | Commit | Erledigt | CI-Nachweis |
 |---|---|---|---|
+| 25.10.2026 | (dieser Commit) | Nicht kalibrierte Confidence wird nicht mehr als `confidence_pct` an Firebase Analytics übertragen; null-/0-Sentinel darf nicht als gemessene 0%-Qualität missverstanden werden. | CI nach diesem Commit ausstehend. |
 | 21.10.2026 | `cc372dc3` | Mehrdeutige Regel-Treffer werden an die Auswahlentscheidung weitergereicht, statt still eine Regel zu bevorzugen. | Dieser Lauf wurde durch einen nachfolgenden Commit abgebrochen; kein eigener grüner Nachweis. |
 | 21.10.2026 | `c0f0376d` | Warnhinweise vor dem Speichern überlappender Regeldefinitionen ergänzt. | GitHub Actions erfolgreich. |
 | 22.10.2026 | `c0aa4553` | Hardware-Fallbacks erfinden keine Geräteleistung mehr; unbekannte Kapazität bleibt unbekannt. | GitHub Actions erfolgreich; Debug-APK gebaut, Instrumentierungstests bestanden, APK hochgeladen. |
@@ -66,7 +67,7 @@ Alle vorgesehenen KI-Funktionen laufen wirklich lokal über das ausgewählte `.g
 
 - [ ] **L01 – Laufzeit-/APK-Inventur:** Kotlin-/JNI-Aufrufpfad, CMake, gepinntes llama.cpp-Submodul und Aufrufer sind im Repository vorhanden. Die APK-Inhalte, die tatsächlich paketierten ABI-Bibliotheken und echte GGUF-Inferenz sind noch nicht vollständig nachgewiesen.
 - [ ] **P0 – Native Wahrheit nachweisen:** Die native CMake/JNI-Integration mit gepinntem llama.cpp-Submodul ist im Quellstand vorhanden. Offen bleiben der aktuelle reproduzierbare CI-/NDK-Nachweis, tatsächliche Paketierung/Installation pro unterstützter ABI, echte GGUF-Inferenz auf `arm64-v8a` und `x86_64`, Grammar-Negativtests, wiederholte Modellaufrufe sowie der 32-Bit-Stub-/Fallback-Test.
-- [ ] **P1 – Ehrliche Laufzeit:** `LOCAL_LLM` und `RULE_FALLBACK` sind im Engine-Status getrennt; LLM-Audit persistiert keine OCR-/Dokumenttext-Auszüge und keine geschätzten RAM/TPS-/Confidence-Messwerte mehr. Offen: feste Confidence-Werte in `LlmClassificationResult`/Erklärungen entfernen, echte native TPS/RAM an die UI anbinden und aktuellen CI-/Gerätenachweis erbringen.
+- [ ] **P1 – Ehrliche Laufzeit:** `LOCAL_LLM` und `RULE_FALLBACK` sind im Engine-Status getrennt; LLM-Audit persistiert keine OCR-/Dokumenttext-Auszüge und keine geschätzten RAM/TPS-/Confidence-Messwerte mehr. Offen: das Ergebnisfeld `confidence` ist weiterhin ein `Float` mit `0f` als „nicht verfügbar“-Sentinel; UI-Pfade auf irreführende Prozentanzeige prüfen. Echte native TPS/RAM an die UI anbinden und physische Gerätetests erbringen.
 - [x] **Sicherer Regel-Treffer:** mehrere gleichzeitig passende Regeln führen nicht mehr zur willkürlichen Auswahl der zuerst gespeicherten Regel.
 - [x] **Konflikte vorbeugen:** neue, geänderte oder erneut aktivierte Regeln werden nicht gespeichert/aktiviert, wenn die Definitionen auf demselben OCR-Text gleichzeitig greifen könnten. Bereits vorhandene widersprüchliche Regeln werden beim Runtime-Matching sicher abgewiesen, müssen aber noch bereinigt werden.
 - [ ] **P2 – Smarte Regeln:** echten LLM-Regelentwurf und -verfeinerung implementieren; vorhandene Regeln semantisch berücksichtigen; freigegebene Regeln automatisch, neue/konfliktbehaftete Änderungen kontrolliert anwenden.
