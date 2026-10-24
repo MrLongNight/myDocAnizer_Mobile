@@ -1,20 +1,6 @@
 package com.example.service.llm
 
-import com.example.service.HuggingFaceModelInfo
-
 object LlmPrompts {
-
-    @Deprecated("Model reasoning must come from the actual model output; do not fabricate a chain of thought.")
-    fun buildModelReasoning(
-        activeModel: HuggingFaceModelInfo,
-        title: String,
-        sender: String,
-        docType: String,
-        mainCatId: String,
-        subCatId: String,
-        fields: Map<String, String>,
-        confidence: Float
-    ): String = "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
 
     fun extractAmountFromText(text: String): String {
         val highPriorityPattern = Regex(

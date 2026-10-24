@@ -1588,7 +1588,7 @@ class LlmService(private val context: Context) {
                 val explanation = if (dmsExtraction.reasoning.isNotBlank()) {
                     "[Team 1 Triage • ${activeModel.name}] ${dmsExtraction.reasoning}\n• Absender: $sender | Typ: $docType | ${finalCustomFields.size} Zusatzfelder"
                 } else {
-                    buildModelReasoning(activeModel, ruleName, sender, docType, mainCat, subCat, finalCustomFields, 0f)
+                    "Automatische Zuordnung anhand erkannter Dokumentmerkmale. Keine erklärende Modellantwort und keine kalibrierte Konfidenz verfügbar."
                 }
 
                 val latency = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
