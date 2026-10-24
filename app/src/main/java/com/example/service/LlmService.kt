@@ -1557,7 +1557,7 @@ class LlmService(private val context: Context) {
                     )
                 )
 
-                val sender = dmsExtraction.absender ?: detectedSender ?: "Deutsche Post"
+                val sender = dmsExtraction.absender ?: detectedSender ?: "Nicht erkannt"
                 val docType = dmsExtraction.dokumententyp ?: if (lower.contains("rechnung")) "Rechnung" else if (lower.contains("brief") || lower.contains("post")) "Brief" else "Dokument"
                 val ruleName = dmsExtraction.computeRuleName()
                 val rawCustomFields = mutableMapOf<String, String>()
@@ -1588,23 +1588,21 @@ class LlmService(private val context: Context) {
                 val explanation = if (dmsExtraction.reasoning.isNotBlank()) {
                     "[Team 1 Triage • ${activeModel.name}] ${dmsExtraction.reasoning}\n• Absender: $sender | Typ: $docType | ${finalCustomFields.size} Zusatzfelder"
                 } else {
-                    buildModelReasoning(activeModel, ruleName, sender, docType, mainCat, subCat, finalCustomFields, 0.94f)
+                    buildModelReasoning(activeModel, ruleName, sender, docType, mainCat, subCat, finalCustomFields, 0f)
                 }
 
                 val latency = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
-                val generatedTokens = (explanation.length / 3.6f).toInt().coerceAtLeast(1)
-                val safeTps = (((generatedTokens / (latency / 1000f))) * 10).toInt() / 10f
-                val finalTps = safeTps.coerceAtLeast(0.1f)
+                val finalTps = 0f // Nicht gemessen: Textlänge ist keine Token-/Inferenzmessung.
 
                 AppAuditLogger.logAiInference(
                     modelId = activeModel.id,
                     docType = docType,
                     sender = sender,
-                    confidence = 0.94f,
+                    confidence = 0f,
                     latencyMs = latency,
                     customFieldsCount = finalCustomFields.size,
                     reasoningSnippet = explanation.take(180),
-                    ramDeltaMb = 8.5f,
+                    ramDeltaMb = 0f,
                     fullReasoning = explanation,
                     tokensPerSecond = finalTps
                 )
@@ -1613,7 +1611,7 @@ class LlmService(private val context: Context) {
                     modelId = activeModel.id,
                     latencyMs = latency,
                     tokensPerSecond = finalTps,
-                    confidence = 0.94f,
+                    confidence = 0f,
                     preferenceMode = currentPreferenceMode.id
                 )
 
@@ -1626,7 +1624,7 @@ class LlmService(private val context: Context) {
                     tags = listOf("#${docType.lowercase()}", "#${sender.lowercase().replace(" ", "_")}"),
                     explanation = explanation,
                     customFields = finalCustomFields,
-                    confidence = 0.94f,
+                    confidence = 0f,
                     smartKeywords = kw,
                     modelIdUsed = activeModel.id
                 )
@@ -1637,7 +1635,7 @@ class LlmService(private val context: Context) {
                 (lower.contains("kfz") || lower.contains("kraftfahrt") || lower.contains("schadenfreiheitsklasse") ||
                  lower.contains("fahrzeugschein") || lower.contains("autoversicherung")) &&
                 (lower.contains("versicherung") || lower.contains("police") || lower.contains("beitrag")) -> {
-                    val sender = detectedSender ?: "Kfz-Versicherung"
+                    val sender = detectedSender ?: "Nicht erkannt"
                     val title = "Kfz-Versicherung $sender"
                     if (extractedPolicyNo.isNotBlank()) customFields["Policennummer"] = extractedPolicyNo
                     else if (extractedCustomerNo.isNotBlank()) customFields["Versicherungsschein-Nr."] = extractedCustomerNo
@@ -1648,7 +1646,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#kfz", "#versicherung", "#auto")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "kfz", "versicherung")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Versicherung", "A04", "B4.01", customFields, 0.96f)
+                    val explanation = buildModelReasoning(activeModel, title, sender, "Versicherung", "A04", "B4.01", customFields, 0f)
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1658,7 +1656,7 @@ class LlmService(private val context: Context) {
                         tags = tags,
                         explanation = explanation,
                         customFields = customFields,
-                        confidence = 0.96f,
+                        confidence = 0f,
                         smartKeywords = smartKeywords,
                         modelIdUsed = activeModel.id
                     )
@@ -1668,7 +1666,7 @@ class LlmService(private val context: Context) {
                 lower.contains("versicherung") || lower.contains("police") || lower.contains("versicherungsschein") ||
                 lower.contains("haftpflicht") || lower.contains("hausrat") || lower.contains("unfallversicherung") ||
                 lower.contains("lebensversicherung") || lower.contains("krankenversicherung") -> {
-                    val sender = detectedSender ?: "Versicherung"
+                    val sender = detectedSender ?: "Nicht erkannt"
                     val title = "Versicherungspolice $sender"
                     if (extractedPolicyNo.isNotBlank()) customFields["Policen- / Vertragsnummer"] = extractedPolicyNo
                     else if (extractedCustomerNo.isNotBlank()) customFields["Versicherungsnummer"] = extractedCustomerNo
@@ -1679,7 +1677,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#versicherung", "#police", "#vorsorge")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "versicherung", "police")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Versicherung", "A04", "B4.01", customFields, 0.95f)
+                    val explanation = buildModelReasoning(activeModel, title, sender, "Versicherung", "A04", "B4.01", customFields, 0f)
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1689,7 +1687,7 @@ class LlmService(private val context: Context) {
                         tags = tags,
                         explanation = explanation,
                         customFields = customFields,
-                        confidence = 0.95f,
+                        confidence = 0f,
                         smartKeywords = smartKeywords,
                         modelIdUsed = activeModel.id
                     )
@@ -1699,7 +1697,7 @@ class LlmService(private val context: Context) {
                 lower.contains("stadtwerke") || lower.contains("strom") || lower.contains("gasabrechnung") ||
                 lower.contains("energieabrechnung") || lower.contains("zählerstand") || lower.contains("abschlagsplan") ||
                 lower.contains("vattenfall") || lower.contains("eon ") || lower.contains("e.on") || lower.contains("enbw") -> {
-                    val sender = detectedSender ?: "Energieversorger"
+                    val sender = detectedSender ?: "Nicht erkannt"
                     val title = "Energieabrechnung $sender"
                     if (extractedAmount.isNotBlank()) customFields["Rechnungsbetrag"] = extractedAmount
                     if (extractedDueDate.isNotBlank()) customFields["Fälligkeit"] = extractedDueDate
@@ -1712,7 +1710,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#energie", "#strom", "#stadtwerke", "#fixkosten")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "energie", "strom", "verbrauch")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Rechnung", "A02", "B2.02", customFields, 0.95f)
+                    val explanation = buildModelReasoning(activeModel, title, sender, "Rechnung", "A02", "B2.02", customFields, 0f)
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1722,7 +1720,7 @@ class LlmService(private val context: Context) {
                         tags = tags,
                         explanation = explanation,
                         customFields = customFields,
-                        confidence = 0.95f,
+                        confidence = 0f,
                         smartKeywords = smartKeywords,
                         modelIdUsed = activeModel.id
                     )
@@ -1744,7 +1742,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#mobilfunk", "#internet", "#telekommunikation")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "rechnung", "mobilfunk")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Rechnung", "A02", "B2.01", customFields, 0.96f)
+                    val explanation = buildModelReasoning(activeModel, title, sender, "Rechnung", "A02", "B2.01", customFields, 0f)
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1754,7 +1752,7 @@ class LlmService(private val context: Context) {
                         tags = tags,
                         explanation = explanation,
                         customFields = customFields,
-                        confidence = 0.96f,
+                        confidence = 0f,
                         smartKeywords = smartKeywords,
                         modelIdUsed = activeModel.id
                     )
@@ -1764,7 +1762,7 @@ class LlmService(private val context: Context) {
                 lower.contains("rechnung") || lower.contains("abrechnung") || lower.contains("fälligkeit") ||
                 lower.contains("zahlbar bis") || lower.contains("gesamtbetrag") || lower.contains("rechnungsbetrag") ||
                 lower.contains("offener betrag") || lower.contains("zahlung") || lower.contains("fälliger betrag") -> {
-                    val sender = detectedSender ?: "Rechnungssteller"
+                    val sender = detectedSender ?: "Nicht erkannt"
                     val title = "Rechnung $sender"
                     if (extractedAmount.isNotBlank()) customFields["Rechnungsbetrag"] = extractedAmount
                     if (extractedDueDate.isNotBlank()) customFields["Fälligkeit"] = extractedDueDate
@@ -1775,7 +1773,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#rechnung", "#abrechnung", "#finanzen")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "rechnung", "betrag")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Rechnung", "A02", "B2.01", customFields, 0.95f)
+                    val explanation = buildModelReasoning(activeModel, title, sender, "Rechnung", "A02", "B2.01", customFields, 0f)
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1785,7 +1783,7 @@ class LlmService(private val context: Context) {
                         tags = tags,
                         explanation = explanation,
                         customFields = customFields,
-                        confidence = 0.95f,
+                        confidence = 0f,
                         smartKeywords = smartKeywords,
                         modelIdUsed = activeModel.id
                     )
@@ -1794,7 +1792,7 @@ class LlmService(private val context: Context) {
                 // 6. Allgemeine Verträge & Vereinbarungen
                 lower.contains("vertrag") || lower.contains("vereinbarung") || lower.contains("mitgliedschaft") ||
                 lower.contains("vertragslaufzeit") || lower.contains("kündigungsfrist") -> {
-                    val sender = detectedSender ?: "Vertragspartner"
+                    val sender = detectedSender ?: "Nicht erkannt"
                     val title = "Vertrag $sender"
                     if (extractedPolicyNo.isNotBlank()) customFields["Vertragsnummer"] = extractedPolicyNo
                     else if (extractedCustomerNo.isNotBlank()) customFields["Kundennummer"] = extractedCustomerNo
@@ -1804,7 +1802,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#vertrag", "#vereinbarung")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "vertrag")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Vertrag", "A02", "B2.03", customFields, 0.94f)
+                    val explanation = buildModelReasoning(activeModel, title, sender, "Vertrag", "A02", "B2.03", customFields, 0f)
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1814,7 +1812,7 @@ class LlmService(private val context: Context) {
                         tags = tags,
                         explanation = explanation,
                         customFields = customFields,
-                        confidence = 0.94f,
+                        confidence = 0f,
                         smartKeywords = smartKeywords,
                         modelIdUsed = activeModel.id
                     )
@@ -1835,7 +1833,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#behörde", "#bescheid", "#amtlich", "#steuern")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "bescheid", "finanzamt")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Bescheid", "A03", "B3.04", customFields, 0.94f)
+                    val explanation = buildModelReasoning(activeModel, title, sender, "Bescheid", "A03", "B3.04", customFields, 0f)
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1845,7 +1843,7 @@ class LlmService(private val context: Context) {
                         tags = tags,
                         explanation = explanation,
                         customFields = customFields,
-                        confidence = 0.94f,
+                        confidence = 0f,
                         smartKeywords = smartKeywords,
                         modelIdUsed = activeModel.id
                     )
@@ -1855,7 +1853,7 @@ class LlmService(private val context: Context) {
                 lower.contains("gehalt") || lower.contains("entgelt") || lower.contains("brutto") ||
                 lower.contains("netto") || lower.contains("lohnabrechnung") || lower.contains("bezügemitteilung") ||
                 lower.contains("monatsabrechnung") -> {
-                    val sender = detectedSender ?: "Arbeitgeber"
+                    val sender = detectedSender ?: "Nicht erkannt"
                     val title = "Gehaltsabrechnung"
                     if (extractedAmount.isNotBlank()) customFields["Auszahlungsbetrag (Netto)"] = extractedAmount
                     if (extractedDocDate.isNotBlank()) customFields["Abrechnungsmonat"] = extractedDocDate
@@ -1863,7 +1861,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#gehalt", "#finanzen", "#einkommen")
                     val smartKeywords = listOf("gehalt", "lohnabrechnung", "netto")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Gehaltsabrechnung", "A03", "B3.02", customFields, 0.96f)
+                    val explanation = buildModelReasoning(activeModel, title, sender, "Gehaltsabrechnung", "A03", "B3.02", customFields, 0f)
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1873,7 +1871,7 @@ class LlmService(private val context: Context) {
                         tags = tags,
                         explanation = explanation,
                         customFields = customFields,
-                        confidence = 0.96f,
+                        confidence = 0f,
                         smartKeywords = smartKeywords,
                         modelIdUsed = activeModel.id
                     )
@@ -1882,7 +1880,7 @@ class LlmService(private val context: Context) {
                 // 9. Quittungen & Kassenbelege
                 lower.contains("quittung") || lower.contains("kassenbon") || lower.contains("kassenzettel") ||
                 lower.contains("bon-nr") || lower.contains("tse-signatur") || lower.contains("zwischensumme") -> {
-                    val sender = detectedSender ?: "Einzelhandel"
+                    val sender = detectedSender ?: "Nicht erkannt"
                     val title = "Kassenbeleg $sender"
                     if (extractedAmount.isNotBlank()) customFields["Gesamtbetrag"] = extractedAmount
                     if (extractedDocDate.isNotBlank()) customFields["Belegdatum"] = extractedDocDate
@@ -1890,7 +1888,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#quittung", "#beleg", "#kassenzettel", "#ausgaben")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "kassenbon", "beleg")
 
-                    val explanation = buildModelReasoning(activeModel, title, sender, "Beleg", "A03", "B3.03", customFields, 0.93f)
+                    val explanation = buildModelReasoning(activeModel, title, sender, "Beleg", "A03", "B3.03", customFields, 0f)
                     LlmClassificationResult(
                         title = title,
                         sender = sender,
@@ -1900,7 +1898,7 @@ class LlmService(private val context: Context) {
                         tags = tags,
                         explanation = explanation,
                         customFields = customFields,
-                        confidence = 0.93f,
+                        confidence = 0f,
                         smartKeywords = smartKeywords,
                         modelIdUsed = activeModel.id
                     )
@@ -1908,7 +1906,7 @@ class LlmService(private val context: Context) {
 
                 // 10. Sonstige Dokumente
                 else -> {
-                    val sender = detectedSender ?: "Posteingang"
+                    val sender = detectedSender ?: "Nicht erkannt"
                     val firstSignificantLine = ocrText.lines()
                         .map { it.trim() }
                         .firstOrNull { it.length in 5..45 && !it.contains("seite", ignoreCase = true) } ?: "Dokument"
@@ -1921,7 +1919,7 @@ class LlmService(private val context: Context) {
                     val tags = listOf("#scan", "#dokument")
                     val smartKeywords = listOfNotNull(sender.lowercase().split(" ").firstOrNull(), "dokument")
 
-                    val explanation = buildModelReasoning(activeModel, cleanTitle, sender, "Sonstiges", "A01", "B1.01", customFields, 0.85f)
+                    val explanation = buildModelReasoning(activeModel, cleanTitle, sender, "Sonstiges", "A01", "B1.01", customFields, 0f)
                     LlmClassificationResult(
                         title = cleanTitle,
                         sender = sender,
@@ -1931,7 +1929,7 @@ class LlmService(private val context: Context) {
                         tags = tags,
                         explanation = explanation,
                         customFields = customFields,
-                        confidence = 0.85f,
+                        confidence = 0f,
                         smartKeywords = smartKeywords,
                         modelIdUsed = activeModel.id
                     )
@@ -1942,12 +1940,8 @@ class LlmService(private val context: Context) {
             val finalResult = result.copy(customFields = harmonization.harmonizedFields)
 
             val latency = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
-            val rt = Runtime.getRuntime()
-            val usedMemMb = ((rt.totalMemory() - rt.freeMemory()) / (1024f * 1024f)).coerceAtLeast(0.5f)
-            val roundedMemDelta = ((usedMemMb * 10).toInt() / 10f)
-            val generatedTokens = (finalResult.explanation.length / 3.6f).toInt().coerceAtLeast(1)
-            val safeTps = (((generatedTokens / (latency / 1000f))) * 10).toInt() / 10f
-            val finalTps = safeTps.coerceAtLeast(0.1f)
+            val roundedMemDelta = 0f // Nicht gemessen: Heapbelegung ist keine RAM-Delta-Messung.
+            val finalTps = 0f // Nicht gemessen: Erklärungslänge ist keine Token-/Inferenzmessung.
 
             AppAuditLogger.logAiInference(
                 modelId = activeModel.id,
@@ -2163,6 +2157,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
 
         try {
             val lower = ocrText.take(15000).lowercase()
+            val chronologicalYear = Regex("\\b(?:19|20)\\d{2}\\b").find(ocrText)?.value ?: "Jahr_unbekannt"
             val extractedAmount = LlmPrompts.extractAmountFromText(ocrText)
             val extractedDueDate = LlmPrompts.extractDueDateFromText(ocrText)
             val extractedDocDate = LlmPrompts.extractDocumentDateFromText(ocrText)
@@ -2252,26 +2247,24 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                 val suggestedPath = dmsExtraction.vorgeschlagenerPfad ?: when (effectiveStrategy) {
                     FolderStrategy.BY_SENDER -> "$sender/$docType"
                     FolderStrategy.BY_CATEGORY -> "$mainCat/$docType"
-                    FolderStrategy.CHRONOLOGICAL -> "2026/$docType"
+                    FolderStrategy.CHRONOLOGICAL -> "$chronologicalYear/$docType"
                     FolderStrategy.FLAT -> "Dokumente"
                 }
 
                 val explanation = "[Team 2 Tiefenanalyse • ${targetDept.displayName} • ${activeModel.name}] ${dmsExtraction.reasoning}\n• Absender: $sender | Typ: $docType | Pfad: $suggestedPath | ${finalCustomFields.size} globale Zusatzfelder"
 
                 val latency = (System.currentTimeMillis() - startTime).coerceAtLeast(1)
-                val generatedTokens = (explanation.length / 3.6f).toInt().coerceAtLeast(1)
-                val safeTps = (((generatedTokens / (latency / 1000f))) * 10).toInt() / 10f
-                val finalTps = safeTps.coerceAtLeast(0.1f)
+                val finalTps = 0f // Nicht gemessen: Textlänge ist keine Token-/Inferenzmessung.
 
                 AppAuditLogger.logAiInference(
                     modelId = activeModel.id,
                     docType = docType,
                     sender = sender,
-                    confidence = 0.98f,
+                    confidence = 0f,
                     latencyMs = latency,
                     customFieldsCount = finalCustomFields.size,
                     reasoningSnippet = explanation.take(180),
-                    ramDeltaMb = 18.0f,
+                    ramDeltaMb = 0f,
                     fullReasoning = explanation,
                     tokensPerSecond = finalTps
                 )
@@ -2280,7 +2273,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                     modelId = activeModel.id,
                     latencyMs = latency,
                     tokensPerSecond = finalTps,
-                    confidence = 0.98f,
+                    confidence = 0f,
                     preferenceMode = currentPreferenceMode.id
                 )
 
@@ -2293,7 +2286,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                     tags = listOf("#${docType.lowercase()}", "#${sender.lowercase().replace(" ", "_")}"),
                     explanation = explanation,
                     customFields = finalCustomFields,
-                    confidence = 0.98f,
+                    confidence = 0f,
                     smartKeywords = dmsExtraction.matchKeywords.ifEmpty { listOf(sender.lowercase(), docType.lowercase()) },
                     modelIdUsed = activeModel.id,
                     suggestedFolderPath = suggestedPath
@@ -2321,7 +2314,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                 sender = finalSender,
                 explanation = "[Team 2 Tiefenanalyse • ${targetDept.displayName}] Detaillierte Extraktion mit ${mergedFields.size} Zusatzfeldern abgeschlossen. Vorgeschlagener Pfad: $fallbackPath",
                 customFields = mergedFields,
-                confidence = 0.96f,
+                confidence = 0f,
                 suggestedFolderPath = fallbackPath
             )
         } finally {
