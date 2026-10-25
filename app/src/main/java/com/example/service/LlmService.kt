@@ -2261,7 +2261,6 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                     modelId = activeModel.id,
                     latencyMs = latency,
                     tokensPerSecond = finalTps,
-                    confidence = 0f,
                     preferenceMode = currentPreferenceMode.id
                 )
 
