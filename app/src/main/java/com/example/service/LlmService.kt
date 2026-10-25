@@ -2140,7 +2140,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
             category = LogCategory.AI_INFERENCE,
             tag = "SecondRunInference",
             message = "Starte ${targetDept.displayName} Tiefenanalyse mit '${activeModel.name}' (${activeModel.quantFormat})",
-            details = "Modell: ${activeModel.id} | Strategie: ${effectiveStrategy.title} | Whitelist-Felder: ${whitelistedCustomFields.size} | Korrektur: ${userCorrection ?: "Keine"}"
+            details = "Modell: ${activeModel.id} | Strategie: ${effectiveStrategy.title} | Whitelist-Felder: ${whitelistedCustomFields.size} | Nutzerkorrektur vorhanden: ${!userCorrection.isNullOrBlank()}"
         )
 
         try {
