@@ -1552,6 +1552,8 @@ class LlmService(private val context: Context) {
                     whitelistedCustomFields = effectiveWhitelistedFields,
                     params = LlamaCppInferenceEngine.InferenceParams(
                         temperature = config.temperature,
+                        topP = config.topP,
+                        maxTokens = config.maxTokens,
                         threads = config.threadCount,
                         grammar = null
                     )
