@@ -1575,7 +1575,7 @@ class LlmService(private val context: Context) {
                     docType == "Rechnung" -> "A02"
                     docType == "Vertrag" || docType == "Versicherung" -> "A04"
                     docType == "Gehaltsabrechnung" || docType == "Steuerbescheid" -> "A03"
-                    else -> "A01"
+                    else -> "" // Unbekannter Typ: keine erfundene Standardkategorie
                 }
                 val subCat = when (docType) {
                     "Rechnung" -> "B2.01"
@@ -1583,7 +1583,7 @@ class LlmService(private val context: Context) {
                     "Versicherung" -> "B4.01"
                     "Gehaltsabrechnung" -> "B3.02"
                     "Steuerbescheid" -> "B3.04"
-                    else -> "B1.01"
+                    else -> "" // Unbekannter Typ: keine erfundene Standard-Unterkategorie
                 }
 
                 val kw = if (dmsExtraction.matchKeywords.isNotEmpty()) dmsExtraction.matchKeywords else listOfNotNull(sender.lowercase().split(" ").firstOrNull(), docType.lowercase())
@@ -2236,7 +2236,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
 
                 val suggestedPath = dmsExtraction.vorgeschlagenerPfad ?: when (effectiveStrategy) {
                     FolderStrategy.BY_SENDER -> "$sender/$docType"
-                    FolderStrategy.BY_CATEGORY -> "$mainCat/$docType"
+                    FolderStrategy.BY_CATEGORY -> if (mainCat.isNotBlank()) "$mainCat/$docType" else docType
                     FolderStrategy.CHRONOLOGICAL -> "$chronologicalYear/$docType"
                     FolderStrategy.FLAT -> "Dokumente"
                 }
