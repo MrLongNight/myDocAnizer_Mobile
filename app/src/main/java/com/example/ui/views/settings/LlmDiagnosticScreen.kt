@@ -95,7 +95,7 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
                 modelFile = modelFile,
                 userMessage = "Antworte exakt mit LLM-DIAGNOSE-OK.",
                 systemPrompt = "Du bist ein kurzer Funktionstest.",
-                params = LlamaCppInferenceEngine.InferenceParams(maxTokens = 24, threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 6))
+                params = LlamaCppInferenceEngine.InferenceParams(maxTokens = 24, threads = 2)
             )
         }
         _status.value = "Testprompt abgeschlossen; Modus=" + engine.lastInferenceMode

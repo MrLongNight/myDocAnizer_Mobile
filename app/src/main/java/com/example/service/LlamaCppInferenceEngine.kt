@@ -455,7 +455,7 @@ ws ::= [ \t\n\r]*
         val temperature: Float = 0.1f,
         val topP: Float = 0.9f,
         val maxTokens: Int = 512,
-        val threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(2, 6),
+        val threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
         val gpuLayers: Int = 0,
         /**
          * Optional grammar. Keep disabled until the grammar is validated against the
