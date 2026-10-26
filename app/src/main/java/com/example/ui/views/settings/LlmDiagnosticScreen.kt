@@ -144,9 +144,9 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
             val file = modelFile
             val result = coroutineScope {
                 listOf(
-                    async { measure("PARALLEL-CHAT") { value -> engine.executeChatInferenceWithTools(file, "Fasse kurz zusammen: " + value.take(500), params = LlamaCppInferenceEngine.InferenceParams(maxTokens = 96)); "Chat-Aufruf" } },
-                    async { measure("PARALLEL-ANALYSE") { value -> service.classifyDocumentFirstRun(value); "First-Run-Analyse" } },
-                    async { measure("PARALLEL-RE-RUN") { value -> service.classifyDocumentSecondRun(value); "Second-Run-Analyse" } }
+                    async { measure("PARALLEL-CHAT", text) { value -> engine.executeChatInferenceWithTools(file, "Fasse kurz zusammen: " + value.take(500), params = LlamaCppInferenceEngine.InferenceParams(maxTokens = 96)); "Chat-Aufruf" } },
+                    async { measure("PARALLEL-ANALYSE", text) { value -> service.classifyDocumentFirstRun(value); "First-Run-Analyse" } },
+                    async { measure("PARALLEL-RE-RUN", text) { value -> service.classifyDocumentSecondRun(value); "Second-Run-Analyse" } }
                 ).map { it.await() }
             }
             _rows.value = _rows.value + result
@@ -215,14 +215,14 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         }
     }
 
-    private suspend fun measure(name: String, action: suspend (String) -> String): LlmDiagnosticRow = withContext(Dispatchers.IO) {
+    private suspend fun measure(name: String, inputText: String? = null, action: suspend (String) -> String): LlmDiagnosticRow = withContext(Dispatchers.IO) {
         val before = HeapSample.capture()
         val start = SystemClock.elapsedRealtime()
         var detail = ""
         var status = "OK"
         var stack = ""
         try {
-            withTimeout(DOC_TIMEOUT_MS) { detail = action(read(name)) }
+            withTimeout(DOC_TIMEOUT_MS) { detail = action(inputText ?: read(name)) }
             if (engine.lastInferenceMode == LlamaCppInferenceEngine.InferenceMode.RULE_FALLBACK || detail.contains("pipelineFallback=true")) status = "FALLBACK"
         } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
             status = "TIMEOUT"; detail = timeout.message ?: "Timeout"; stack = Log.getStackTraceString(timeout)
