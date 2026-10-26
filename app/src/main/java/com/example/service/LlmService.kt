@@ -2219,11 +2219,11 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                 }
 
                 val mainCat = when {
-                    dmsExtraction.kategorieVorschlag != null -> dmsExtraction.kategorieVorschlag!!
+                    !dmsExtraction.kategorieVorschlag.isNullOrBlank() -> dmsExtraction.kategorieVorschlag!!
                     docType == "Rechnung" -> "A02"
                     docType == "Vertrag" || docType == "Versicherung" -> "A04"
                     docType == "Gehaltsabrechnung" || docType == "Steuerbescheid" -> "A03"
-                    else -> "A01"
+                    else -> "" // Unbekannter Typ: keine erfundene Standardkategorie
                 }
                 val subCat = when (docType) {
                     "Rechnung" -> "B2.01"
@@ -2231,7 +2231,7 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                     "Versicherung" -> "B4.01"
                     "Gehaltsabrechnung" -> "B3.02"
                     "Steuerbescheid" -> "B3.04"
-                    else -> "B1.01"
+                    else -> "" // Unbekannter Typ: keine erfundene Standard-Unterkategorie
                 }
 
                 val suggestedPath = dmsExtraction.vorgeschlagenerPfad ?: when (effectiveStrategy) {
