@@ -2201,6 +2201,8 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                     department = targetDept,
                     params = LlamaCppInferenceEngine.InferenceParams(
                         temperature = config.temperature,
+                        topP = config.topP,
+                        maxTokens = config.maxTokens,
                         threads = config.threadCount,
                         grammar = null
                     )
