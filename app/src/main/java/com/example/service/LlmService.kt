@@ -1555,7 +1555,8 @@ class LlmService(private val context: Context) {
                         topP = config.topP,
                         maxTokens = config.maxTokens,
                         threads = config.threadCount,
-                        grammar = null
+                        grammar = null,
+                        timeoutMs = 20_000L
                     )
                 )
 
@@ -2204,7 +2205,8 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                         topP = config.topP,
                         maxTokens = config.maxTokens,
                         threads = config.threadCount,
-                        grammar = null
+                        grammar = null,
+                        timeoutMs = 45_000L
                     )
                 )
 

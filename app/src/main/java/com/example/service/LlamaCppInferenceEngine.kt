@@ -18,6 +18,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Fachabteilungs-Teams für den Second Run (Team 2: Spezialisten-Tiefenanalyse).
@@ -456,7 +457,9 @@ ws ::= [ \t\n\r]*
          * Optional grammar. Keep disabled until the grammar is validated against the
          * pinned llama.cpp parser on the target Android ABI.
          */
-        val grammar: String? = null
+        val grammar: String? = null,
+        /** Maximum native inference duration after the native runtime starts. */
+        val timeoutMs: Long = 30_000L
     )
 
     /**
@@ -601,6 +604,7 @@ ws ::= [ \t\n\r]*
 
         try {
             _inferenceProgress.value = 0
+            val timedOut = AtomicBoolean(false)
             val resultJson = inferenceMutex.withLock {
                 System.loadLibrary("llama_android")
                 val poller = progressScope.launch {
@@ -608,6 +612,17 @@ ws ::= [ \t\n\r]*
                         val value = runCatching { nativeGetInferenceProgress() }.getOrDefault(-1)
                         if (value >= 0) _inferenceProgress.value = value
                         delay(200L)
+                    }
+                }
+                val timeoutWatcher = progressScope.launch {
+                    // Wait until this native call has actually started; otherwise an old progress value
+                    // could trigger cancellation before JNI resets its cancellation flag.
+                    while (isActive && _inferenceProgress.value !in 5..99) delay(50L)
+                    if (!isActive) return@launch
+                    delay(params.timeoutMs.coerceAtLeast(1L))
+                    if (isActive) {
+                        timedOut.set(true)
+                        requestNativeCancellation()
                     }
                 }
                 try {
@@ -623,8 +638,17 @@ ws ::= [ \t\n\r]*
                     grammar = params.grammar ?: ""
                     )
                 } finally {
+                    timeoutWatcher.cancel()
                     poller.cancel()
                 }
+            }
+            if (timedOut.get()) {
+                _inferenceProgress.value = -1
+                lastInferenceMetrics = null
+                lastFinishReason = "timeout"
+                lastInferenceMode = InferenceMode.RULE_FALLBACK
+                safeLogW(TAG, "Native llama.cpp-Inferenz überschritt das Zeitlimit (${params.timeoutMs} ms); Regel-Fallback aktiv.")
+                return@withContext executeFallbackInference(prompt, systemPrompt)
             }
             val result = JSONObject(resultJson)
             if (result.has("error")) {
