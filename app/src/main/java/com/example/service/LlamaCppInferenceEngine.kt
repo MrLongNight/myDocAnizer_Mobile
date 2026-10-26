@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.sync.withLock
@@ -581,6 +584,7 @@ ws ::= [ \t\n\r]*
     /**
      * Führt die Roh-Inferenz über llama.cpp oder die optimierte Fallback-Engine aus.
      */
+    @OptIn(InternalCoroutinesApi::class)
     suspend fun executeInference(
         modelFile: File,
         prompt: String,
@@ -614,12 +618,31 @@ ws ::= [ \t\n\r]*
                         delay(200L)
                     }
                 }
+                val cancellationRequested = AtomicBoolean(false)
+                // onCancelling fires as soon as the calling coroutine is cancelled, even while
+                // the synchronous JNI inference is blocking this coroutine.
+                val cancellationHandle = currentCoroutineContext()[Job]?.invokeOnCompletion(
+                    onCancelling = true,
+                    invokeImmediately = true
+                ) { cause ->
+                    if (cause is CancellationException) {
+                        cancellationRequested.set(true)
+                        requestNativeCancellation()
+                    }
+                }
                 val timeoutWatcher = progressScope.launch {
-                    // Wait until this native call has actually started; otherwise an old progress value
-                    // could trigger cancellation before JNI resets its cancellation flag.
+                    // Wait until native inference starts: JNI resets its cancellation flag at entry.
+                    // Re-send a pending cancellation after that reset to close the startup race.
                     while (isActive && _inferenceProgress.value !in 5..99) delay(50L)
                     if (!isActive) return@launch
-                    delay(params.timeoutMs.coerceAtLeast(1L))
+                    if (cancellationRequested.get()) requestNativeCancellation()
+                    val deadlineMs = params.timeoutMs.coerceAtLeast(1L)
+                    var elapsedMs = 0L
+                    while (isActive && elapsedMs < deadlineMs) {
+                        delay(50L)
+                        elapsedMs += 50L
+                        if (cancellationRequested.get()) requestNativeCancellation()
+                    }
                     if (isActive) {
                         timedOut.set(true)
                         requestNativeCancellation()
@@ -627,17 +650,18 @@ ws ::= [ \t\n\r]*
                 }
                 try {
                     nativeExecuteLlamaWithGrammar(
-                    modelPath = modelFile.absolutePath,
-                    prompt = prompt,
-                    systemPrompt = systemPrompt,
-                    threads = params.threads,
-                    gpuLayers = 0,
-                    temp = params.temperature,
-                    topP = params.topP,
-                    maxTokens = params.maxTokens,
-                    grammar = params.grammar ?: ""
+                        modelPath = modelFile.absolutePath,
+                        prompt = prompt,
+                        systemPrompt = systemPrompt,
+                        threads = params.threads,
+                        gpuLayers = 0,
+                        temp = params.temperature,
+                        topP = params.topP,
+                        maxTokens = params.maxTokens,
+                        grammar = params.grammar ?: ""
                     )
                 } finally {
+                    cancellationHandle?.dispose()
                     timeoutWatcher.cancel()
                     poller.cancel()
                 }
