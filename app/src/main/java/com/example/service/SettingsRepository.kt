@@ -1512,7 +1512,7 @@ class SettingsRepository(context: Context) {
             maxTokens = prefs.getInt("llm_max_tokens", 512),
             topP = prefs.getFloat("llm_top_p", 0.9f),
             systemPromptFocus = prefs.getString("llm_system_focus", "STANDARD") ?: "STANDARD",
-            threadCount = prefs.getInt("llm_threads", 4),
+            threadCount = prefs.getInt("llm_threads", 2),
             contextLength = prefs.getInt("llm_ctx_len", 2048),
             onlyShowCompatibleModels = prefs.getBoolean("llm_filter_compat", true)
         )

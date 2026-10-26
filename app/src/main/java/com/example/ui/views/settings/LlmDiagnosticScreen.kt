@@ -82,7 +82,7 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
             "Engine geladen: " + engine.nativeEngineLoaded(),
             "Geladener Modellpfad: " + (engine.nativeLoadedModelPath() ?: if (engine.inferenceProgress.value in 5..99) "Inferenz läuft (Abfrage nicht blockierend)" else "nicht geladen/unbekannt"),
             "n_ctx: " + engine.nativeContextSize(),
-            "Threads (Default): " + Runtime.getRuntime().availableProcessors().coerceIn(2, 6),
+            "Threads (Default): " + Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
             "Letzter Modus: " + engine.lastInferenceMode,
             "finish_reason: " + (engine.lastFinishReason ?: "—")
         ).joinToString("\n")
@@ -138,19 +138,30 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
     suspend fun runParallel() {
         if (_running.value) return
         _running.value = true
-        _status.value = "Lauf 2/3: Chat + Analyse + Re-Run"
+        _status.value = "Lauf 2/3: Chat + Analyse + Re-Run (nacheinander, eine native Engine)"
         try {
             val text = read(assets().first())
             val file = modelFile
-            val result = coroutineScope {
-                listOf(
-                    async { measure("PARALLEL-CHAT", text) { value -> engine.executeChatInferenceWithTools(file, "Fasse kurz zusammen: " + value.take(500), params = LlamaCppInferenceEngine.InferenceParams(maxTokens = 96)); "Chat-Aufruf" } },
-                    async { measure("PARALLEL-ANALYSE", text) { value -> service.classifyDocumentFirstRun(value); "First-Run-Analyse" } },
-                    async { measure("PARALLEL-RE-RUN", text) { value -> service.classifyDocumentSecondRun(value); "Second-Run-Analyse" } }
-                ).map { it.await() }
-            }
+            // One process-wide llama.cpp engine and shared last-run metrics cannot provide
+            // three independent native inferences at once. Running these as async siblings
+            // only queues them behind the native mutex and races the shared diagnostics state.
+            // Exercise all three entry points sequentially to avoid CPU saturation and false results.
+            val result = listOf(
+                measure("CHAT-SEQUENZIELL", text) { value ->
+                    engine.executeChatInferenceWithTools(file, "Fasse kurz zusammen: " + value.take(500), params = LlamaCppInferenceEngine.InferenceParams(maxTokens = 96, threads = 2))
+                    "Chat-Aufruf"
+                },
+                measure("ANALYSE-SEQUENZIELL", text) { value ->
+                    service.classifyDocumentFirstRun(value)
+                    "First-Run-Analyse"
+                },
+                measure("RE-RUN-SEQUENZIELL", text) { value ->
+                    service.classifyDocumentSecondRun(value)
+                    "Second-Run-Analyse"
+                }
+            )
             _rows.value = _rows.value + result
-            _status.value = "Parallellauf abgeschlossen; native Engine serialisiert Inferenz intern"
+            _status.value = "Sequenztest abgeschlossen; alle drei Aufrufwege separat gemessen"
         } catch (cancelled: CancellationException) {
             _status.value = "Parallellauf abgebrochen"
             throw cancelled

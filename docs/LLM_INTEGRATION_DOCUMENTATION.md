@@ -175,7 +175,7 @@ Der App-Katalog enthält 12 konfigurierte GGUF-Modell-Einträge; Quelle, tatsäc
 
 Im **Experten-Modus** (`isExpertMode`) können Inferenz-Parameter über `LlmInferenceConfig` angepasst werden:
 
-* `threadCount`: Anzahl der CPU-Inferenz-Threads (Standard: Automatisch nach CPU-Kernen, meist 4–6 Threads).
+* `threadCount`: Anzahl der CPU-Inferenz-Threads (Standard: 2; bei Bedarf im Experten-Modus erhöhen).
 * `temperature`: Zufälligkeit der Generierung (Standard: `0.1` für deterministische, reproduzierbare Metadaten-Extraktion).
 * `topP`: Top-P Nukleus-Sampling (Standard: `0.9`).
 * `maxTokens`: Maximale Antwortlänge (Standard: `512` Tokens).

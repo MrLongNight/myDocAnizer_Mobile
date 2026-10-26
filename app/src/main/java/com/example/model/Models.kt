@@ -1406,7 +1406,7 @@ data class LlmInferenceConfig(
     val maxTokens: Int = 512, // 128, 256, 512, 1024
     val topP: Float = 0.9f,
     val systemPromptFocus: String = "STANDARD", // ID aus SYSTEM_PROMPT_FOCUS_OPTIONS
-    val threadCount: Int = 4, // 1, 2, 4, 8 CPU-Threads
+    val threadCount: Int = 2, // 1, 2, 4, 8 CPU-Threads; conservative default for on-device inference
     val contextLength: Int = 2048, // 1024, 2048, 4096
     val onlyShowCompatibleModels: Boolean = true // Hardware-Filter
 ) {
