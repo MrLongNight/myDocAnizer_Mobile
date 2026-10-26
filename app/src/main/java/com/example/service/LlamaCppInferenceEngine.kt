@@ -362,7 +362,6 @@ ws ::= [ \t\n\r]*
             folderStrategy: FolderStrategy = FolderStrategy.BY_CATEGORY
         ): DmsExtractionResponse {
             val lower = ocrText.lowercase()
-            val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
             val detectedSender = when {
                 DocRuleRepository.containsKeywordMatch(lower, "congstar") -> "congstar"
                 DocRuleRepository.containsKeywordMatch(lower, "deutsche post") || DocRuleRepository.containsKeywordMatch(lower, "postbank") -> "Deutsche Post"
@@ -408,13 +407,15 @@ ws ::= [ \t\n\r]*
             val catSuggestion = when (detectedType) {
                 "Rechnung", "Gehaltsabrechnung", "Kassenbeleg" -> "Finanzen"
                 "Vertrag", "Bescheid" -> "Verträge"
-                else -> "Post & Dokumente"
+                "Brief" -> "Post & Dokumente"
+                else -> null
             }
 
+            val groundedYear = Regex("\\b(?:19|20)\\d{2}\\b").find(ocrText)?.value
             val suggestedPath = when (folderStrategy) {
-                FolderStrategy.BY_SENDER -> "${detectedSender ?: "Dokumente"}/$detectedType"
-                FolderStrategy.BY_CATEGORY -> "$catSuggestion/$detectedType"
-                FolderStrategy.CHRONOLOGICAL -> "$currentYear/$detectedType"
+                FolderStrategy.BY_SENDER -> detectedSender?.let { "$it/$detectedType" } ?: detectedType
+                FolderStrategy.BY_CATEGORY -> catSuggestion?.let { "$it/$detectedType" } ?: detectedType
+                FolderStrategy.CHRONOLOGICAL -> groundedYear?.let { "$it/$detectedType" } ?: detectedType
                 FolderStrategy.FLAT -> "Dokumente"
             }
 
@@ -820,14 +821,14 @@ ws ::= [ \t\n\r]*
                 matchKeywords = matchKeywords,
                 kategorieVorschlag = catSuggestion,
                 vorgeschlagenerPfad = pathSuggestion ?: run {
-                    val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
-                    val snd = absender ?: "Dokumente"
-                    val typ = docType ?: "Allgemein"
-                    val cat = catSuggestion ?: "Finanzen"
+                    val typ = docType?.takeIf { it.isNotBlank() } ?: "Dokument"
+                    val senderPath = absender?.takeIf { it.isNotBlank() }?.let { "$it/$typ" } ?: typ
+                    val categoryPath = catSuggestion?.takeIf { it.isNotBlank() }?.let { "$it/$typ" } ?: typ
+                    val groundedYear = Regex("\\b(?:19|20)\\d{2}\\b").find(fallbackOcrText)?.value
                     when (folderStrategy) {
-                        FolderStrategy.BY_SENDER -> "$snd/$typ"
-                        FolderStrategy.BY_CATEGORY -> "$cat/$typ"
-                        FolderStrategy.CHRONOLOGICAL -> "$currentYear/$typ"
+                        FolderStrategy.BY_SENDER -> senderPath
+                        FolderStrategy.BY_CATEGORY -> categoryPath
+                        FolderStrategy.CHRONOLOGICAL -> groundedYear?.let { "$it/$typ" } ?: typ
                         FolderStrategy.FLAT -> "Dokumente"
                     }
                 },
