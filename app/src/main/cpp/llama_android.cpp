@@ -27,6 +27,7 @@ std::mutex g_mutex;
 std::atomic<int> g_inference_progress{-1};
 std::atomic<bool> g_cancel_requested{false};
 Engine * g_engine = nullptr;
+std::atomic<bool> g_engine_loaded{false};
 bool g_backend_ready = false;
 
 std::string from_jstring(JNIEnv * env, jstring value) {
@@ -68,6 +69,7 @@ std::string error_json(const std::string & message) {
 }
 
 void release_engine() {
+    g_engine_loaded.store(false, std::memory_order_relaxed);
     if (!g_engine) return;
     if (g_engine->context) llama_free(g_engine->context);
     if (g_engine->model) llama_model_free(g_engine->model);
@@ -114,6 +116,7 @@ bool ensure_engine(const std::string & model_path, int threads, std::string & er
     }
 
     g_engine = engine;
+    g_engine_loaded.store(true, std::memory_order_relaxed);
     return true;
 }
 
@@ -321,13 +324,15 @@ Java_com_example_service_LlamaCppInferenceEngine_nativeUnloadEngine(JNIEnv *, jo
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_example_service_LlamaCppInferenceEngine_nativeIsEngineLoaded(JNIEnv *, jobject) {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    return (g_engine && g_engine->model && g_engine->context) ? JNI_TRUE : JNI_FALSE;
+    // Never block the UI thread behind the long-running inference mutex.
+    return g_engine_loaded.load(std::memory_order_relaxed) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_example_service_LlamaCppInferenceEngine_nativeGetLoadedModelPath(JNIEnv * env, jobject) {
-    std::lock_guard<std::mutex> lock(g_mutex);
+    // Diagnostics can run on the main thread; return immediately while inference owns the mutex.
+    std::unique_lock<std::mutex> lock(g_mutex, std::try_to_lock);
+    if (!lock.owns_lock()) return env->NewStringUTF("__INFERENCE_BUSY__");
     const std::string path = (g_engine && g_engine->model) ? g_engine->model_path : std::string();
     return env->NewStringUTF(path.c_str());
 }

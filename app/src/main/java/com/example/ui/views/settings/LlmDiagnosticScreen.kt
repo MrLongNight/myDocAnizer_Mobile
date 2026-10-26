@@ -80,7 +80,7 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
             "Java-Heap: " + heap.java + " Bytes",
             "Native-Heap: " + heap.native + " Bytes",
             "Engine geladen: " + engine.nativeEngineLoaded(),
-            "Geladener Modellpfad: " + (engine.nativeLoadedModelPath() ?: "nicht geladen/unbekannt"),
+            "Geladener Modellpfad: " + (engine.nativeLoadedModelPath() ?: if (engine.inferenceProgress.value in 5..99) "Inferenz läuft (Abfrage nicht blockierend)" else "nicht geladen/unbekannt"),
             "n_ctx: " + engine.nativeContextSize(),
             "Threads (Default): " + Runtime.getRuntime().availableProcessors().coerceIn(2, 6),
             "Letzter Modus: " + engine.lastInferenceMode,
@@ -236,7 +236,8 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
     private fun row(name: String, start: Long, before: HeapSample, status: String, detail: String, stack: String = ""): LlmDiagnosticRow {
         val after = HeapSample.capture()
         val mode = if (engine.lastInferenceMode == LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM) "LLM" else "Fallback"
-        return LlmDiagnosticRow(name, SystemClock.elapsedRealtime() - start, mode, engine.lastFinishReason ?: if (status == "FALLBACK") "fallback" else "unknown", engine.lastInferenceMetrics?.generatedTokens ?: 0, before.java, after.java, before.native, after.native, status, detail, stack)
+        val finishReason = when (status) { "FEHLER" -> "error"; "TIMEOUT" -> "timeout"; "ABGEBROCHEN" -> "cancelled"; else -> engine.lastFinishReason ?: if (status == "FALLBACK") "fallback" else "unknown" }
+        return LlmDiagnosticRow(name, SystemClock.elapsedRealtime() - start, mode, finishReason, engine.lastInferenceMetrics?.generatedTokens ?: 0, before.java, after.java, before.native, after.native, status, detail, stack)
     }
 
     private fun errorRow(name: String, error: Throwable): LlmDiagnosticRow {
@@ -277,7 +278,7 @@ fun LlmDiagnosticScreen(viewModel: DocAnizerViewModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(enabled = !running, onClick = { activeJob = scope.launch { runCatching { runner.testPrompt() }; snapshot = runner.snapshot() } }) { Icon(Icons.Default.PlayArrow, null); Text("Modell laden") }
                 OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch { runCatching { runner.testPrompt() }; snapshot = runner.snapshot() } }) { Text("Testprompt") }
-                OutlinedButton(enabled = !running, onClick = { runner.unload(); snapshot = runner.snapshot() }) { Icon(Icons.Default.Memory, null); Text("Entladen") }
+                OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch(Dispatchers.IO) { runner.unload(); withContext(Dispatchers.Main) { snapshot = runner.snapshot() } } }) { Icon(Icons.Default.Memory, null); Text("Entladen") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(enabled = !running, onClick = { activeJob = scope.launch { runner.runSequential() } }) { Text("Stresstest 20") }

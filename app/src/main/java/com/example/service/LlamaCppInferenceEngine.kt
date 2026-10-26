@@ -131,7 +131,7 @@ class LlamaCppInferenceEngine(private val context: Context) {
         private set
 
     fun nativeEngineLoaded(): Boolean = runCatching { nativeIsEngineLoaded() }.getOrDefault(false)
-    fun nativeLoadedModelPath(): String? = runCatching { nativeGetLoadedModelPath().takeIf { it.isNotBlank() } }.getOrNull()
+    fun nativeLoadedModelPath(): String? = runCatching { nativeGetLoadedModelPath().takeIf { it.isNotBlank() && it != "__INFERENCE_BUSY__" } }.getOrNull()
     fun nativeContextSize(): Int = runCatching { nativeGetContextSize() }.getOrDefault(2048)
     fun requestNativeCancellation() {
         try { nativeCancelInference() } catch (_: Throwable) { }
