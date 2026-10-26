@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.sync.withLock
@@ -661,6 +662,14 @@ ws ::= [ \t\n\r]*
                 isError = false
             )
             output
+        } catch (e: CancellationException) {
+            // Coroutine cancellation must propagate; never turn it into a successful rule fallback.
+            requestNativeCancellation()
+            _inferenceProgress.value = -1
+            lastInferenceMetrics = null
+            lastFinishReason = "cancelled"
+            lastInferenceMode = InferenceMode.NOT_RUN
+            throw e
         } catch (e: LinkageError) {
             _inferenceProgress.value = -1
             lastInferenceMetrics = null
