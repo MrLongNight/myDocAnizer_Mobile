@@ -1,9 +1,18 @@
 # Lokale LLM-Funktionen – Live-Todo
 
-**Stand:** 23.10.2026 · **Branch:** `main` · **Pflegepflicht:** Nach jedem Arbeitsblock Aufgabenstatus, Commit und CI-Nachweis hier aktualisieren. Ein grüner CI-Build belegt keinen realen Gerätetest.
+**Stand:** 27.10.2026 · **Branch:** `main` · **Pflegepflicht:** Nach jedem Arbeitsblock Aufgabenstatus, Commit und CI-Nachweis hier aktualisieren. Ein grüner CI-Build belegt keinen realen Gerätetest.
 **Statusbegriffe:** ✅ belegt/erledigt · 🟡 teilweise belegt · ⛔ blockiert/offen
 
 ## Arbeitsprotokoll – erledigte Änderungen und Nachweise
+
+## Aktueller Arbeitsblock – native Inferenz-Stabilität (27.10.2026)
+
+| Commit | Änderung | Nachweis / Grenze |
+|---|---|---|
+| `0ad72c4` | Native Thread-Zahl auf höchstens vier begrenzt; OCR-Grounding-Tests ergänzt; Diagnosetests als sequenziell gekennzeichnet. | CI [40457467980](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40457467980) erfolgreich (Build, Unit-Tests und Instrumentierungstests). |
+| `cca9865` | Native Inferenz-Timeouts werden in der Diagnose als `TIMEOUT` statt als gewöhnlicher Fallback gezählt. | CI [40501214099](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40501214099) erfolgreich (Build, Unit-Tests und Instrumentierungstests). |
+| `c7ace6d` | llama.cpp-Abbruch-Callback prüft das atomare Abbruchsignal auch während der Prompt-Auswertung; abgebrochene Prompt-Auswertung liefert `finish_reason=cancelled`. | CI-Lauf [40518199671](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40518199671) war beim letzten Check noch aktiv; Ergebnis ausstehend. Physischer Gerätetest und tatsächlicher ANR-Nachweis bleiben offen. |
+
 
 | 24.10.2026 | `5cba4ebf` / `2b0f91ab` | Erfundenes Reasoning entfernt, Confidence-Default auf „nicht verfügbar“ gesetzt, hartkodiertes Ablagejahr entfernt; veraltete Tests an die ehrliche Erklärung angepasst. | Run [40137078831](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40137078831) erfolgreich: APK, Unit-Tests und Instrumentierungstests. Kein physischer Gerätetest behauptet. |
 

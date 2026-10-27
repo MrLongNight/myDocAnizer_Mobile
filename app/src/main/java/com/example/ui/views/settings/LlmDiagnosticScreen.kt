@@ -198,7 +198,7 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
 
     fun cancelMessage() {
         engine.requestNativeCancellation()
-        _status.value = "Abbruchsignal an native Token-Generierung gesendet; Prompt-Evaluation selbst ist synchron"
+        _status.value = "Abbruchsignal an native Prompt-Evaluation und Token-Generierung gesendet"
     }
 
     fun report(): String = buildString {
