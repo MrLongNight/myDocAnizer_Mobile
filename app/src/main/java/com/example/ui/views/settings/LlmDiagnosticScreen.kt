@@ -89,16 +89,36 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
     }
 
     suspend fun testPrompt() {
-        _status.value = "Testprompt läuft"
-        withTimeout(DOC_TIMEOUT_MS) {
-            engine.executeChatInferenceWithTools(
-                modelFile = modelFile,
-                userMessage = "Antworte exakt mit LLM-DIAGNOSE-OK.",
-                systemPrompt = "Du bist ein kurzer Funktionstest.",
-                params = LlamaCppInferenceEngine.InferenceParams(maxTokens = 24, threads = 2)
-            )
+        if (_running.value) return
+        _running.value = true
+        _status.value = "Testprompt läuft: Modell wird bei Bedarf geladen und eine kurze Antwort erzeugt"
+        try {
+            val response = withTimeout(DOC_TIMEOUT_MS) {
+                engine.executeChatInferenceWithTools(
+                    modelFile = modelFile,
+                    userMessage = "Antworte exakt mit LLM-DIAGNOSE-OK.",
+                    systemPrompt = "Du bist ein kurzer Funktionstest.",
+                    params = LlamaCppInferenceEngine.InferenceParams(maxTokens = 24, threads = 2, temperature = 0f)
+                )
+            }
+            val mode = engine.lastInferenceMode
+            val markerFound = response.contains("LLM-DIAGNOSE-OK", ignoreCase = true)
+            _status.value = when {
+                mode != LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM ->
+                    "TEST NICHT BESTANDEN: Es lief nur der Regel-/Fallbackpfad (Modus=$mode, finish_reason=${engine.lastFinishReason ?: "—"})."
+                !markerFound ->
+                    "LLM wurde aufgerufen, aber die erwartete Testantwort fehlt. Antwort: " + response.take(180)
+                else ->
+                    "NATIVER LLM-TEST BESTANDEN: Testmarker gefunden; finish_reason=${engine.lastFinishReason ?: "—"}."
+            }
+        } catch (cancelled: CancellationException) {
+            _status.value = "Testprompt abgebrochen"
+            throw cancelled
+        } catch (error: Throwable) {
+            _status.value = "TEST FEHLGESCHLAGEN: ${error.javaClass.simpleName}: ${error.message ?: "keine Fehlermeldung"}"
+        } finally {
+            _running.value = false
         }
-        _status.value = "Testprompt abgeschlossen; Modus=" + engine.lastInferenceMode
     }
 
     fun unload() {
@@ -295,8 +315,8 @@ fun LlmDiagnosticScreen(viewModel: DocAnizerViewModel) {
             Text("Nur Debug-Build. Kein Kamerazugriff, kein Dialog, keine Speicherung im echten Tresor.", style = MaterialTheme.typography.bodySmall)
             Text(snapshot, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = !running, onClick = { activeJob = scope.launch { runCatching { runner.testPrompt() }; snapshot = runner.snapshot() } }) { Icon(Icons.Default.PlayArrow, null); Text("Modell laden") }
-                OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch { runCatching { runner.testPrompt() }; snapshot = runner.snapshot() } }) { Text("Testprompt") }
+                Button(enabled = !running, onClick = { activeJob = scope.launch { runCatching { runner.testPrompt() }; snapshot = runner.snapshot() } }) { Icon(Icons.Default.PlayArrow, null); Text("Modell laden + Test") }
+                OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch { runCatching { runner.testPrompt() }; snapshot = runner.snapshot() } }) { Text("Testprompt wiederholen") }
                 OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch(Dispatchers.IO) { runner.unload(); withContext(Dispatchers.Main) { snapshot = runner.snapshot() } } }) { Icon(Icons.Default.Memory, null); Text("Entladen") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
