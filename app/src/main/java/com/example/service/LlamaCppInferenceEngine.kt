@@ -785,17 +785,32 @@ ws ::= [ \t\n\r]*
             val json = JSONObject(jsonStr)
 
             val reasoning = json.optString("_reasoning", "")
-            val absender = json.optString("absender", "").takeIf { it.isNotBlank() && it != "null" }
-            val docType = json.optString("dokumententyp", "").takeIf { it.isNotBlank() && it != "null" }
-            val catSuggestion = json.optString("kategorie_vorschlag", "").takeIf { it.isNotBlank() && it != "null" }
-            val pathSuggestion = json.optString("vorgeschlagener_pfad", "").takeIf { it.isNotBlank() && it != "null" }
+            // Free-text fields are accepted only when the value can be found in OCR.
+            // Small on-device models often invent sender names or plausible-looking paths.
+            val normalizedOcr = fallbackOcrText.filter { it.isLetterOrDigit() }.lowercase()
+            fun groundedCandidate(raw: String): String? {
+                val candidate = raw.trim()
+                if (candidate.isBlank() || candidate.equals("null", ignoreCase = true)) return null
+                val normalized = candidate.filter { it.isLetterOrDigit() }.lowercase()
+                return candidate.takeIf { normalized.isNotBlank() && normalizedOcr.contains(normalized) }
+            }
+            val absender = groundedCandidate(json.optString("absender", ""))
+            val docType = groundedCandidate(json.optString("dokumententyp", ""))
+            val rawCategory = json.optString("kategorie_vorschlag", "").trim()
+            val catSuggestion = when (rawCategory.filter { it.isLetterOrDigit() }.lowercase()) {
+                "finanzen" -> "Finanzen"
+                "verträge", "vertrage" -> "Verträge"
+                "steuern" -> "Steuern"
+                "postdokumente" -> "Post & Dokumente"
+                else -> null
+            }
 
             val matchKeywords = mutableListOf<String>()
             val kwArray = json.optJSONArray("match_keywords")
             if (kwArray != null) {
                 for (i in 0 until kwArray.length()) {
                     val kw = kwArray.optString(i, "").trim().lowercase()
-                    if (kw.isNotBlank() && kw != "null") {
+                    if (kw.isNotBlank() && kw != "null" && normalizedOcr.contains(kw.filter { it.isLetterOrDigit() })) {
                         matchKeywords.add(kw)
                     }
                 }
@@ -808,7 +823,7 @@ ws ::= [ \t\n\r]*
                 while (keys.hasNext()) {
                     val k = keys.next()
                     val v = fieldsObj.optString(k, "").trim()
-                    if (v.isNotBlank() && v != "null") {
+                    if (v.isNotBlank() && v != "null" && groundedCandidate(v) != null) {
                         customFields[k] = v
                     }
                 }
@@ -820,10 +835,12 @@ ws ::= [ \t\n\r]*
                 dokumententyp = docType,
                 matchKeywords = matchKeywords,
                 kategorieVorschlag = catSuggestion,
-                vorgeschlagenerPfad = pathSuggestion ?: run {
+                // Ignore the model's free-form path: it may contain invented folder names.
+                // Construct a path only from grounded fields and a year present in OCR.
+                vorgeschlagenerPfad = run {
                     val typ = docType?.takeIf { it.isNotBlank() } ?: "Dokument"
-                    val senderPath = absender?.takeIf { it.isNotBlank() }?.let { "$it/$typ" } ?: typ
-                    val categoryPath = catSuggestion?.takeIf { it.isNotBlank() }?.let { "$it/$typ" } ?: typ
+                    val senderPath = absender?.let { "$it/$typ" } ?: typ
+                    val categoryPath = catSuggestion?.let { "$it/$typ" } ?: typ
                     val groundedYear = Regex("\\b(?:19|20)\\d{2}\\b").find(fallbackOcrText)?.value
                     when (folderStrategy) {
                         FolderStrategy.BY_SENDER -> senderPath
