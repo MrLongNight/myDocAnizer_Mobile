@@ -278,8 +278,16 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         setStatus("Abbruchsignal an native Prompt-Evaluation und Token-Generierung gesendet")
     }
 
+    fun noteExportResult(message: String) {
+        _status.value = message
+        logScope.launch { persistLiveReport() }
+    }
+
     fun report(): String = buildString {
         appendLine("LLM-Diagnose")
+        appendLine("Berichtsversion=2")
+        appendLine("Exportzeitpunkt=" + java.time.Instant.now().toString())
+        appendLine("Hinweis=Der Bericht darf auch während eines laufenden oder festhängenden Tests exportiert werden.")
         appendLine("Zeitpunkt (Epoch-ms)=" + System.currentTimeMillis())
         appendLine("Status=" + _status.value)
         appendLine("Läuft=" + _running.value)
@@ -370,8 +378,19 @@ fun LlmDiagnosticScreen(viewModel: DocAnizerViewModel) {
     var activeJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var snapshot by remember { mutableStateOf("") }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
-        if (uri != null) runCatching {
-            context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(runner.report()) }
+        if (uri == null) {
+            runner.noteExportResult("Logexport abgebrochen: kein Speicherziel ausgewählt")
+        } else {
+            val result = runCatching {
+                val content = runner.report()
+                val output = context.contentResolver.openOutputStream(uri)
+                    ?: error("Android hat keinen Dateiausgabestrom bereitgestellt")
+                output.bufferedWriter(Charsets.UTF_8).use { it.write(content) }
+            }
+            runner.noteExportResult(
+                if (result.isSuccess) "LOG EXPORTIERT: Diagnosebericht wurde gespeichert."
+                else "LOG-EXPORT FEHLGESCHLAGEN: ${result.exceptionOrNull()?.javaClass?.simpleName}: ${result.exceptionOrNull()?.message ?: "unbekannter Dateifehler"}"
+            )
         }
     }
     LaunchedEffect(Unit) { snapshot = runner.snapshot() }
@@ -397,7 +416,7 @@ fun LlmDiagnosticScreen(viewModel: DocAnizerViewModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(enabled = running, onClick = { activeJob?.cancel(); runner.cancelMessage() }) { Icon(Icons.Default.Stop, null); Text("Stop") }
                 OutlinedButton(onClick = { snapshot = runner.snapshot() }) { Text("Aktualisieren") }
-                OutlinedButton(enabled = running || rows.isNotEmpty(), onClick = { export.launch("LLM-Diagnose.txt") }) { Icon(Icons.Default.UploadFile, null); Text(if (running) "Live-Log exportieren" else "Export") }
+                OutlinedButton(onClick = { export.launch("LLM-Diagnose.txt") }) { Icon(Icons.Default.UploadFile, null); Text(if (running) "Live-Log speichern" else "Log exportieren") }
             }
             Text("Status: " + status)
             Text("OK " + rows.count { it.status == "OK" } + " · Fallback " + rows.count { it.status == "FALLBACK" } + " · Timeout " + rows.count { it.status == "TIMEOUT" } + " · Fehler " + rows.count { it.status == "FEHLER" })
