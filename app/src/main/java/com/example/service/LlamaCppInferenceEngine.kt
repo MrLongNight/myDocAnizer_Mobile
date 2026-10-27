@@ -632,21 +632,24 @@ ws ::= [ \t\n\r]*
                     }
                 }
                 val timeoutWatcher = progressScope.launch {
-                    // Wait until native inference starts: JNI resets its cancellation flag at entry.
-                    // Re-send a pending cancellation after that reset to close the startup race.
-                    while (isActive && _inferenceProgress.value !in 5..99) delay(50L)
-                    if (!isActive) return@launch
-                    if (cancellationRequested.get()) requestNativeCancellation()
+                    // The deadline starts before entering JNI, not after model loading.
+                    // Loading/initialization can stall before progress reaches 5; waiting for
+                    // that progress first would leave the timeout disabled indefinitely.
                     val deadlineMs = params.timeoutMs.coerceAtLeast(1L)
                     var elapsedMs = 0L
-                    while (isActive && elapsedMs < deadlineMs) {
+                    var deadlineReached = false
+                    while (isActive) {
                         delay(50L)
                         elapsedMs += 50L
-                        if (cancellationRequested.get()) requestNativeCancellation()
-                    }
-                    if (isActive) {
-                        timedOut.set(true)
-                        requestNativeCancellation()
+                        if (!deadlineReached && elapsedMs >= deadlineMs) {
+                            deadlineReached = true
+                            timedOut.set(true)
+                        }
+                        // JNI resets its cancellation flag at entry. Re-send cancellation
+                        // after the deadline so a slow native startup cannot swallow the signal.
+                        if (deadlineReached || cancellationRequested.get()) {
+                            requestNativeCancellation()
+                        }
                     }
                 }
                 try {
