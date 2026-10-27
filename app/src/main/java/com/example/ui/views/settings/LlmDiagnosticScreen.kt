@@ -190,8 +190,9 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
             for ((index, name) in names.withIndex()) {
                 val ocrText = read(name)
                 setStatus("OCR-Stresstest: " + (index + 1) + "/" + names.size + " – First-Run: " + name)
-                val matchCount = rules.matchingRules(ocrText).size
+                var matchCount = 0
                 val firstRow = measure("$name / First-Run", ocrText) { text ->
+                    matchCount = rules.matchingRules(text).size
                     service.classifyDocumentFirstRun(text)
                     "Regeltreffer=" + matchCount +
                         "; mode=" + engine.lastInferenceMode +
