@@ -30,6 +30,12 @@ Engine * g_engine = nullptr;
 std::atomic<bool> g_engine_loaded{false};
 bool g_backend_ready = false;
 
+// llama.cpp calls this during prompt evaluation and token generation. Unlike the
+// Kotlin timeout watcher, this can interrupt a long synchronous llama_decode().
+bool should_abort_inference(void *) {
+    return g_cancel_requested.load(std::memory_order_relaxed);
+}
+
 std::string from_jstring(JNIEnv * env, jstring value) {
     if (!value) return {};
     const char * chars = env->GetStringUTFChars(value, nullptr);
@@ -107,6 +113,8 @@ bool ensure_engine(const std::string & model_path, int threads, std::string & er
     context_params.n_threads = threads;
     context_params.n_threads_batch = threads;
     context_params.op_offload = false;
+    context_params.abort_callback = should_abort_inference;
+    context_params.abort_callback_data = nullptr;
     engine->context = llama_init_from_model(engine->model, context_params);
     if (!engine->context) {
         error = "llama.cpp could not create an inference context";
@@ -253,6 +261,9 @@ std::string run_inference(
     if (llama_decode(g_engine->context, batch) != 0) {
         llama_sampler_free(sampler);
         g_inference_progress.store(-1, std::memory_order_relaxed);
+        if (g_cancel_requested.load(std::memory_order_relaxed)) {
+            return "{\"text\":\"\",\"tokensGenerated\":0,\"finish_reason\":\"cancelled\",\"promptEvalTimeMs\":0,\"generateTimeMs\":0,\"tokensPerSecond\":0}";
+        }
         return error_json("llama.cpp failed while evaluating the OCR prompt");
     }
     const int64_t prompt_end_us = llama_time_us();
