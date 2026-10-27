@@ -28,6 +28,9 @@ import com.example.service.LlamaCppInferenceEngine
 import com.example.service.LlmService
 import com.example.ui.DocAnizerViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -37,6 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withTimeout
+import java.io.File
 import java.io.FileInputStream
 
 private const val DOC_TIMEOUT_MS = 90_000L
@@ -63,9 +67,55 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
     val running = _running.asStateFlow()
     private val _status = MutableStateFlow("Bereit")
     val status = _status.asStateFlow()
+    private val _activeStep = MutableStateFlow("—")
+    @Volatile private var activeStartedAtMs = 0L
+    private val logFile = File(context.cacheDir, "llm-diagnostic-live.txt")
+    private val logLock = Any()
+    private val logScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var heartbeatJob: Job? = null
     private val engine get() = service.llamaCppEngine
     private val selectedModel get() = service.getSelectedModel()
     private val modelFile get() = service.getModelFile(selectedModel.id)
+
+    private fun setStatus(value: String) {
+        _status.value = value
+        logScope.launch { persistLiveReport() }
+    }
+
+    private fun markStep(name: String) {
+        _activeStep.value = name
+        activeStartedAtMs = SystemClock.elapsedRealtime()
+        logScope.launch { persistLiveReport() }
+    }
+
+    private fun startTracking() {
+        if (heartbeatJob?.isActive == true) return
+        heartbeatJob = logScope.launch {
+            while (_running.value) {
+                persistLiveReport()
+                delay(1_000L)
+            }
+            persistLiveReport()
+        }
+    }
+
+    private fun stopTracking() {
+        _activeStep.value = "—"
+        activeStartedAtMs = 0L
+        _running.value = false
+        logScope.launch { persistLiveReport() }
+    }
+
+    private fun persistLiveReport() {
+        runCatching {
+            val content = report()
+            synchronized(logLock) {
+                logFile.writeText(content, Charsets.UTF_8)
+            }
+        }.onFailure {
+            Log.e("LlmDiagnostic", "Live-Protokoll konnte nicht aktualisiert werden: ${it.javaClass.simpleName}: ${it.message}")
+        }
+    }
 
     fun snapshot(): String {
         val file = modelFile
@@ -84,14 +134,17 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
             "n_ctx: " + engine.nativeContextSize(),
             "Threads (Default): " + Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
             "Letzter Modus: " + engine.lastInferenceMode,
-            "finish_reason: " + (engine.lastFinishReason ?: "—")
+            "finish_reason: " + (engine.lastFinishReason ?: "—"),
+            "Live-Log: " + logFile.absolutePath
         ).joinToString("\n")
     }
 
     suspend fun testPrompt() {
         if (_running.value) return
         _running.value = true
-        _status.value = "Testprompt läuft: Modell wird bei Bedarf geladen und eine kurze Antwort erzeugt"
+        markStep("TESTPROMPT")
+        setStatus("Testprompt läuft: Modell wird bei Bedarf geladen und eine kurze Antwort erzeugt")
+        startTracking()
         try {
             val response = withTimeout(DOC_TIMEOUT_MS) {
                 engine.executeChatInferenceWithTools(
@@ -103,37 +156,39 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
             }
             val mode = engine.lastInferenceMode
             val markerFound = response.contains("LLM-DIAGNOSE-OK", ignoreCase = true)
-            _status.value = when {
+            setStatus(when {
                 mode != LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM ->
                     "TEST NICHT BESTANDEN: Es lief nur der Regel-/Fallbackpfad (Modus=$mode, finish_reason=${engine.lastFinishReason ?: "—"})."
                 !markerFound ->
                     "LLM wurde aufgerufen, aber die erwartete Testantwort fehlt. Antwort: " + response.take(180)
                 else ->
                     "NATIVER LLM-TEST BESTANDEN: Testmarker gefunden; finish_reason=${engine.lastFinishReason ?: "—"}."
-            }
+            })
         } catch (cancelled: CancellationException) {
-            _status.value = "Testprompt abgebrochen"
+            setStatus("Testprompt abgebrochen")
             throw cancelled
         } catch (error: Throwable) {
-            _status.value = "TEST FEHLGESCHLAGEN: ${error.javaClass.simpleName}: ${error.message ?: "keine Fehlermeldung"}"
+            setStatus("TEST FEHLGESCHLAGEN: ${error.javaClass.simpleName}: ${error.message ?: "keine Fehlermeldung"}")
         } finally {
-            _running.value = false
+            stopTracking()
         }
     }
 
     fun unload() {
         engine.unloadNativeEngine()
-        _status.value = "Native Engine entladen"
+        setStatus("Native Engine entladen")
     }
 
     suspend fun runSequential() {
         if (_running.value) return
         _running.value = true
         _rows.value = emptyList()
+        setStatus("OCR-Stresstest wird vorbereitet")
+        startTracking()
         try {
             val names = assets()
             for ((index, name) in names.withIndex()) {
-                _status.value = "Lauf 1/3: " + (index + 1) + "/" + names.size + " – " + name
+                setStatus("Lauf 1/3: " + (index + 1) + "/" + names.size + " – " + name)
                 _rows.value = _rows.value + measure(name) { text ->
                     val matchCount = rules.matchingRules(text).size
                     service.classifyDocumentFirstRun(text)
@@ -148,17 +203,18 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
                     "Regeltreffer=" + matchCount + "; firstMode=" + firstMode + "; firstFinish=" + firstFinish + "; firstTokens=" + firstTokens + "; secondMode=" + secondMode + "; secondFinish=" + secondFinish + "; secondTokens=" + secondTokens + "; pipelineFallback=" + anyFallback + "; Vorschlag nur im Arbeitsspeicher, nicht gespeichert"
                 }
             }
-            _status.value = "Lauf 1/3 abgeschlossen"
+            setStatus("Lauf 1/3 abgeschlossen")
         } catch (cancelled: CancellationException) {
-            _status.value = "Lauf abgebrochen"
+            setStatus("Lauf abgebrochen")
             throw cancelled
-        } finally { _running.value = false }
+        } finally { stopTracking() }
     }
 
     suspend fun runParallel() {
         if (_running.value) return
         _running.value = true
-        _status.value = "Lauf 2/3: Chat + Analyse + Re-Run (nacheinander, eine native Engine)"
+        setStatus("Lauf 2/3: Chat + Analyse + Re-Run (nacheinander, eine native Engine)")
+        startTracking()
         try {
             val text = read(assets().first())
             val file = modelFile
@@ -181,20 +237,21 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
                 }
             )
             _rows.value = _rows.value + result
-            _status.value = "Sequenztest abgeschlossen; alle drei Aufrufwege separat gemessen"
+            setStatus("Sequenztest abgeschlossen; alle drei Aufrufwege separat gemessen")
         } catch (cancelled: CancellationException) {
-            _status.value = "Parallellauf abgebrochen"
+            setStatus("Sequenztest abgebrochen")
             throw cancelled
         } catch (error: Throwable) {
-            _rows.value = _rows.value + errorRow("PARALLEL", error)
-            _status.value = "Parallellauf mit Fehler beendet"
-        } finally { _running.value = false }
+            _rows.value = _rows.value + errorRow("SEQUENZTEST", error)
+            setStatus("Sequenztest mit Fehler beendet")
+        } finally { stopTracking() }
     }
 
     suspend fun runAbortTest() {
         if (_running.value) return
         _running.value = true
-        _status.value = "Lauf 3/3: Langtext mit 1,5-s-Abbruchfenster"
+        setStatus("Lauf 3/3: Langtext mit 1,5-s-Abbruchfenster")
+        startTracking()
         try {
             val name = assets().firstOrNull { it.contains("langer_ocrtext") } ?: assets().last()
             val before = HeapSample.capture()
@@ -212,17 +269,24 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
             }
             val wasCancelled = engine.lastFinishReason == "cancelled"
             _rows.value = _rows.value + row(name, start, before, if (wasCancelled) "ABGEBROCHEN" else "OK", if (wasCancelled) "Native Token-Generierung hat Abbruchsignal verarbeitet" else "Analyse vor Abbruchsignal abgeschlossen")
-            _status.value = "Abbruchtest abgeschlossen"
-        } finally { _running.value = false }
+            setStatus("Abbruchtest abgeschlossen")
+        } finally { stopTracking() }
     }
 
     fun cancelMessage() {
         engine.requestNativeCancellation()
-        _status.value = "Abbruchsignal an native Prompt-Evaluation und Token-Generierung gesendet"
+        setStatus("Abbruchsignal an native Prompt-Evaluation und Token-Generierung gesendet")
     }
 
     fun report(): String = buildString {
         appendLine("LLM-Diagnose")
+        appendLine("Zeitpunkt (Epoch-ms)=" + System.currentTimeMillis())
+        appendLine("Status=" + _status.value)
+        appendLine("Läuft=" + _running.value)
+        appendLine("Aktiver Schritt=" + _activeStep.value)
+        appendLine("Aktive Schrittzeit=" + if (activeStartedAtMs > 0L) (SystemClock.elapsedRealtime() - activeStartedAtMs).toString() + " ms" else "—")
+        appendLine("Native Inferenzfortschritt=" + engine.inferenceProgress.value)
+        appendLine("Live-Log-Datei=" + logFile.absolutePath)
         appendLine(snapshot())
         appendLine()
         appendLine("OK=" + _rows.value.count { it.status == "OK" })
@@ -247,7 +311,9 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
     }
 
     private suspend fun measure(name: String, inputText: String? = null, action: suspend (String) -> String): LlmDiagnosticRow = withContext(Dispatchers.IO) {
+        markStep(name)
         val before = HeapSample.capture()
+        persistLiveReport()
         val start = SystemClock.elapsedRealtime()
         var detail = ""
         var status = "OK"
@@ -265,7 +331,11 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
             }
         } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
             status = "TIMEOUT"; detail = timeout.message ?: "Timeout"; stack = Log.getStackTraceString(timeout)
-        } catch (cancelled: CancellationException) { throw cancelled
+        } catch (cancelled: CancellationException) {
+            // The heartbeat log preserves this active step even if cancellation interrupts
+            // native inference before a normal result row can be returned.
+            setStatus("Schritt abgebrochen: " + name)
+            throw cancelled
         } catch (error: Throwable) {
             status = "FEHLER"; detail = error.message ?: error.javaClass.simpleName; stack = Log.getStackTraceString(error)
         }
@@ -327,7 +397,7 @@ fun LlmDiagnosticScreen(viewModel: DocAnizerViewModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(enabled = running, onClick = { activeJob?.cancel(); runner.cancelMessage() }) { Icon(Icons.Default.Stop, null); Text("Stop") }
                 OutlinedButton(onClick = { snapshot = runner.snapshot() }) { Text("Aktualisieren") }
-                OutlinedButton(enabled = rows.isNotEmpty(), onClick = { export.launch("LLM-Diagnose.txt") }) { Icon(Icons.Default.UploadFile, null); Text("Export") }
+                OutlinedButton(enabled = running || rows.isNotEmpty(), onClick = { export.launch("LLM-Diagnose.txt") }) { Icon(Icons.Default.UploadFile, null); Text(if (running) "Live-Log exportieren" else "Export") }
             }
             Text("Status: " + status)
             Text("OK " + rows.count { it.status == "OK" } + " · Fallback " + rows.count { it.status == "FALLBACK" } + " · Timeout " + rows.count { it.status == "TIMEOUT" } + " · Fehler " + rows.count { it.status == "FEHLER" })
