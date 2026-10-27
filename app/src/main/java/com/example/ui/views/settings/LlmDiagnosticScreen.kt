@@ -188,22 +188,32 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         try {
             val names = assets()
             for ((index, name) in names.withIndex()) {
-                setStatus("Lauf 1/3: " + (index + 1) + "/" + names.size + " – " + name)
-                _rows.value = _rows.value + measure(name) { text ->
-                    val matchCount = rules.matchingRules(text).size
+                val ocrText = read(name)
+                setStatus("OCR-Stresstest: " + (index + 1) + "/" + names.size + " – First-Run: " + name)
+                val matchCount = rules.matchingRules(ocrText).size
+                val firstRow = measure("$name / First-Run", ocrText) { text ->
                     service.classifyDocumentFirstRun(text)
-                    val firstMode = engine.lastInferenceMode
-                    val firstTokens = engine.lastInferenceMetrics?.generatedTokens ?: 0
-                    val firstFinish = engine.lastFinishReason ?: "unknown"
-                    service.classifyDocumentSecondRun(text)
-                    val secondMode = engine.lastInferenceMode
-                    val secondTokens = engine.lastInferenceMetrics?.generatedTokens ?: 0
-                    val secondFinish = engine.lastFinishReason ?: "unknown"
-                    val anyFallback = firstMode != LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM || secondMode != LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM
-                    "Regeltreffer=" + matchCount + "; firstMode=" + firstMode + "; firstFinish=" + firstFinish + "; firstTokens=" + firstTokens + "; secondMode=" + secondMode + "; secondFinish=" + secondFinish + "; secondTokens=" + secondTokens + "; pipelineFallback=" + anyFallback + "; Vorschlag nur im Arbeitsspeicher, nicht gespeichert"
+                    "Regeltreffer=" + matchCount +
+                        "; mode=" + engine.lastInferenceMode +
+                        "; finish_reason=" + (engine.lastFinishReason ?: "unknown") +
+                        "; tokens=" + (engine.lastInferenceMetrics?.generatedTokens ?: 0) +
+                        "; Pipeline=First-Run; Vorschlag nicht gespeichert"
                 }
+                _rows.value = _rows.value + firstRow
+                logScope.launch { persistLiveReport() }
+
+                setStatus("OCR-Stresstest: " + (index + 1) + "/" + names.size + " – Second-Run: " + name)
+                val secondRow = measure("$name / Second-Run", ocrText) { text ->
+                    service.classifyDocumentSecondRun(text)
+                    "mode=" + engine.lastInferenceMode +
+                        "; finish_reason=" + (engine.lastFinishReason ?: "unknown") +
+                        "; tokens=" + (engine.lastInferenceMetrics?.generatedTokens ?: 0) +
+                        "; Pipeline=Second-Run; Vorschlag nicht gespeichert"
+                }
+                _rows.value = _rows.value + secondRow
+                logScope.launch { persistLiveReport() }
             }
-            setStatus("Lauf 1/3 abgeschlossen")
+            setStatus("OCR-Stresstest abgeschlossen: " + names.size + " Texte, First- und Second-Run getrennt protokolliert")
         } catch (cancelled: CancellationException) {
             setStatus("Lauf abgebrochen")
             throw cancelled
