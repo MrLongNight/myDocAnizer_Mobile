@@ -292,8 +292,8 @@ fun LlmDiagnosticScreen(viewModel: DocAnizerViewModel) {
                 OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch(Dispatchers.IO) { runner.unload(); withContext(Dispatchers.Main) { snapshot = runner.snapshot() } } }) { Icon(Icons.Default.Memory, null); Text("Entladen") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = !running, onClick = { activeJob = scope.launch { runner.runSequential() } }) { Text("Stresstest 20") }
-                OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch { runner.runParallel() } }) { Text("3 parallel") }
+                Button(enabled = !running, onClick = { activeJob = scope.launch { runner.runSequential() } }) { Text("OCR-Stresstest (20)") }
+                OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch { runner.runParallel() } }) { Text("3 Aufrufwege (sequenziell)") }
                 OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch { runner.runAbortTest() } }) { Text("Abbruchtest") }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
