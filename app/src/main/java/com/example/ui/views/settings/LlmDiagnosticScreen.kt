@@ -218,6 +218,9 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         } catch (cancelled: CancellationException) {
             setStatus("Lauf abgebrochen")
             throw cancelled
+        } catch (error: Throwable) {
+            _rows.value = _rows.value + errorRow("OCR-STRESSTEST", error)
+            setStatus("OCR-STRESSTEST FEHLGESCHLAGEN: " + error.javaClass.simpleName + ": " + (error.message ?: "keine Fehlermeldung"))
         } finally { stopTracking() }
     }
 
@@ -270,7 +273,12 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
             coroutineScope {
                 val cancelJob = launch {
                     delay(1_500L)
-                    engine.requestNativeCancellation()
+                    // A one-shot signal can be swallowed if JNI resets the cancellation
+                    // flag while initializing. Repeat until the inference call returns.
+                    while (isActive) {
+                        engine.requestNativeCancellation()
+                        delay(100L)
+                    }
                 }
                 try {
                     service.classifyDocumentSecondRun(read(name))
@@ -279,8 +287,20 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
                 }
             }
             val wasCancelled = engine.lastFinishReason == "cancelled"
-            _rows.value = _rows.value + row(name, start, before, if (wasCancelled) "ABGEBROCHEN" else "OK", if (wasCancelled) "Native Token-Generierung hat Abbruchsignal verarbeitet" else "Analyse vor Abbruchsignal abgeschlossen")
-            setStatus("Abbruchtest abgeschlossen")
+            val resultRow = row(
+                name, start, before,
+                if (wasCancelled) "ABGEBROCHEN" else "OK",
+                if (wasCancelled) "Native Inferenz hat das wiederholte Abbruchsignal verarbeitet"
+                else "Analyse vor erfolgreichem Abbruchnachweis abgeschlossen; finish_reason=" + (engine.lastFinishReason ?: "unknown")
+            )
+            _rows.value = _rows.value + resultRow
+            setStatus(if (wasCancelled) "Abbruchtest erfolgreich: Native Inferenz abgebrochen" else "Abbruchtest beendet, aber Abbruch wurde nicht bestätigt")
+        } catch (cancelled: CancellationException) {
+            setStatus("Abbruchtest durch Benutzer gestoppt")
+            throw cancelled
+        } catch (error: Throwable) {
+            _rows.value = _rows.value + errorRow("ABBRUCHTEST", error)
+            setStatus("ABBRUCHTEST FEHLGESCHLAGEN: " + error.javaClass.simpleName + ": " + (error.message ?: "keine Fehlermeldung"))
         } finally { stopTracking() }
     }
 

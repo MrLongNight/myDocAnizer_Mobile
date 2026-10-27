@@ -5,14 +5,13 @@
 
 ## Arbeitsprotokoll – erledigte Änderungen und Nachweise
 
-## Aktueller Arbeitsblock – native Inferenz-Stabilität (27.10.2026)
+## Aktueller Arbeitsblock – native Inferenz-Stabilität (28.10.2026)
 
 | Commit | Änderung | Nachweis / Grenze |
 |---|---|---|
-| `0ad72c4` | Native Thread-Zahl auf höchstens vier begrenzt; OCR-Grounding-Tests ergänzt; Diagnosetests als sequenziell gekennzeichnet. | CI [40457467980](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40457467980) erfolgreich (Build, Unit-Tests und Instrumentierungstests). |
-| `cca9865` | Native Inferenz-Timeouts werden in der Diagnose als `TIMEOUT` statt als gewöhnlicher Fallback gezählt. | CI [40501214099](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40501214099) erfolgreich (Build, Unit-Tests und Instrumentierungstests). |
-| `c7ace6d` | llama.cpp-Abbruch-Callback prüft das atomare Abbruchsignal auch während der Prompt-Auswertung; abgebrochene Prompt-Auswertung liefert `finish_reason=cancelled`. | CI-Lauf [40518199671](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40518199671) wurde durch einen nachfolgenden Push abgebrochen; der Lauf [40518523982](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40518523982) baute die native Bibliothek, scheiterte aber an einem hostzeitabhängigen Scanner-Performance-Test (235/236 Unit-Tests bestanden). Daher wird dieser Test stabilisiert und die native Änderung erneut komplett geprüft. Physischer Gerätetest und tatsächlicher ANR-Nachweis bleiben offen. |
-
+| `4766f9a` | Inferenz-Timeout läuft bereits vor dem Eintritt in JNI; Abbruchsignal wird nach Ablauf wiederholt gesendet, auch wenn Modellinitialisierung noch nicht den üblichen Fortschrittswert erreicht hat. | CI [40596217303](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40596217303) erfolgreich (APK, Unit- und Instrumentierungstests). Geräteeffekt weiterhin nicht belegt. |
+| `eafdf67` / `f9614ec` | OCR-Stresstest protokolliert First-Run und Second-Run als getrennte Zeilen; Regeltrefferzählung bleibt im IO-Kontext. | Lauf [40600196114](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40600196114) wurde durch den folgenden Push abgebrochen. Lauf [40600424756](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40600424756) für den korrigierten Stand ist noch offen und wird durch den aktuellen zusammengefassten Stabilitäts-Commit ersetzt. |
+| aktueller Commit | Geplanter zusammenhängender Fix: native Decode-Abbrüche klar als `cancelled` melden, Abbruchtest-Signal wiederholen und unerwartete Fehler des OCR-Stresstests/Abbruchtests dauerhaft protokollieren. | CI-Nachweis ausstehend; echter Android-Gerätetest und tatsächlicher ANR-Nachweis bleiben offen. |
 
 | 24.10.2026 | `5cba4ebf` / `2b0f91ab` | Erfundenes Reasoning entfernt, Confidence-Default auf „nicht verfügbar“ gesetzt, hartkodiertes Ablagejahr entfernt; veraltete Tests an die ehrliche Erklärung angepasst. | Run [40137078831](https://github.com/MrLongNight/myDocAnizer_Mobile/actions/runs/40137078831) erfolgreich: APK, Unit-Tests und Instrumentierungstests. Kein physischer Gerätetest behauptet. |
 

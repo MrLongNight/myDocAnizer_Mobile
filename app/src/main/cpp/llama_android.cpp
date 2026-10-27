@@ -285,7 +285,17 @@ std::string run_inference(
         const int32_t piece_length = llama_token_to_piece(vocab, token, piece, sizeof(piece), 0, true);
         if (piece_length > 0) output.append(piece, static_cast<size_t>(piece_length));
         llama_batch next = llama_batch_get_one(&token, 1);
-        if (llama_decode(g_engine->context, next) != 0) { decode_failed = true; break; }
+        if (llama_decode(g_engine->context, next) != 0) {
+            // llama.cpp's abort callback reports cancellation as a failed decode.
+            // Preserve the distinction so the diagnostic abort test does not label
+            // a deliberate stop as a native inference error.
+            if (g_cancel_requested.load(std::memory_order_relaxed)) {
+                cancelled = true;
+            } else {
+                decode_failed = true;
+            }
+            break;
+        }
     }
     const int64_t end_us = llama_time_us();
     llama_sampler_free(sampler);
