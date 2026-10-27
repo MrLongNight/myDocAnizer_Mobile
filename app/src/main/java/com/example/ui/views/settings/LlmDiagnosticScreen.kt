@@ -234,7 +234,15 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         var stack = ""
         try {
             withTimeout(DOC_TIMEOUT_MS) { detail = action(inputText ?: read(name)) }
-            if (engine.lastInferenceMode == LlamaCppInferenceEngine.InferenceMode.RULE_FALLBACK || detail.contains("pipelineFallback=true")) status = "FALLBACK"
+            val inferenceTimedOut = engine.lastFinishReason == "timeout" ||
+                detail.contains("firstFinish=timeout") ||
+                detail.contains("secondFinish=timeout")
+            status = when {
+                inferenceTimedOut -> "TIMEOUT"
+                engine.lastInferenceMode == LlamaCppInferenceEngine.InferenceMode.RULE_FALLBACK ||
+                    detail.contains("pipelineFallback=true") -> "FALLBACK"
+                else -> "OK"
+            }
         } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
             status = "TIMEOUT"; detail = timeout.message ?: "Timeout"; stack = Log.getStackTraceString(timeout)
         } catch (cancelled: CancellationException) { throw cancelled
