@@ -306,38 +306,69 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
     suspend fun runParallel() {
         if (_running.value) return
         _running.value = true
-        setStatus("Lauf 2/3: Chat + Analyse + Re-Run (nacheinander, eine native Engine)")
+        _rows.value = emptyList()
+        _completedSteps.value = 0
+        _totalSteps.value = 3
+        _currentDocumentIndex.value = 0
+        _totalDocuments.value = 1
+        _currentDocumentName.value = ""
+        _pipelineLabel.value = "Vorbereitung"
+        setStatus("Sequenztest vorbereitet")
         startTracking()
         try {
             val text = read(assets().first())
             val file = modelFile
-            // One process-wide llama.cpp engine and shared last-run metrics cannot provide
-            // three independent native inferences at once. Running these as async siblings
-            // only queues them behind the native mutex and races the shared diagnostics state.
-            // Exercise all three entry points sequentially to avoid CPU saturation and false results.
-            val result = listOf(
-                measure("CHAT-SEQUENZIELL", text) { value ->
-                    engine.executeChatInferenceWithTools(file, "Fasse kurz zusammen: " + value.take(500), params = LlamaCppInferenceEngine.InferenceParams(maxTokens = 96, threads = 2))
+            val steps: List<Pair<String, suspend (String) -> String>> = listOf(
+                "CHAT-SEQUENZIELL" to { value ->
+                    engine.executeChatInferenceWithTools(
+                        file,
+                        "Fasse kurz zusammen: " + value.take(500),
+                        params = LlamaCppInferenceEngine.InferenceParams(
+                            maxTokens = 96, threads = 2
+                        )
+                    )
                     "Chat-Aufruf"
                 },
-                measure("ANALYSE-SEQUENZIELL", text) { value ->
+                "ANALYSE-SEQUENZIELL" to { value ->
                     service.classifyDocumentFirstRun(value)
                     "First-Run-Analyse"
                 },
-                measure("RE-RUN-SEQUENZIELL", text) { value ->
+                "RE-RUN-SEQUENZIELL" to { value ->
                     service.classifyDocumentSecondRun(value)
                     "Second-Run-Analyse"
                 }
             )
-            _rows.value = _rows.value + result
-            setStatus("Sequenztest abgeschlossen; alle drei Aufrufwege separat gemessen")
+
+            for ((index, step) in steps.withIndex()) {
+                _currentDocumentIndex.value = 1
+                _pipelineLabel.value = step.first
+                val row = measure(step.first, text, step.second)
+                _rows.value = _rows.value + row
+                _completedSteps.value = index + 1
+                persistLiveReport()
+
+                if (row.status != "OK") {
+                    setStatus(
+                        when (row.status) {
+                            "TIMEOUT" -> "Sequenztest automatisch gestoppt: Timeout bei ${step.first}"
+                            "ABGEBROCHEN" -> "Sequenztest automatisch gestoppt: native Inferenz bei ${step.first} abgebrochen"
+                            "FALLBACK" -> "Sequenztest automatisch gestoppt: kein natives LLM-Ergebnis bei ${step.first}"
+                            else -> "Sequenztest automatisch gestoppt: Fehler bei ${step.first}"
+                        }
+                    )
+                    return
+                }
+            }
+            setStatus("Sequenztest abgeschlossen: alle drei Aufrufwege erfolgreich")
         } catch (cancelled: CancellationException) {
-            setStatus("Sequenztest abgebrochen")
+            setStatus("Sequenztest durch Benutzer gestoppt")
             throw cancelled
         } catch (error: Throwable) {
             _rows.value = _rows.value + errorRow("SEQUENZTEST", error)
-            setStatus("Sequenztest mit Fehler beendet")
-        } finally { stopTracking() }
+            setStatus("Sequenztest mit Fehler beendet: " + error.javaClass.simpleName)
+        } finally {
+            stopTracking()
+        }
     }
 
     suspend fun runAbortTest() {
@@ -457,6 +488,8 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
                 detail.contains("secondFinish=timeout")
             status = when {
                 inferenceTimedOut -> "TIMEOUT"
+                engine.lastFinishReason == "cancelled" ||
+                    engine.lastNativeFinishReason == "cancelled" -> "ABGEBROCHEN"
                 engine.lastInferenceMode == LlamaCppInferenceEngine.InferenceMode.RULE_FALLBACK ||
                     detail.contains("pipelineFallback=true") -> "FALLBACK"
                 else -> "OK"
