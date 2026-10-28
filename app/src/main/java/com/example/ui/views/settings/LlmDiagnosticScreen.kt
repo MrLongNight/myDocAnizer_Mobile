@@ -69,6 +69,25 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
     private val _status = MutableStateFlow("Bereit")
     val status = _status.asStateFlow()
     private val _activeStep = MutableStateFlow("—")
+    val activeStep = _activeStep.asStateFlow()
+    private val _activeElapsedMs = MutableStateFlow(0L)
+    val activeElapsedMs = _activeElapsedMs.asStateFlow()
+    private val _nativeProgress = MutableStateFlow(-1)
+    val nativeProgress = _nativeProgress.asStateFlow()
+    private val _nativeStage = MutableStateFlow("idle_or_unavailable")
+    val nativeStage = _nativeStage.asStateFlow()
+    private val _currentDocumentIndex = MutableStateFlow(0)
+    val currentDocumentIndex = _currentDocumentIndex.asStateFlow()
+    private val _totalDocuments = MutableStateFlow(0)
+    val totalDocuments = _totalDocuments.asStateFlow()
+    private val _currentDocumentName = MutableStateFlow("")
+    val currentDocumentName = _currentDocumentName.asStateFlow()
+    private val _pipelineLabel = MutableStateFlow("")
+    val pipelineLabel = _pipelineLabel.asStateFlow()
+    private val _completedSteps = MutableStateFlow(0)
+    val completedSteps = _completedSteps.asStateFlow()
+    private val _totalSteps = MutableStateFlow(0)
+    val totalSteps = _totalSteps.asStateFlow()
     @Volatile private var activeStartedAtMs = 0L
     private val logFile = File(context.cacheDir, "llm-diagnostic-live.txt")
     private val logLock = Any()
@@ -86,6 +105,7 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
     private fun markStep(name: String) {
         _activeStep.value = name
         activeStartedAtMs = SystemClock.elapsedRealtime()
+        _activeElapsedMs.value = 0L
         logScope.launch { persistLiveReport() }
     }
 
@@ -93,15 +113,23 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         if (heartbeatJob?.isActive == true) return
         heartbeatJob = logScope.launch {
             while (_running.value) {
+                _activeElapsedMs.value = if (activeStartedAtMs > 0L) {
+                    (SystemClock.elapsedRealtime() - activeStartedAtMs).coerceAtLeast(0L)
+                } else 0L
+                _nativeProgress.value = engine.inferenceProgress.value
+                _nativeStage.value = engine.nativeInferenceStageName()
                 persistLiveReport()
-                delay(1_000L)
+                delay(500L)
             }
+            _nativeProgress.value = -1
+            _nativeStage.value = "idle_or_unavailable"
             persistLiveReport()
         }
     }
 
     private fun stopTracking() {
         _activeStep.value = "—"
+        _activeElapsedMs.value = 0L
         activeStartedAtMs = 0L
         _running.value = false
         logScope.launch { persistLiveReport() }
@@ -143,33 +171,41 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
     suspend fun testPrompt() {
         if (_running.value) return
         _running.value = true
-        markStep("TESTPROMPT")
-        setStatus("Testprompt läuft: Modell wird bei Bedarf geladen und eine kurze Antwort erzeugt")
+        _completedSteps.value = 0
+        _totalSteps.value = 1
+        _totalDocuments.value = 0
+        _currentDocumentIndex.value = 0
+        _currentDocumentName.value = ""
+        _pipelineLabel.value = "Modell-Kurztest"
+        markStep("MODELL-KURZTEST")
+        setStatus("Modell-Kurztest läuft")
         startTracking()
         try {
-            val response = withTimeout(DOC_TIMEOUT_MS) {
+            val response = withTimeout(15_000L) {
                 engine.executeChatInferenceWithTools(
                     modelFile = modelFile,
-                    userMessage = "Antworte exakt mit LLM-DIAGNOSE-OK.",
-                    systemPrompt = "Du bist ein kurzer Funktionstest.",
-                    params = LlamaCppInferenceEngine.InferenceParams(maxTokens = 24, threads = 2, temperature = 0f)
+                    userMessage = "Antworte nur: OK",
+                    systemPrompt = "Antworte kurz.",
+                    params = LlamaCppInferenceEngine.InferenceParams(
+                        maxTokens = 8, threads = 2, temperature = 0f, timeoutMs = 12_000L
+                    )
                 )
             }
-            val mode = engine.lastInferenceMode
-            val markerFound = response.contains("LLM-DIAGNOSE-OK", ignoreCase = true)
-            setStatus(when {
-                mode != LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM ->
-                    "TEST NICHT BESTANDEN: Es lief nur der Regel-/Fallbackpfad (Modus=$mode, finish_reason=${engine.lastFinishReason ?: "—"})."
-                !markerFound ->
-                    "LLM wurde aufgerufen, aber die erwartete Testantwort fehlt. Antwort: " + response.take(180)
-                else ->
-                    "NATIVER LLM-TEST BESTANDEN: Testmarker gefunden; finish_reason=${engine.lastFinishReason ?: "—"}."
-            })
+            val passed = engine.lastInferenceMode == LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM &&
+                response.trim().contains("OK", ignoreCase = true)
+            if (passed) _completedSteps.value = 1
+            setStatus(
+                when {
+                    passed -> "Modell-Kurztest erfolgreich"
+                    engine.lastFinishReason == "timeout" -> "Kurztest fehlgeschlagen: Modell hat nicht rechtzeitig geantwortet"
+                    else -> "Kurztest fehlgeschlagen: keine gültige lokale Modellantwort"
+                }
+            )
         } catch (cancelled: CancellationException) {
-            setStatus("Testprompt abgebrochen")
+            setStatus("Kurztest gestoppt")
             throw cancelled
-        } catch (error: Throwable) {
-            setStatus("TEST FEHLGESCHLAGEN: ${error.javaClass.simpleName}: ${error.message ?: "keine Fehlermeldung"}")
+        } catch (_: Throwable) {
+            setStatus("Kurztest fehlgeschlagen")
         } finally {
             stopTracking()
         }
@@ -184,15 +220,28 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         if (_running.value) return
         _running.value = true
         _rows.value = emptyList()
-        setStatus("OCR-Stresstest wird vorbereitet")
+        _completedSteps.value = 0
+        _currentDocumentIndex.value = 0
+        _currentDocumentName.value = ""
+        _pipelineLabel.value = "Vorbereitung"
+        setStatus("OCR-Test wird vorbereitet")
         startTracking()
+        var stoppedEarly = false
         try {
             val names = assets()
+            if (names.isEmpty()) {
+                setStatus("Keine OCR-Testdokumente gefunden")
+                return
+            }
+            _totalDocuments.value = names.size
+            _totalSteps.value = names.size * 2
             for ((index, name) in names.withIndex()) {
-                val ocrText = read(name)
-                setStatus("OCR-Stresstest: " + (index + 1) + "/" + names.size + " – First-Run: " + name)
+                _currentDocumentIndex.value = index + 1
+                _currentDocumentName.value = displayDocumentName(name)
+                _pipelineLabel.value = "Ersterkennung"
+                setStatus("OCR-Test läuft")
                 var matchCount = 0
-                val firstRow = measure("$name / First-Run", ocrText) { text ->
+                val firstRow = measure("$name / First-Run", read(name)) { text ->
                     matchCount = rules.matchingRules(text).size
                     service.classifyDocumentFirstRun(text)
                     "Regeltreffer=" + matchCount +
@@ -202,10 +251,22 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
                         "; Pipeline=First-Run; Vorschlag nicht gespeichert"
                 }
                 _rows.value = _rows.value + firstRow
+                _completedSteps.value = _completedSteps.value + 1
                 logScope.launch { persistLiveReport() }
+                if (firstRow.status != "OK") {
+                    stoppedEarly = true
+                    setStatus(
+                        when (firstRow.status) {
+                            "TIMEOUT" -> "Automatisch gestoppt: Modell-Kurzlauf hat das Zeitlimit erreicht"
+                            "FALLBACK" -> "Automatisch gestoppt: keine native Modellantwort"
+                            else -> "Automatisch gestoppt: Fehler bei der Ersterkennung"
+                        }
+                    )
+                    break
+                }
 
-                setStatus("OCR-Stresstest: " + (index + 1) + "/" + names.size + " – Second-Run: " + name)
-                val secondRow = measure("$name / Second-Run", ocrText) { text ->
+                _pipelineLabel.value = "Tiefenanalyse"
+                val secondRow = measure("$name / Second-Run", read(name)) { text ->
                     service.classifyDocumentSecondRun(text)
                     "mode=" + engine.lastInferenceMode +
                         "; finish_reason=" + (engine.lastFinishReason ?: "unknown") +
@@ -213,26 +274,35 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
                         "; Pipeline=Second-Run; Vorschlag nicht gespeichert"
                 }
                 _rows.value = _rows.value + secondRow
+                _completedSteps.value = _completedSteps.value + 1
                 logScope.launch { persistLiveReport() }
-            }
-            val timeoutCount = _rows.value.count { it.status == "TIMEOUT" }
-            val errorCount = _rows.value.count { it.status == "FEHLER" }
-            setStatus(
-                if (timeoutCount > 0 || errorCount > 0) {
-                    "OCR-Stresstest beendet mit Problemen: " + timeoutCount + " Timeout(s), " + errorCount + " Fehler; native Phasen stehen im Bericht"
-                } else {
-                    "OCR-Stresstest erfolgreich abgeschlossen: " + names.size + " Texte, First- und Second-Run getrennt protokolliert"
+                if (secondRow.status != "OK") {
+                    stoppedEarly = true
+                    setStatus(
+                        when (secondRow.status) {
+                            "TIMEOUT" -> "Automatisch gestoppt: Tiefenanalyse hat das Zeitlimit erreicht"
+                            "FALLBACK" -> "Automatisch gestoppt: keine native Modellantwort in der Tiefenanalyse"
+                            else -> "Automatisch gestoppt: Fehler bei der Tiefenanalyse"
+                        }
+                    )
+                    break
                 }
-            )
+            }
+            if (!stoppedEarly) setStatus("OCR-Test abgeschlossen")
         } catch (cancelled: CancellationException) {
-            setStatus("Lauf abgebrochen")
+            setStatus("Test durch Benutzer gestoppt")
             throw cancelled
-        } catch (error: Throwable) {
-            _rows.value = _rows.value + errorRow("OCR-STRESSTEST", error)
-            setStatus("OCR-STRESSTEST FEHLGESCHLAGEN: " + error.javaClass.simpleName + ": " + (error.message ?: "keine Fehlermeldung"))
-        } finally { stopTracking() }
+        } catch (_: Throwable) {
+            _rows.value = _rows.value + errorRow("OCR-Test", IllegalStateException("Diagnoselauf fehlgeschlagen"))
+            setStatus("OCR-Test fehlgeschlagen")
+        } finally {
+            stopTracking()
+        }
     }
 
+    private fun displayDocumentName(fileName: String): String =
+        fileName.substringAfter('_', fileName).substringBeforeLast('.').replace('_', ' ')
+    
     suspend fun runParallel() {
         if (_running.value) return
         _running.value = true
@@ -315,7 +385,7 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
 
     fun cancelMessage() {
         engine.requestNativeCancellation()
-        setStatus("Abbruchsignal an native Prompt-Evaluation und Token-Generierung gesendet")
+        setStatus("Abbruch wird ausgeführt")
     }
 
     fun noteExportResult(message: String) {
@@ -330,6 +400,8 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         appendLine("Hinweis=Der Bericht darf auch während eines laufenden oder festhängenden Tests exportiert werden.")
         appendLine("Zeitpunkt (Epoch-ms)=" + System.currentTimeMillis())
         appendLine("Status=" + _status.value)
+        appendLine("Aktives Dokument=" + _currentDocumentName.value)
+        appendLine("Aktive Pipeline=" + _pipelineLabel.value)
         appendLine("Läuft=" + _running.value)
         appendLine("Aktiver Schritt=" + _activeStep.value)
         appendLine("Aktive Schrittzeit=" + if (activeStartedAtMs > 0L) (SystemClock.elapsedRealtime() - activeStartedAtMs).toString() + " ms" else "—")
@@ -338,6 +410,8 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         appendLine("Letzte native Phase=" + (engine.lastNativePhase ?: "—"))
         appendLine("Letztes natives finish_reason=" + (engine.lastNativeFinishReason ?: "—"))
         appendLine("Native Tokens (auch bei Timeout)=" + engine.lastNativeGeneratedTokens)
+        appendLine("Prompt-Tokens gesamt=" + engine.lastNativePromptTokens)
+        appendLine("Prompt-Tokens verarbeitet=" + engine.lastNativePromptTokensEvaluated)
         appendLine("Native Prompt-Auswertung=" + engine.lastNativePromptEvalTimeMs + " ms")
         appendLine("Native Generierung=" + engine.lastNativeGenerationTimeMs + " ms")
         appendLine("Native Aufrufdauer=" + engine.lastNativeElapsedMs + " ms")
@@ -422,65 +496,221 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
 fun LlmDiagnosticScreen(viewModel: DocAnizerViewModel) {
     if (!BuildConfig.DEBUG) return
     val context = LocalContext.current
-    val runner = remember(context, viewModel) { LlmDiagnosticRunner(context.applicationContext, viewModel.llmService, viewModel.ruleRepo) }
+    val runner = remember(context, viewModel) {
+        LlmDiagnosticRunner(context.applicationContext, viewModel.llmService, viewModel.ruleRepo)
+    }
     val rows by runner.rows.collectAsStateWithLifecycle()
     val running by runner.running.collectAsStateWithLifecycle()
     val status by runner.status.collectAsStateWithLifecycle()
+    val elapsedMs by runner.activeElapsedMs.collectAsStateWithLifecycle()
+    val nativeProgress by runner.nativeProgress.collectAsStateWithLifecycle()
+    val nativeStage by runner.nativeStage.collectAsStateWithLifecycle()
+    val documentIndex by runner.currentDocumentIndex.collectAsStateWithLifecycle()
+    val totalDocuments by runner.totalDocuments.collectAsStateWithLifecycle()
+    val documentName by runner.currentDocumentName.collectAsStateWithLifecycle()
+    val pipelineLabel by runner.pipelineLabel.collectAsStateWithLifecycle()
+    val completedSteps by runner.completedSteps.collectAsStateWithLifecycle()
+    val totalSteps by runner.totalSteps.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var activeJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    var snapshot by remember { mutableStateOf("") }
+    var showAdvanced by remember { mutableStateOf(false) }
+
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri == null) {
-            runner.noteExportResult("Logexport abgebrochen: kein Speicherziel ausgewählt")
+            runner.noteExportResult("Logexport abgebrochen")
         } else {
             val result = runCatching {
                 val content = runner.report()
                 val output = context.contentResolver.openOutputStream(uri)
-                    ?: error("Android hat keinen Dateiausgabestrom bereitgestellt")
+                    ?: error("Datei konnte nicht geöffnet werden")
                 output.bufferedWriter(Charsets.UTF_8).use { it.write(content) }
             }
-            runner.noteExportResult(
-                if (result.isSuccess) "LOG EXPORTIERT: Diagnosebericht wurde gespeichert."
-                else "LOG-EXPORT FEHLGESCHLAGEN: ${result.exceptionOrNull()?.javaClass?.simpleName}: ${result.exceptionOrNull()?.message ?: "unbekannter Dateifehler"}"
+            runner.noteExportResult(if (result.isSuccess) "Diagnosebericht exportiert" else "Export fehlgeschlagen")
+        }
+    }
+
+    val progressValue = if (totalSteps > 0) {
+        ((completedSteps.toFloat() + if (nativeProgress in 0..100) nativeProgress / 100f else 0f) / totalSteps).coerceIn(0f, 1f)
+    } else if (!running && status.contains("erfolgreich", ignoreCase = true)) 1f else 0f
+    val stageText = when (nativeStage) {
+        "model_load" -> "Modell wird geladen"
+        "context_init" -> "Rechenkontext wird vorbereitet"
+        "prompt_prepare" -> "Dokumenttext wird vorbereitet"
+        "prompt_eval" -> "Modell verarbeitet den Text"
+        "generation" -> "Modell erstellt die Antwort"
+        "cancelled" -> "Abbruch läuft"
+        "error" -> "Modellfehler"
+        else -> if (running) "Test wird vorbereitet" else ""
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Icon(Icons.Default.BugReport, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                Text("LLM-Test", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.weight(1f))
+                Text("lokal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                "Prüft, ob das installierte Modell tatsächlich antwortet. Technische Details gibt es nur im Export.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            if (running) {
+                if (totalDocuments > 0) {
+                    Text(
+                        buildString {
+                            append("Dokument ")
+                            append(documentIndex.coerceAtLeast(1))
+                            append("/")
+                            append(totalDocuments)
+                            if (documentName.isNotBlank()) {
+                                append(" · ")
+                                append(documentName)
+                            }
+                            if (pipelineLabel.isNotBlank()) {
+                                append(" · ")
+                                append(pipelineLabel)
+                            }
+                        },
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 2
+                    )
+                } else {
+                    Text(pipelineLabel.ifBlank { "Modell-Kurztest" }, style = MaterialTheme.typography.labelLarge)
+                }
+                LinearProgressIndicator(progress = progressValue, modifier = Modifier.fillMaxWidth().height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp)
+                    Text(stageText.ifBlank { status }, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    Text(formatDiagnosticElapsed(elapsedMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                Text(status, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    enabled = !running,
+                    onClick = { activeJob = scope.launch { runner.testPrompt() } },
+                    modifier = Modifier.weight(1f).heightIn(min = 38.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(17.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Modell-Kurztest", maxLines = 1)
+                }
+                OutlinedButton(
+                    enabled = !running,
+                    onClick = { activeJob = scope.launch { runner.runSequential() } },
+                    modifier = Modifier.weight(1f).heightIn(min = 38.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
+                ) { Text("OCR-Test", maxLines = 1) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    enabled = running,
+                    onClick = { activeJob?.cancel(); runner.cancelMessage() },
+                    modifier = Modifier.weight(1f).heightIn(min = 36.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Stop")
+                }
+                OutlinedButton(
+                    onClick = { export.launch("LLM-Diagnose.txt") },
+                    modifier = Modifier.weight(1f).heightIn(min = 36.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (running) "Live-Log exportieren" else "Log exportieren", maxLines = 1)
+                }
+            }
+
+            if (rows.isNotEmpty()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text(
+                    "Ergebnisse · OK ${rows.count { it.status == "OK" }} · Zeitüberschreitungen ${rows.count { it.status == "TIMEOUT" }} · Fehler ${rows.count { it.status == "FEHLER" || it.status == "ABGEBROCHEN" }}",
+                    style = MaterialTheme.typography.labelMedium
+                )
+                rows.takeLast(5).forEach { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                        val ok = row.status == "OK"
+                        Text(
+                            if (ok) "✓" else "!",
+                            color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            row.name.substringBefore(" / ").removePrefix("0").replace("_", " ").substringBeforeLast("."),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1
+                        )
+                        Text(
+                            when (row.status) {
+                                "OK" -> "OK"
+                                "TIMEOUT" -> "Zeitüberschreitung"
+                                "FALLBACK" -> "Fallback"
+                                "ABGEBROCHEN" -> "Gestoppt"
+                                else -> "Fehler"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        )
+                        Text(formatDiagnosticElapsed(row.elapsedMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+
+            TextButton(
+                onClick = { showAdvanced = !showAdvanced },
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+            ) { Text(if (showAdvanced) "Weitere Tests ausblenden" else "Weitere Tests") }
+            if (showAdvanced) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        enabled = !running,
+                        onClick = { activeJob = scope.launch { runner.runParallel() } },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                    ) { Text("3 Aufrufwege", maxLines = 1) }
+                    OutlinedButton(
+                        enabled = !running,
+                        onClick = { activeJob = scope.launch { runner.runAbortTest() } },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                    ) { Text("Abbruchtest", maxLines = 1) }
+                    OutlinedButton(
+                        enabled = !running,
+                        onClick = { activeJob = scope.launch(Dispatchers.IO) { runner.unload() } },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Memory, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Text("Entladen", maxLines = 1)
+                    }
+                }
+            }
         }
     }
-    LaunchedEffect(Unit) { snapshot = runner.snapshot() }
-    Card(Modifier.fillMaxWidth(), border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.BugReport, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("LLM-Diagnose", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            }
-            Text("Nur Debug-Build. Kein Kamerazugriff, kein Dialog, keine Speicherung im echten Tresor.", style = MaterialTheme.typography.bodySmall)
-            Text(snapshot, style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = !running, onClick = { activeJob = scope.launch { runCatching { runner.testPrompt() }; snapshot = runner.snapshot() } }) { Icon(Icons.Default.PlayArrow, null); Text("Modell laden + Test") }
-                OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch { runCatching { runner.testPrompt() }; snapshot = runner.snapshot() } }) { Text("Testprompt wiederholen") }
-                OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch(Dispatchers.IO) { runner.unload(); withContext(Dispatchers.Main) { snapshot = runner.snapshot() } } }) { Icon(Icons.Default.Memory, null); Text("Entladen") }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = !running, onClick = { activeJob = scope.launch { runner.runSequential() } }) { Text("OCR-Stresstest (20)") }
-                OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch { runner.runParallel() } }) { Text("3 Aufrufwege (sequenziell)") }
-                OutlinedButton(enabled = !running, onClick = { activeJob = scope.launch { runner.runAbortTest() } }) { Text("Abbruchtest") }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(enabled = running, onClick = { activeJob?.cancel(); runner.cancelMessage() }) { Icon(Icons.Default.Stop, null); Text("Stop") }
-                OutlinedButton(onClick = { snapshot = runner.snapshot() }) { Text("Aktualisieren") }
-                OutlinedButton(onClick = { export.launch("LLM-Diagnose.txt") }) { Icon(Icons.Default.UploadFile, null); Text(if (running) "Live-Log speichern" else "Log exportieren") }
-            }
-            Text("Status: " + status)
-            Text("OK " + rows.count { it.status == "OK" } + " · Fallback " + rows.count { it.status == "FALLBACK" } + " · Timeout " + rows.count { it.status == "TIMEOUT" } + " · Fehler " + rows.count { it.status == "FEHLER" })
-            val javaTrend = if (rows.isNotEmpty()) rows.last().javaAfter - rows.first().javaBefore else 0L
-            val nativeTrend = if (rows.isNotEmpty()) rows.last().nativeAfter - rows.first().nativeBefore else 0L
-            Text("Längste Wartezeit: " + (rows.maxOfOrNull { it.elapsedMs } ?: 0L) + " ms", style = MaterialTheme.typography.bodySmall)
-            Text("Heap-Trend: Java " + javaTrend + " B · Native " + nativeTrend + " B · über 150 MB: " + ((javaTrend + nativeTrend) > 150L * 1024L * 1024L), style = MaterialTheme.typography.bodySmall)
-            rows.forEach { r ->
-                HorizontalDivider()
-                Text(r.name + ": " + r.status + " · " + r.elapsedMs + " ms · " + r.mode + " · " + r.finishReason + " · " + r.tokens + " Tokens", style = MaterialTheme.typography.bodySmall)
-                if (r.detail.isNotBlank()) Text(r.detail, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
+}
+
+private fun formatDiagnosticElapsed(milliseconds: Long): String {
+    val seconds = milliseconds.coerceAtLeast(0L) / 1000L
+    return if (seconds < 60L) "${seconds}s" else "${seconds / 60L}m ${seconds % 60L}s"
 }

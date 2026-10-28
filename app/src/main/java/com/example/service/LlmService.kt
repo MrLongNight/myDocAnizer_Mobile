@@ -2204,10 +2204,10 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                         temperature = config.temperature,
                         topP = config.topP,
                         // Bound long continuations on mobile while retaining the full OCR prompt.
-                        maxTokens = config.maxTokens.coerceIn(24, 160),
-                        threads = config.threadCount,
+                        maxTokens = config.maxTokens.coerceIn(24, 96),
+                        threads = config.threadCount.coerceIn(1, 2),
                         grammar = null,
-                        timeoutMs = 45_000L
+                        timeoutMs = 30_000L
                     )
                 )
 

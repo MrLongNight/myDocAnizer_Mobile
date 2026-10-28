@@ -48,7 +48,7 @@ fun DeveloperSettingsTab(viewModel: DocAnizerViewModel) {
             .fillMaxSize()
             .padding(16.dp)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         // Diagnose und Stresstest auch in der installierten Release-Variante sichtbar halten.
         LlmDiagnosticScreen(viewModel)

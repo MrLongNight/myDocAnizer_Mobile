@@ -139,6 +139,10 @@ class LlamaCppInferenceEngine(private val context: Context) {
         private set
     @Volatile var lastNativeGeneratedTokens: Int = 0
         private set
+    @Volatile var lastNativePromptTokens: Int = 0
+        private set
+    @Volatile var lastNativePromptTokensEvaluated: Int = 0
+        private set
     @Volatile var lastNativePromptEvalTimeMs: Long = 0L
         private set
     @Volatile var lastNativeGenerationTimeMs: Long = 0L
@@ -171,6 +175,8 @@ class LlamaCppInferenceEngine(private val context: Context) {
         "native_phase=" + (lastNativePhase ?: "not_reported"),
         "native_finish_reason=" + (lastNativeFinishReason ?: "not_reported"),
         "native_tokens=" + lastNativeGeneratedTokens,
+        "prompt_tokens=" + lastNativePromptTokens,
+        "prompt_tokens_evaluated=" + lastNativePromptTokensEvaluated,
         "native_prompt_eval_ms=" + lastNativePromptEvalTimeMs,
         "native_generation_ms=" + lastNativeGenerationTimeMs,
         "native_elapsed_ms=" + lastNativeElapsedMs,
@@ -196,6 +202,8 @@ class LlamaCppInferenceEngine(private val context: Context) {
         lastNativeFinishReason = null
         lastNativePhase = null
         lastNativeGeneratedTokens = 0
+        lastNativePromptTokens = 0
+        lastNativePromptTokensEvaluated = 0
         lastNativePromptEvalTimeMs = 0L
         lastNativeGenerationTimeMs = 0L
         lastNativeElapsedMs = 0L
@@ -250,23 +258,11 @@ JSON-Schema:
         /**
          * System-Prompt für den schnellen First Run. Kompakt und ohne ausführliche Reasoning-Ausgabe.
          */
-        const val TRIAGE_SYSTEM_PROMPT: String = """Du bist der Leiter der Poststelle & Eingangstriage (Team 1) für die App myDocAnizer.
-Deine Aufgabe: Blitzschnelle Ersterfassung des Dokuments anhand der Kopfzeilen und Schlüsselbereiche.
-Regeln:
-1. Nutze nur eindeutig im OCR-Text belegte Informationen. Erfinde keine Werte; fehlende Werte sind null.
-2. Identifiziere Absender, Dokumententyp und Hauptkategorie.
-3. Extrahiere bis zu 3 Schlüsselwörter, die tatsächlich im OCR-Text vorkommen.
-4. '_reasoning' ist höchstens ein kurzer Satz, keine Gedankenkette.
-5. Antworte nur mit gültigem JSON.
-
-Antworte AUSSCHLIESSLICH mit diesem exakten JSON-Schema:
-{
-  "_reasoning": "Kurzer Satz zur Begründung",
-  "absender": "Firma oder Aussteller",
-  "dokumententyp": "z.B. Rechnung, Vertrag, Überweisung",
-  "match_keywords": ["keyword1", "keyword2"],
-  "kategorie_vorschlag": "Hauptkategorie"
-}"""
+        const val TRIAGE_SYSTEM_PROMPT: String = """Ordne das deutsche Dokument anhand des OCR-Auszuges zu.
+Erfinde nichts. Nutze nur belegte Angaben; unbekannte Werte sind null.
+Kategorie nur: Finanzen, Verträge, Steuern, Post & Dokumente oder null.
+Gib ausschließlich gültiges JSON ohne Markdown mit genau diesen Feldern zurück:
+{"_reasoning":"kurzer Satz","absender":null,"dokumententyp":null,"match_keywords":[],"kategorie_vorschlag":null}"""
 
         /**
          * GBNF Grammatik für den schnellen First Run (Team 1 Triage ohne Zusatzfelder-Overhead).
@@ -386,6 +382,31 @@ Antworte AUSSCHLIESSLICH mit diesem exakten JSON-Schema:
     "dynamisches_feld_2": "wert"
   }
 }"""
+        }
+
+        fun buildCompactDepartmentSystemPrompt(
+            department: DepartmentTeam,
+            folderStrategy: FolderStrategy = FolderStrategy.BY_CATEGORY,
+            whitelistedCustomFields: List<String> = emptyList(),
+            userCorrectionPrompt: String? = null
+        ): String = buildString {
+            append("Klassifiziere ein deutsches Dokument für ")
+            append(department.displayName)
+            append(". Verwende nur belegte OCR-Angaben; erfinde nichts. ")
+            append("Kategorie nur: Finanzen, Verträge, Steuern, Post & Dokumente oder null. ")
+            append("Ablagestrategie: ")
+            append(folderStrategy.title)
+            append(". Zusatzfelder nur mit belegten Werten")
+            if (whitelistedCustomFields.isNotEmpty()) {
+                append(" und bevorzugt aus: ")
+                append(whitelistedCustomFields.take(8).joinToString(", "))
+            }
+            append(". Antworte ausschließlich als JSON ohne Markdown: ")
+            append("""{"_reasoning":"kurzer Satz","absender":null,"dokumententyp":null,"match_keywords":[],"kategorie_vorschlag":null,"vorgeschlagener_pfad":null,"globale_zusatzfelder":{}}""")
+            if (!userCorrectionPrompt.isNullOrBlank()) {
+                append(". Benutzerkorrektur beachten: ")
+                append(userCorrectionPrompt.take(160))
+            }
         }
 
         fun buildSecondRunSystemPrompt(
@@ -551,7 +572,7 @@ ws ::= [ \t\n\r]*
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             return@withContext createHeuristicFallbackResponse(ocrText)
         }
-        val filteredSlice = OcrPreFilterMatrix.extractFirstRunSlice(ocrText)
+        val filteredSlice = OcrPreFilterMatrix.extractFirstRunSlice(ocrText, maxChars = 420)
         val useTriage = useStrictTriage || whitelistedCustomFields.isEmpty()
         val systemPrompt = if (useTriage) TRIAGE_SYSTEM_PROMPT else buildSmallModelOptimizedPrompt(whitelistedCustomFields)
         // The active TRIAGE/DMS grammars are rejected by llama.cpp on the target device.
@@ -593,18 +614,21 @@ ws ::= [ \t\n\r]*
             return@withContext createHeuristicFallbackResponse(ocrText, folderStrategy)
         }
         val targetDept = department ?: DepartmentTeam.dispatch(ocrText)
-        val systemPrompt = buildDepartmentSystemPrompt(
+        val systemPrompt = buildCompactDepartmentSystemPrompt(
             department = targetDept,
             folderStrategy = folderStrategy,
             whitelistedCustomFields = whitelistedCustomFields,
             userCorrectionPrompt = userCorrectionPrompt
         )
+        // Deterministic field extractors still use the full OCR in LlmService.
+        // The small model only needs header/key lines for classification.
+        val promptExcerpt = OcrPreFilterMatrix.extractFirstRunSlice(ocrText, maxChars = 800)
         val promptContent = buildString {
-            append("OCR-VOLLTEXT:\n")
-            append(ocrText)
+            append("OCR-SCHLUESSELSTELLEN:\n")
+            append(promptExcerpt)
             if (!userCorrectionPrompt.isNullOrBlank()) {
-                append("\n\nHINWEIS ZUR BENUTZER-KORREKTUR:\n")
-                append(userCorrectionPrompt)
+                append("\n\nBENUTZER-KORREKTUR:\n")
+                append(userCorrectionPrompt.take(160))
             }
         }
         val rawOutput = executeInference(
@@ -658,6 +682,8 @@ ws ::= [ \t\n\r]*
         lastNativeFinishReason = null
         lastNativePhase = null
         lastNativeGeneratedTokens = 0
+        lastNativePromptTokens = 0
+        lastNativePromptTokensEvaluated = 0
         lastNativePromptEvalTimeMs = 0L
         lastNativeGenerationTimeMs = 0L
         lastNativeElapsedMs = 0L
@@ -755,6 +781,8 @@ ws ::= [ \t\n\r]*
                 lastNativeFinishReason = if (nativeResult.has("error")) "error" else nativeResult.optString("finish_reason", "unknown")
                 lastNativePhase = nativeResult.optString("phase", nativeStageName(runCatching { nativeGetInferenceStage() }.getOrDefault(0)))
                 lastNativeGeneratedTokens = nativeResult.optInt("tokensGenerated", 0).coerceAtLeast(0)
+                lastNativePromptTokens = nativeResult.optInt("promptTokens", 0).coerceAtLeast(0)
+                lastNativePromptTokensEvaluated = nativeResult.optInt("promptTokensEvaluated", 0).coerceAtLeast(0)
                 lastNativePromptEvalTimeMs = nativeResult.optLong("promptEvalTimeMs", 0L).coerceAtLeast(0L)
                 lastNativeGenerationTimeMs = nativeResult.optLong("generateTimeMs", 0L).coerceAtLeast(0L)
             } else {
@@ -780,6 +808,8 @@ ws ::= [ \t\n\r]*
             lastNativeFinishReason = result.optString("finish_reason", "unknown")
             lastNativePhase = result.optString("phase", nativeStageName(runCatching { nativeGetInferenceStage() }.getOrDefault(0)))
             lastNativeGeneratedTokens = result.optInt("tokensGenerated", 0).coerceAtLeast(0)
+            lastNativePromptTokens = result.optInt("promptTokens", 0).coerceAtLeast(0)
+            lastNativePromptTokensEvaluated = result.optInt("promptTokensEvaluated", 0).coerceAtLeast(0)
             lastNativePromptEvalTimeMs = result.optLong("promptEvalTimeMs", 0L).coerceAtLeast(0L)
             lastNativeGenerationTimeMs = result.optLong("generateTimeMs", 0L).coerceAtLeast(0L)
             lastFinishReason = result.optString("finish_reason", "unknown")

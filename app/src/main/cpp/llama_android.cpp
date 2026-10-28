@@ -86,12 +86,15 @@ std::string error_json(const std::string & message) {
 }
 
 std::string inference_result_json(const std::string & output, int generated, const char * finish_reason,
-                                  int64_t prompt_ms, int64_t generation_ms, float tokens_per_second, const char * phase) {
+                                  int64_t prompt_ms, int64_t generation_ms, float tokens_per_second,
+                                  const char * phase, int prompt_tokens = 0, int prompt_tokens_evaluated = 0) {
     return "{\"text\":\"" + json_escape(output) +
         "\",\"tokensGenerated\":" + std::to_string(generated) +
         ",\"finish_reason\":\"" + finish_reason +
         "\",\"phase\":\"" + phase +
-        "\",\"promptEvalTimeMs\":" + std::to_string(prompt_ms) +
+        "\",\"promptTokens\":" + std::to_string(prompt_tokens) +
+        ",\"promptTokensEvaluated\":" + std::to_string(prompt_tokens_evaluated) +
+        ",\"promptEvalTimeMs\":" + std::to_string(prompt_ms) +
         ",\"generateTimeMs\":" + std::to_string(generation_ms) +
         ",\"tokensPerSecond\":" + std::to_string(tokens_per_second) + "}";
 }
@@ -304,8 +307,13 @@ std::string run_inference(
     }
     g_inference_progress.store(20, std::memory_order_relaxed);
     const int generation_limit = std::max(1, std::min(max_tokens, 1024));
-    const size_t prompt_limit = kContextSize > static_cast<uint32_t>(generation_limit + 16)
+    const size_t context_prompt_limit = kContextSize > static_cast<uint32_t>(generation_limit + 16)
         ? static_cast<size_t>(kContextSize - generation_limit - 16) : 128;
+    // The current target is a small mobile CPU. Bound prompt prefill instead of
+    // feeding almost the whole 2K context to a 1.5B model for every classification.
+    const size_t mobile_prompt_limit = generation_limit <= 96 ? 192U
+        : (generation_limit <= 160 ? 256U : 512U);
+    const size_t prompt_limit = std::min(context_prompt_limit, mobile_prompt_limit);
     std::vector<llama_token> tokens;
     if (!fit_prompt_to_context(vocab, prompt, prompt_limit, tokens)) {
         return error_json("OCR prompt could not be fitted into the configured context window");
@@ -319,7 +327,9 @@ std::string run_inference(
     }
     const int64_t start_us = llama_time_us();
     g_inference_stage.store(STAGE_PROMPT_EVAL, std::memory_order_relaxed);
-    constexpr size_t kPromptDecodeChunkTokens = 32;
+    // Smaller batches avoid leaving the UI frozen at one value while a large
+    // prompt batch is evaluated, and make cancellation checks more frequent.
+    constexpr size_t kPromptDecodeChunkTokens = 4;
     size_t prompt_offset = 0;
     while (prompt_offset < tokens.size()) {
         if (g_cancel_requested.load(std::memory_order_relaxed)) {
@@ -327,9 +337,12 @@ std::string run_inference(
             llama_sampler_free(sampler);
             g_inference_progress.store(-1, std::memory_order_relaxed);
             g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
-            return inference_result_json("", 0, "cancelled", elapsed_ms, 0, 0.0f, "prompt_eval");
+            return inference_result_json("", 0, "cancelled", elapsed_ms, 0, 0.0f, "prompt_eval",
+                                         static_cast<int>(tokens.size()), static_cast<int>(prompt_offset));
         }
         const size_t chunk_size = std::min(kPromptDecodeChunkTokens, tokens.size() - prompt_offset);
+        const int active_progress = 21 + static_cast<int>((prompt_offset * 23) / tokens.size());
+        g_inference_progress.store(std::min(44, active_progress), std::memory_order_relaxed);
         llama_batch batch = llama_batch_get_one(tokens.data() + prompt_offset, static_cast<int32_t>(chunk_size));
         if (llama_decode(g_engine->context, batch) != 0) {
             const int64_t elapsed_ms = (llama_time_us() - start_us) / 1000;
@@ -337,13 +350,14 @@ std::string run_inference(
             g_inference_progress.store(-1, std::memory_order_relaxed);
             if (g_cancel_requested.load(std::memory_order_relaxed)) {
                 g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
-                return inference_result_json("", 0, "cancelled", elapsed_ms, 0, 0.0f, "prompt_eval");
+                return inference_result_json("", 0, "cancelled", elapsed_ms, 0, 0.0f, "prompt_eval",
+                                             static_cast<int>(tokens.size()), static_cast<int>(prompt_offset));
             }
             g_inference_stage.store(STAGE_ERROR, std::memory_order_relaxed);
             return error_json("llama.cpp failed while evaluating the OCR prompt");
         }
         prompt_offset += chunk_size;
-        const int prompt_progress = 25 + static_cast<int>((prompt_offset * 19) / tokens.size());
+        const int prompt_progress = 21 + static_cast<int>((prompt_offset * 23) / tokens.size());
         g_inference_progress.store(std::min(44, prompt_progress), std::memory_order_relaxed);
     }
     const int64_t prompt_end_us = llama_time_us();
@@ -399,7 +413,8 @@ std::string run_inference(
         g_inference_progress.store(100, std::memory_order_relaxed);
         g_inference_stage.store(STAGE_COMPLETE, std::memory_order_relaxed);
     }
-    return inference_result_json(output, generated, finish_reason, prompt_ms, generation_ms, tokens_per_second, phase);
+    return inference_result_json(output, generated, finish_reason, prompt_ms, generation_ms, tokens_per_second,
+                                 phase, static_cast<int>(tokens.size()), static_cast<int>(tokens.size()));
 }
 
 } // namespace
