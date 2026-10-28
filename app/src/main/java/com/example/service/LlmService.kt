@@ -2203,7 +2203,8 @@ Antworte AUSSCHLIESSLICH im selben JSON-Format wie zuvor, aktualisiere die Werte
                     params = LlamaCppInferenceEngine.InferenceParams(
                         temperature = config.temperature,
                         topP = config.topP,
-                        maxTokens = config.maxTokens,
+                        // Bound long continuations on mobile while retaining the full OCR prompt.
+                        maxTokens = config.maxTokens.coerceIn(24, 160),
                         threads = config.threadCount,
                         grammar = null,
                         timeoutMs = 45_000L

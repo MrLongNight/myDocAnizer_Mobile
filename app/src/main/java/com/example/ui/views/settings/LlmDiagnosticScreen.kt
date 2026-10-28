@@ -215,7 +215,15 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
                 _rows.value = _rows.value + secondRow
                 logScope.launch { persistLiveReport() }
             }
-            setStatus("OCR-Stresstest abgeschlossen: " + names.size + " Texte, First- und Second-Run getrennt protokolliert")
+            val timeoutCount = _rows.value.count { it.status == "TIMEOUT" }
+            val errorCount = _rows.value.count { it.status == "FEHLER" }
+            setStatus(
+                if (timeoutCount > 0 || errorCount > 0) {
+                    "OCR-Stresstest beendet mit Problemen: " + timeoutCount + " Timeout(s), " + errorCount + " Fehler; native Phasen stehen im Bericht"
+                } else {
+                    "OCR-Stresstest erfolgreich abgeschlossen: " + names.size + " Texte, First- und Second-Run getrennt protokolliert"
+                }
+            )
         } catch (cancelled: CancellationException) {
             setStatus("Lauf abgebrochen")
             throw cancelled
@@ -317,7 +325,7 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
 
     fun report(): String = buildString {
         appendLine("LLM-Diagnose")
-        appendLine("Berichtsversion=2")
+        appendLine("Berichtsversion=3")
         appendLine("Exportzeitpunkt=" + java.time.Instant.now().toString())
         appendLine("Hinweis=Der Bericht darf auch während eines laufenden oder festhängenden Tests exportiert werden.")
         appendLine("Zeitpunkt (Epoch-ms)=" + System.currentTimeMillis())
@@ -326,6 +334,16 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         appendLine("Aktiver Schritt=" + _activeStep.value)
         appendLine("Aktive Schrittzeit=" + if (activeStartedAtMs > 0L) (SystemClock.elapsedRealtime() - activeStartedAtMs).toString() + " ms" else "—")
         appendLine("Native Inferenzfortschritt=" + engine.inferenceProgress.value)
+        appendLine("Native Inferenzphase (aktuell)=" + engine.nativeInferenceStageName())
+        appendLine("Letzte native Phase=" + (engine.lastNativePhase ?: "—"))
+        appendLine("Letztes natives finish_reason=" + (engine.lastNativeFinishReason ?: "—"))
+        appendLine("Native Tokens (auch bei Timeout)=" + engine.lastNativeGeneratedTokens)
+        appendLine("Native Prompt-Auswertung=" + engine.lastNativePromptEvalTimeMs + " ms")
+        appendLine("Native Generierung=" + engine.lastNativeGenerationTimeMs + " ms")
+        appendLine("Native Aufrufdauer=" + engine.lastNativeElapsedMs + " ms")
+        appendLine("Native Phase bei Timeout=" + (engine.lastNativeStageAtTimeout ?: "—"))
+        appendLine("Fortschritt bei Timeout=" + engine.lastNativeProgressAtTimeout)
+        appendLine("Timeout-Budget=" + engine.lastNativeTimeoutBudgetMs + " ms")
         appendLine("Live-Log-Datei=" + logFile.absolutePath)
         appendLine(snapshot())
         appendLine()
@@ -379,6 +397,7 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         } catch (error: Throwable) {
             status = "FEHLER"; detail = error.message ?: error.javaClass.simpleName; stack = Log.getStackTraceString(error)
         }
+        detail = listOf(detail, engine.lastNativeDiagnosticSummary()).filter { it.isNotBlank() }.joinToString("; ")
         row(name, start, before, status, detail, stack)
     }
 
@@ -386,7 +405,8 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         val after = HeapSample.capture()
         val mode = if (engine.lastInferenceMode == LlamaCppInferenceEngine.InferenceMode.LOCAL_LLM) "LLM" else "Fallback"
         val finishReason = when (status) { "FEHLER" -> "error"; "TIMEOUT" -> "timeout"; "ABGEBROCHEN" -> "cancelled"; else -> engine.lastFinishReason ?: if (status == "FALLBACK") "fallback" else "unknown" }
-        return LlmDiagnosticRow(name, SystemClock.elapsedRealtime() - start, mode, finishReason, engine.lastInferenceMetrics?.generatedTokens ?: 0, before.java, after.java, before.native, after.native, status, detail, stack)
+        val tokenCount = engine.lastInferenceMetrics?.generatedTokens ?: engine.lastNativeGeneratedTokens
+        return LlmDiagnosticRow(name, SystemClock.elapsedRealtime() - start, mode, finishReason, tokenCount, before.java, after.java, before.native, after.native, status, detail, stack)
     }
 
     private fun errorRow(name: String, error: Throwable): LlmDiagnosticRow {

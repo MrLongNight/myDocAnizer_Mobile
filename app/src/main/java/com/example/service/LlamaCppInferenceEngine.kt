@@ -22,6 +22,8 @@ import org.json.JSONObject
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Fachabteilungs-Teams für den Second Run (Team 2: Spezialisten-Tiefenanalyse).
@@ -130,6 +132,53 @@ class LlamaCppInferenceEngine(private val context: Context) {
     var lastFinishReason: String? = null
         private set
 
+    // Native-only metadata survives a timeout fallback. OCR and output text are not retained.
+    @Volatile var lastNativeFinishReason: String? = null
+        private set
+    @Volatile var lastNativePhase: String? = null
+        private set
+    @Volatile var lastNativeGeneratedTokens: Int = 0
+        private set
+    @Volatile var lastNativePromptEvalTimeMs: Long = 0L
+        private set
+    @Volatile var lastNativeGenerationTimeMs: Long = 0L
+        private set
+    @Volatile var lastNativeElapsedMs: Long = 0L
+        private set
+    @Volatile var lastNativeProgressAtTimeout: Int = -1
+        private set
+    @Volatile var lastNativeStageAtTimeout: String? = null
+        private set
+    @Volatile var lastNativeTimeoutBudgetMs: Long = 0L
+        private set
+
+    fun nativeInferenceStageName(): String =
+        nativeStageName(runCatching { nativeGetInferenceStage() }.getOrDefault(0))
+
+    private fun nativeStageName(stage: Int): String = when (stage) {
+        1 -> "model_load"
+        2 -> "context_init"
+        3 -> "prompt_prepare"
+        4 -> "prompt_eval"
+        5 -> "generation"
+        6 -> "complete"
+        7 -> "cancelled"
+        8 -> "error"
+        else -> "idle_or_unavailable"
+    }
+
+    fun lastNativeDiagnosticSummary(): String = listOf(
+        "native_phase=" + (lastNativePhase ?: "not_reported"),
+        "native_finish_reason=" + (lastNativeFinishReason ?: "not_reported"),
+        "native_tokens=" + lastNativeGeneratedTokens,
+        "native_prompt_eval_ms=" + lastNativePromptEvalTimeMs,
+        "native_generation_ms=" + lastNativeGenerationTimeMs,
+        "native_elapsed_ms=" + lastNativeElapsedMs,
+        "native_stage_at_timeout=" + (lastNativeStageAtTimeout ?: "not_timed_out"),
+        "native_progress_at_timeout=" + lastNativeProgressAtTimeout,
+        "native_timeout_budget_ms=" + lastNativeTimeoutBudgetMs
+    ).joinToString("; ")
+
     fun nativeEngineLoaded(): Boolean = runCatching { nativeIsEngineLoaded() }.getOrDefault(false)
     fun nativeLoadedModelPath(): String? = runCatching { nativeGetLoadedModelPath().takeIf { it.isNotBlank() && it != "__INFERENCE_BUSY__" } }.getOrNull()
     fun nativeContextSize(): Int = runCatching { nativeGetContextSize() }.getOrDefault(2048)
@@ -144,6 +193,15 @@ class LlamaCppInferenceEngine(private val context: Context) {
         lastFinishReason = null
         lastInferenceMetrics = null
         lastInferenceMode = InferenceMode.NOT_RUN
+        lastNativeFinishReason = null
+        lastNativePhase = null
+        lastNativeGeneratedTokens = 0
+        lastNativePromptEvalTimeMs = 0L
+        lastNativeGenerationTimeMs = 0L
+        lastNativeElapsedMs = 0L
+        lastNativeProgressAtTimeout = -1
+        lastNativeStageAtTimeout = null
+        lastNativeTimeoutBudgetMs = 0L
         _inferenceProgress.value = -1
     }
 
@@ -499,7 +557,8 @@ ws ::= [ \t\n\r]*
         // The active TRIAGE/DMS grammars are rejected by llama.cpp on the target device.
         // Do not let grammar construction abort structured extraction; parse the model JSON afterward.
         val targetParams = params.copy(
-            maxTokens = if (useTriage) 200 else params.maxTokens,
+            // Compact triage JSON should be bounded on small mobile CPUs.
+            maxTokens = if (useTriage) params.maxTokens.coerceIn(24, 96) else params.maxTokens,
             grammar = null
         )
 
@@ -596,6 +655,15 @@ ws ::= [ \t\n\r]*
         lastInferenceMode = InferenceMode.NOT_RUN
         lastInferenceMetrics = null
         lastFinishReason = null
+        lastNativeFinishReason = null
+        lastNativePhase = null
+        lastNativeGeneratedTokens = 0
+        lastNativePromptEvalTimeMs = 0L
+        lastNativeGenerationTimeMs = 0L
+        lastNativeElapsedMs = 0L
+        lastNativeProgressAtTimeout = -1
+        lastNativeStageAtTimeout = null
+        lastNativeTimeoutBudgetMs = 0L
         if (!modelFile.exists() || modelFile.length() < 1024 * 1024) {
             lastInferenceMode = InferenceMode.RULE_FALLBACK
             lastFinishReason = "fallback"
@@ -610,8 +678,13 @@ ws ::= [ \t\n\r]*
         try {
             _inferenceProgress.value = 0
             val timedOut = AtomicBoolean(false)
+            val progressAtDeadline = AtomicInteger(-1)
+            val stageAtDeadline = AtomicInteger(0)
+            val timeoutBudgetAtDeadline = AtomicLong(0L)
             val resultJson = inferenceMutex.withLock {
                 System.loadLibrary("llama_android")
+                // Reset before installing this call's cancellation/deadline handlers.
+                nativeResetCancellation()
                 val poller = progressScope.launch {
                     while (isActive) {
                         val value = runCatching { nativeGetInferenceProgress() }.getOrDefault(-1)
@@ -632,26 +705,29 @@ ws ::= [ \t\n\r]*
                     }
                 }
                 val timeoutWatcher = progressScope.launch {
-                    // The deadline starts before entering JNI, not after model loading.
-                    // Loading/initialization can stall before progress reaches 5; waiting for
-                    // that progress first would leave the timeout disabled indefinitely.
-                    val deadlineMs = params.timeoutMs.coerceAtLeast(1L)
-                    var elapsedMs = 0L
+                    val inferenceDeadlineMs = params.timeoutMs.coerceAtLeast(1L)
+                    // A large GGUF gets a separate finite initialization budget. The
+                    // triage/deep inference budget applies to prompt evaluation/generation.
+                    val initializationDeadlineMs = 90_000L
+                    var initializationElapsedMs = 0L
+                    var inferenceElapsedMs = 0L
                     var deadlineReached = false
                     while (isActive) {
                         delay(50L)
-                        elapsedMs += 50L
-                        if (!deadlineReached && elapsedMs >= deadlineMs) {
+                        val stage = runCatching { nativeGetInferenceStage() }.getOrDefault(0)
+                        if (stage == 0 || stage == 1 || stage == 2) initializationElapsedMs += 50L
+                        else if (stage in 3..5) inferenceElapsedMs += 50L
+                        if (!deadlineReached && (initializationElapsedMs >= initializationDeadlineMs || inferenceElapsedMs >= inferenceDeadlineMs)) {
                             deadlineReached = true
                             timedOut.set(true)
+                            progressAtDeadline.set(runCatching { nativeGetInferenceProgress() }.getOrDefault(-1))
+                            stageAtDeadline.set(stage)
+                            timeoutBudgetAtDeadline.set(if (stage == 0 || stage == 1 || stage == 2) initializationDeadlineMs else inferenceDeadlineMs)
                         }
-                        // JNI resets its cancellation flag at entry. Re-send cancellation
-                        // after the deadline so a slow native startup cannot swallow the signal.
-                        if (deadlineReached || cancellationRequested.get()) {
-                            requestNativeCancellation()
-                        }
+                        if (deadlineReached || cancellationRequested.get()) requestNativeCancellation()
                     }
                 }
+                val nativeCallStartedAtMs = System.currentTimeMillis()
                 try {
                     nativeExecuteLlamaWithGrammar(
                         modelPath = modelFile.absolutePath,
@@ -665,24 +741,47 @@ ws ::= [ \t\n\r]*
                         grammar = params.grammar ?: ""
                     )
                 } finally {
+                    lastNativeElapsedMs = (System.currentTimeMillis() - nativeCallStartedAtMs).coerceAtLeast(0L)
                     cancellationHandle?.dispose()
                     timeoutWatcher.cancel()
                     poller.cancel()
                 }
             }
+            lastNativeProgressAtTimeout = if (timedOut.get()) progressAtDeadline.get() else -1
+            lastNativeStageAtTimeout = if (timedOut.get()) nativeStageName(stageAtDeadline.get()) else null
+            lastNativeTimeoutBudgetMs = if (timedOut.get()) timeoutBudgetAtDeadline.get() else 0L
+            val nativeResult = runCatching { JSONObject(resultJson) }.getOrNull()
+            if (nativeResult != null) {
+                lastNativeFinishReason = if (nativeResult.has("error")) "error" else nativeResult.optString("finish_reason", "unknown")
+                lastNativePhase = nativeResult.optString("phase", nativeStageName(runCatching { nativeGetInferenceStage() }.getOrDefault(0)))
+                lastNativeGeneratedTokens = nativeResult.optInt("tokensGenerated", 0).coerceAtLeast(0)
+                lastNativePromptEvalTimeMs = nativeResult.optLong("promptEvalTimeMs", 0L).coerceAtLeast(0L)
+                lastNativeGenerationTimeMs = nativeResult.optLong("generateTimeMs", 0L).coerceAtLeast(0L)
+            } else {
+                lastNativeFinishReason = "invalid_native_result"
+                lastNativePhase = nativeStageName(runCatching { nativeGetInferenceStage() }.getOrDefault(0))
+            }
             if (timedOut.get()) {
                 _inferenceProgress.value = -1
-                lastInferenceMetrics = null
+                lastInferenceMetrics = if (lastNativeGeneratedTokens > 0 && lastNativeGenerationTimeMs > 0L) {
+                    val tps = lastNativeGeneratedTokens * 1000.0 / lastNativeGenerationTimeMs
+                    InferenceMetrics(lastNativeGeneratedTokens, lastNativePromptEvalTimeMs, lastNativeGenerationTimeMs, tps.toFloat())
+                } else null
                 lastFinishReason = "timeout"
                 lastInferenceMode = InferenceMode.RULE_FALLBACK
-                safeLogW(TAG, "Native llama.cpp-Inferenz überschritt das Zeitlimit (${params.timeoutMs} ms); Regel-Fallback aktiv.")
+                safeLogW(TAG, "Native llama.cpp timed out: budget=${lastNativeTimeoutBudgetMs} ms; phase=${lastNativePhase}; native_finish=${lastNativeFinishReason}; progress_at_deadline=${lastNativeProgressAtTimeout}; stage_at_deadline=${lastNativeStageAtTimeout}; elapsed=${lastNativeElapsedMs} ms")
                 return@withContext executeFallbackInference(prompt, systemPrompt)
             }
-            val result = JSONObject(resultJson)
+            val result = nativeResult ?: throw IllegalStateException("Native inference returned invalid JSON")
             if (result.has("error")) {
                 throw IllegalStateException(result.optString("error", "Native inference failed"))
             }
             val output = result.optString("text", "")
+            lastNativeFinishReason = result.optString("finish_reason", "unknown")
+            lastNativePhase = result.optString("phase", nativeStageName(runCatching { nativeGetInferenceStage() }.getOrDefault(0)))
+            lastNativeGeneratedTokens = result.optInt("tokensGenerated", 0).coerceAtLeast(0)
+            lastNativePromptEvalTimeMs = result.optLong("promptEvalTimeMs", 0L).coerceAtLeast(0L)
+            lastNativeGenerationTimeMs = result.optLong("generateTimeMs", 0L).coerceAtLeast(0L)
             lastFinishReason = result.optString("finish_reason", "unknown")
             if (output.isBlank() && lastFinishReason != "cancelled") throw IllegalStateException("Native inference returned an empty response")
 
@@ -1094,6 +1193,8 @@ ws ::= [ \t\n\r]*
     }
 
     private external fun nativeGetInferenceProgress(): Int
+    private external fun nativeGetInferenceStage(): Int
+    private external fun nativeResetCancellation()
     private external fun nativeCancelInference()
     private external fun nativeUnloadEngine()
     private external fun nativeIsEngineLoaded(): Boolean

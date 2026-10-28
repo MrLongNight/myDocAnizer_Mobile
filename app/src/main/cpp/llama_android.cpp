@@ -25,7 +25,14 @@ struct Engine {
 
 std::mutex g_mutex;
 std::atomic<int> g_inference_progress{-1};
+std::atomic<int> g_inference_stage{0};
 std::atomic<bool> g_cancel_requested{false};
+
+enum NativeStage : int {
+    STAGE_IDLE = 0, STAGE_MODEL_LOAD = 1, STAGE_CONTEXT_INIT = 2,
+    STAGE_PROMPT_PREPARE = 3, STAGE_PROMPT_EVAL = 4, STAGE_GENERATION = 5,
+    STAGE_COMPLETE = 6, STAGE_CANCELLED = 7, STAGE_ERROR = 8
+};
 Engine * g_engine = nullptr;
 std::atomic<bool> g_engine_loaded{false};
 bool g_backend_ready = false;
@@ -34,6 +41,10 @@ bool g_backend_ready = false;
 // Kotlin timeout watcher, this can interrupt a long synchronous llama_decode().
 bool should_abort_inference(void *) {
     return g_cancel_requested.load(std::memory_order_relaxed);
+}
+
+bool continue_model_loading(float, void *) {
+    return !g_cancel_requested.load(std::memory_order_relaxed);
 }
 
 std::string from_jstring(JNIEnv * env, jstring value) {
@@ -74,6 +85,17 @@ std::string error_json(const std::string & message) {
     return "{\"error\":\"" + json_escape(message) + "\"}";
 }
 
+std::string inference_result_json(const std::string & output, int generated, const char * finish_reason,
+                                  int64_t prompt_ms, int64_t generation_ms, float tokens_per_second, const char * phase) {
+    return "{\"text\":\"" + json_escape(output) +
+        "\",\"tokensGenerated\":" + std::to_string(generated) +
+        ",\"finish_reason\":\"" + finish_reason +
+        "\",\"phase\":\"" + phase +
+        "\",\"promptEvalTimeMs\":" + std::to_string(prompt_ms) +
+        ",\"generateTimeMs\":" + std::to_string(generation_ms) +
+        ",\"tokensPerSecond\":" + std::to_string(tokens_per_second) + "}";
+}
+
 void release_engine() {
     g_engine_loaded.store(false, std::memory_order_relaxed);
     if (!g_engine) return;
@@ -99,15 +121,27 @@ bool ensure_engine(const std::string & model_path, int threads, std::string & er
     engine->model_path = model_path;
     engine->threads = threads;
 
+    g_inference_stage.store(STAGE_MODEL_LOAD, std::memory_order_relaxed);
     llama_model_params model_params = llama_model_default_params();
     model_params.n_gpu_layers = 0; // portable CPU-only build
+    model_params.progress_callback = continue_model_loading;
+    model_params.progress_callback_user_data = nullptr;
     engine->model = llama_model_load_from_file(model_path.c_str(), model_params);
     if (!engine->model) {
-        error = "llama.cpp could not load the selected GGUF model";
+        const bool cancelled = g_cancel_requested.load(std::memory_order_relaxed);
+        error = cancelled ? "cancelled:model_load" : "llama.cpp could not load the selected GGUF model";
+        g_inference_stage.store(cancelled ? STAGE_CANCELLED : STAGE_ERROR, std::memory_order_relaxed);
         delete engine;
         return false;
     }
-
+    if (g_cancel_requested.load(std::memory_order_relaxed)) {
+        llama_model_free(engine->model);
+        delete engine;
+        error = "cancelled:model_load";
+        g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
+        return false;
+    }
+    g_inference_stage.store(STAGE_CONTEXT_INIT, std::memory_order_relaxed);
     llama_context_params context_params = llama_context_default_params();
     context_params.n_ctx = kContextSize;
     context_params.n_threads = threads;
@@ -117,12 +151,21 @@ bool ensure_engine(const std::string & model_path, int threads, std::string & er
     context_params.abort_callback_data = nullptr;
     engine->context = llama_init_from_model(engine->model, context_params);
     if (!engine->context) {
-        error = "llama.cpp could not create an inference context";
+        const bool cancelled = g_cancel_requested.load(std::memory_order_relaxed);
+        error = cancelled ? "cancelled:context_init" : "llama.cpp could not create an inference context";
         llama_model_free(engine->model);
         delete engine;
+        g_inference_stage.store(cancelled ? STAGE_CANCELLED : STAGE_ERROR, std::memory_order_relaxed);
         return false;
     }
-
+    if (g_cancel_requested.load(std::memory_order_relaxed)) {
+        llama_free(engine->context);
+        llama_model_free(engine->model);
+        delete engine;
+        error = "cancelled:context_init";
+        g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
+        return false;
+    }
     g_engine = engine;
     g_engine_loaded.store(true, std::memory_order_relaxed);
     return true;
@@ -230,18 +273,35 @@ std::string run_inference(
         int max_tokens,
         const std::string & grammar) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    g_cancel_requested.store(false, std::memory_order_relaxed);
+    // Cancellation is reset before Kotlin starts the watcher; never clear it at JNI entry.
     g_inference_progress.store(5, std::memory_order_relaxed);
+    g_inference_stage.store(STAGE_MODEL_LOAD, std::memory_order_relaxed);
     std::string error;
     threads = std::max(1, std::min(threads, 8));
     if (!ensure_engine(model_path, threads, error)) {
         g_inference_progress.store(-1, std::memory_order_relaxed);
+        if (g_cancel_requested.load(std::memory_order_relaxed) || error.rfind("cancelled:", 0) == 0) {
+            const std::string phase = error.rfind("cancelled:", 0) == 0 ? error.substr(10) : "model_load";
+            g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
+            return inference_result_json("", 0, "cancelled", 0, 0, 0.0f, phase.c_str());
+        }
+        g_inference_stage.store(STAGE_ERROR, std::memory_order_relaxed);
         return error_json(error);
     }
+    if (g_cancel_requested.load(std::memory_order_relaxed)) {
+        g_inference_progress.store(-1, std::memory_order_relaxed);
+        g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
+        return inference_result_json("", 0, "cancelled", 0, 0, 0.0f, "context_init");
+    }
     g_inference_progress.store(15, std::memory_order_relaxed);
-
+    g_inference_stage.store(STAGE_PROMPT_PREPARE, std::memory_order_relaxed);
     const llama_vocab * vocab = llama_model_get_vocab(g_engine->model);
     std::string prompt = build_prompt(g_engine->model, system_prompt, user_prompt);
+    if (g_cancel_requested.load(std::memory_order_relaxed)) {
+        g_inference_progress.store(-1, std::memory_order_relaxed);
+        g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
+        return inference_result_json("", 0, "cancelled", 0, 0, 0.0f, "prompt_prepare");
+    }
     g_inference_progress.store(20, std::memory_order_relaxed);
     const int generation_limit = std::max(1, std::min(max_tokens, 1024));
     const size_t prompt_limit = kContextSize > static_cast<uint32_t>(generation_limit + 16)
@@ -253,21 +313,42 @@ std::string run_inference(
 
     llama_memory_clear(llama_get_memory(g_engine->context), true);
     llama_sampler * sampler = make_sampler(vocab, temperature, top_p, grammar);
-    if (!sampler) return error_json("The supplied GBNF grammar is invalid");
-
+    if (!sampler) {
+        g_inference_stage.store(STAGE_ERROR, std::memory_order_relaxed);
+        return error_json("The supplied GBNF grammar is invalid");
+    }
     const int64_t start_us = llama_time_us();
-    g_inference_progress.store(25, std::memory_order_relaxed);
-    llama_batch batch = llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()));
-    if (llama_decode(g_engine->context, batch) != 0) {
-        llama_sampler_free(sampler);
-        g_inference_progress.store(-1, std::memory_order_relaxed);
+    g_inference_stage.store(STAGE_PROMPT_EVAL, std::memory_order_relaxed);
+    constexpr size_t kPromptDecodeChunkTokens = 32;
+    size_t prompt_offset = 0;
+    while (prompt_offset < tokens.size()) {
         if (g_cancel_requested.load(std::memory_order_relaxed)) {
-            return "{\"text\":\"\",\"tokensGenerated\":0,\"finish_reason\":\"cancelled\",\"promptEvalTimeMs\":0,\"generateTimeMs\":0,\"tokensPerSecond\":0}";
+            const int64_t elapsed_ms = (llama_time_us() - start_us) / 1000;
+            llama_sampler_free(sampler);
+            g_inference_progress.store(-1, std::memory_order_relaxed);
+            g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
+            return inference_result_json("", 0, "cancelled", elapsed_ms, 0, 0.0f, "prompt_eval");
         }
-        return error_json("llama.cpp failed while evaluating the OCR prompt");
+        const size_t chunk_size = std::min(kPromptDecodeChunkTokens, tokens.size() - prompt_offset);
+        llama_batch batch = llama_batch_get_one(tokens.data() + prompt_offset, static_cast<int32_t>(chunk_size));
+        if (llama_decode(g_engine->context, batch) != 0) {
+            const int64_t elapsed_ms = (llama_time_us() - start_us) / 1000;
+            llama_sampler_free(sampler);
+            g_inference_progress.store(-1, std::memory_order_relaxed);
+            if (g_cancel_requested.load(std::memory_order_relaxed)) {
+                g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
+                return inference_result_json("", 0, "cancelled", elapsed_ms, 0, 0.0f, "prompt_eval");
+            }
+            g_inference_stage.store(STAGE_ERROR, std::memory_order_relaxed);
+            return error_json("llama.cpp failed while evaluating the OCR prompt");
+        }
+        prompt_offset += chunk_size;
+        const int prompt_progress = 25 + static_cast<int>((prompt_offset * 19) / tokens.size());
+        g_inference_progress.store(std::min(44, prompt_progress), std::memory_order_relaxed);
     }
     const int64_t prompt_end_us = llama_time_us();
     g_inference_progress.store(45, std::memory_order_relaxed);
+    g_inference_stage.store(STAGE_GENERATION, std::memory_order_relaxed);
 
     std::string output;
     int generated = 0;
@@ -307,11 +388,18 @@ std::string run_inference(
         ? static_cast<float>(generated * 1000.0 / generation_ms) : 0.0f;
 
     const char * finish_reason = decode_failed ? "error" : (cancelled ? "cancelled" : (reached_eog ? "stop" : "length"));
-    return "{\"text\":\"" + json_escape(output) +
-        "\",\"tokensGenerated\":" + std::to_string(generated) +
-        ",\"finish_reason\":\"" + finish_reason + "\",\"promptEvalTimeMs\":" + std::to_string(prompt_ms) +
-        ",\"generateTimeMs\":" + std::to_string(generation_ms) +
-        ",\"tokensPerSecond\":" + std::to_string(tokens_per_second) + "}";
+    const char * phase = decode_failed ? "generation_error" : (cancelled ? "generation" : "complete");
+    if (decode_failed) {
+        g_inference_progress.store(-1, std::memory_order_relaxed);
+        g_inference_stage.store(STAGE_ERROR, std::memory_order_relaxed);
+    } else if (cancelled) {
+        g_inference_progress.store(-1, std::memory_order_relaxed);
+        g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
+    } else {
+        g_inference_progress.store(100, std::memory_order_relaxed);
+        g_inference_stage.store(STAGE_COMPLETE, std::memory_order_relaxed);
+    }
+    return inference_result_json(output, generated, finish_reason, prompt_ms, generation_ms, tokens_per_second, phase);
 }
 
 } // namespace
@@ -319,6 +407,18 @@ std::string run_inference(
 extern "C" JNIEXPORT jint JNICALL
 Java_com_example_service_LlamaCppInferenceEngine_nativeGetInferenceProgress(JNIEnv *, jobject) {
     return static_cast<jint>(g_inference_progress.load(std::memory_order_relaxed));
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_example_service_LlamaCppInferenceEngine_nativeGetInferenceStage(JNIEnv *, jobject) {
+    return static_cast<jint>(g_inference_stage.load(std::memory_order_relaxed));
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_example_service_LlamaCppInferenceEngine_nativeResetCancellation(JNIEnv *, jobject) {
+    g_cancel_requested.store(false, std::memory_order_relaxed);
+    g_inference_stage.store(STAGE_IDLE, std::memory_order_relaxed);
+    g_inference_progress.store(-1, std::memory_order_relaxed);
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -341,6 +441,8 @@ Java_com_example_service_LlamaCppInferenceEngine_nativeUnloadEngine(JNIEnv *, jo
     std::lock_guard<std::mutex> lock(g_mutex);
     release_engine();
     g_inference_progress.store(-1, std::memory_order_relaxed);
+    g_inference_stage.store(STAGE_IDLE, std::memory_order_relaxed);
+    g_cancel_requested.store(false, std::memory_order_relaxed);
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
