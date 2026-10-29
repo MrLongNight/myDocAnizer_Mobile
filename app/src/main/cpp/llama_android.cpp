@@ -174,6 +174,34 @@ bool ensure_engine(const std::string & model_path, int threads, std::string & er
         g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
         return false;
     }
+    // Warm up one BOS token before exposing the engine to the first real prompt.
+    // Model weights are memory-mapped by default; the first prompt otherwise pays
+    // the cold-page-in cost while also being subject to the short inference deadline.
+    const llama_vocab * warmup_vocab = llama_model_get_vocab(engine->model);
+    const llama_token warmup_token = llama_vocab_bos(warmup_vocab);
+    if (warmup_token != LLAMA_TOKEN_NULL) {
+        g_inference_progress.store(12, std::memory_order_relaxed);
+        const int64_t warmup_start_us = llama_time_us();
+        llama_token token_for_batch = warmup_token;
+        const llama_batch warmup_batch = llama_batch_get_one(&token_for_batch, 1);
+        const int warmup_result = llama_decode(engine->context, warmup_batch);
+        const int64_t warmup_elapsed_ms = (llama_time_us() - warmup_start_us) / 1000;
+        if (warmup_result != 0 || g_cancel_requested.load(std::memory_order_relaxed)) {
+            const bool cancelled = g_cancel_requested.load(std::memory_order_relaxed) || warmup_result == 2;
+            error = cancelled ? "cancelled:model_warmup" : "llama.cpp model warm-up failed";
+            llama_free(engine->context);
+            llama_model_free(engine->model);
+            delete engine;
+            g_inference_progress.store(-1, std::memory_order_relaxed);
+            g_inference_stage.store(cancelled ? STAGE_CANCELLED : STAGE_ERROR, std::memory_order_relaxed);
+            return false;
+        }
+        llama_memory_clear(llama_get_memory(engine->context), true);
+        __android_log_print(ANDROID_LOG_INFO, LOG_TAG,
+                            "Model warm-up complete in %lld ms",
+                            static_cast<long long>(warmup_elapsed_ms));
+    }
+
     g_engine = engine;
     g_engine_loaded.store(true, std::memory_order_relaxed);
     return true;

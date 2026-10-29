@@ -44,7 +44,7 @@ import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.io.FileInputStream
 
-private const val DOC_TIMEOUT_MS = 90_000L
+private const val DOC_TIMEOUT_MS = 115_000L
 
 data class LlmDiagnosticRow(
     val name: String, val elapsedMs: Long, val mode: String, val finishReason: String,
@@ -181,7 +181,9 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
         setStatus("Modell-Kurztest läuft")
         startTracking()
         try {
-            val response = withTimeout(15_000L) {
+            // Native engine initialization has a separate 90-second watchdog. Let that
+            // finish, then give the short inference its own 12-second budget.
+            val response = withTimeout(110_000L) {
                 engine.executeChatInferenceWithTools(
                     modelFile = modelFile,
                     userMessage = "Antworte nur: OK",
@@ -257,8 +259,8 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
                     stoppedEarly = true
                     setStatus(
                         when (firstRow.status) {
-                            "TIMEOUT" -> "Automatisch gestoppt: Modell-Kurzlauf hat das Zeitlimit erreicht"
-                            "FALLBACK" -> "Automatisch gestoppt: keine native Modellantwort"
+                            "TIMEOUT" -> "Automatisch gestoppt: native Prompt-Auswertung der Ersterkennung hat das Zeitlimit erreicht"
+                            "FALLBACK" -> "Automatisch gestoppt: Ersterkennung lieferte keine native Modellantwort"
                             else -> "Automatisch gestoppt: Fehler bei der Ersterkennung"
                         }
                     )
@@ -280,8 +282,8 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
                     stoppedEarly = true
                     setStatus(
                         when (secondRow.status) {
-                            "TIMEOUT" -> "Automatisch gestoppt: Tiefenanalyse hat das Zeitlimit erreicht"
-                            "FALLBACK" -> "Automatisch gestoppt: keine native Modellantwort in der Tiefenanalyse"
+                            "TIMEOUT" -> "Automatisch gestoppt: native Prompt-Auswertung der Tiefenanalyse hat das Zeitlimit erreicht"
+                            "FALLBACK" -> "Automatisch gestoppt: Tiefenanalyse lieferte keine native Modellantwort"
                             else -> "Automatisch gestoppt: Fehler bei der Tiefenanalyse"
                         }
                     )

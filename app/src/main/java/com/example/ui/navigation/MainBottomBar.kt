@@ -175,7 +175,7 @@ fun MainBottomBar(
                     colors = navItemColors,
                     modifier = Modifier
                         .weight(1.25f)
-                        .padding(horizontal = 12.dp)
+                        .padding(horizontal = 2.dp)
                         .onGloballyPositioned { coords ->
                             val bounds = coords.boundsInRoot()
                             val elemBounds = TourElementBounds(
@@ -277,7 +277,7 @@ fun MainBottomBar(
                     colors = navItemColors,
                     modifier = Modifier
                         .weight(1.25f)
-                        .padding(horizontal = 12.dp)
+                        .padding(horizontal = 2.dp)
                         .testTag("nav_item_batch_inbox")
                 )
             }

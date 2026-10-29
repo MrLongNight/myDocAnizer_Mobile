@@ -86,6 +86,34 @@ object SplashSoundSynthesizer {
         }.start()
     }
 
+    /**
+     * Short resonant water-drop with a descending pitch and two soft ripple partials.
+     * Times are relative to the animation's shock-wave finish (in seconds).
+     */
+    private fun waterDropSample(
+        time: Double,
+        onset: Double,
+        initialFrequency: Double,
+        amplitude: Double
+    ): Double {
+        val age = time - onset
+        if (age < 0.0 || age > 0.46) return 0.0
+
+        val attack = (age / 0.003).coerceIn(0.0, 1.0)
+        val decay = kotlin.math.exp(-8.5 * age)
+        val baseFrequency = 220.0
+        val phase = 2.0 * Math.PI * (
+            baseFrequency * age +
+                (initialFrequency - baseFrequency) * (1.0 - kotlin.math.exp(-8.0 * age)) / 8.0
+            )
+        val body = sin(phase) * decay
+        val ripple = sin(2.0 * Math.PI * initialFrequency * 0.72 * age) *
+            kotlin.math.exp(-14.0 * age) * 0.18
+        val shimmer = sin(2.0 * Math.PI * initialFrequency * 1.45 * age) *
+            kotlin.math.exp(-20.0 * age) * 0.12
+        return amplitude * attack * (body * 0.62 + ripple + shimmer)
+    }
+
     private fun generateSamples(): ShortArray {
         val sampleRate = 44100
         val durationSeconds = 4.5
@@ -157,6 +185,15 @@ object SplashSoundSynthesizer {
 
                 val fadeOut = if (t > 4.20) ((4.5 - t) / 0.30).coerceIn(0.0, 1.0) else 1.0
                 sample += chimeWave * attack * fadeOut * 0.85
+            }
+
+            // 4. Water ripple synced with the visible shock wave at 82.5% (~3.71 s).
+            // A low-volume drop, followed by lighter echoes, sits above the fading chime.
+            if (t >= 3.71) {
+                sample += waterDropSample(t, 3.71, 1450.0, 0.15)
+                sample += waterDropSample(t, 3.81, 980.0, 0.085)
+                sample += waterDropSample(t, 3.96, 720.0, 0.065)
+                sample += waterDropSample(t, 4.13, 560.0, 0.045)
             }
 
             data[i] = (sample.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
