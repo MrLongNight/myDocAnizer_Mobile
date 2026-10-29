@@ -5,6 +5,24 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_link_options("-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
 
+# --- Performance (kritisch) --------------------------------------------------
+# Der Android-Gradle-Plugin ruft CMake fuer Debug-Varianten mit
+# CMAKE_BUILD_TYPE=Debug auf (-O0, Asserts an). llama.cpp/ggml laeuft dann etwa
+# 50-100x langsamer. Die CI baut und verteilt ausschliesslich assembleDebug
+# (.github/workflows/build-apk.yml). Diagnose-Messung auf dem Geraet:
+# 4 von 161 Prompt-Tokens in 20 s (Qwen2.5-1.5B Q4_K_M).
+# "cppFlags += -O3" in build.gradle.kts reicht NICHT: Es betrifft nur C++ und wird
+# von -O0 aus CMAKE_CXX_FLAGS_DEBUG ueberschrieben (spaeteres -O gewinnt); der
+# ggml-Kern ist ausserdem C. Darum die Flags fuer C und C++ hier erzwingen.
+foreach(_lang C CXX)
+    foreach(_cfg DEBUG RELWITHDEBINFO)
+        set(CMAKE_${_lang}_FLAGS_${_cfg} "-O3 -DNDEBUG" CACHE STRING
+            "Optimierte Flags auch fuer Debug (llama.cpp)" FORCE)
+    endforeach()
+endforeach()
+message(STATUS "llama_android: CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} "
+               "C_FLAGS_DEBUG=${CMAKE_C_FLAGS_DEBUG} CXX_FLAGS_DEBUG=${CMAKE_CXX_FLAGS_DEBUG}")
+
 # llama.cpp is pinned as a Git submodule. Compile the real engine only for
 # 64-bit ABIs; 32-bit builds get a tiny JNI stub so the app remains installable
 # and the Kotlin layer can deliberately use its rule/OCR fallback.
