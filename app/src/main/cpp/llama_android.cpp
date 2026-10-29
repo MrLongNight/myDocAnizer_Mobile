@@ -147,6 +147,11 @@ bool ensure_engine(const std::string & model_path, int threads, std::string & er
     g_inference_stage.store(STAGE_CONTEXT_INIT, std::memory_order_relaxed);
     llama_context_params context_params = llama_context_default_params();
     context_params.n_ctx = kContextSize;
+    // Let llama.cpp split prompt batches internally. The app-level decode loop
+    // previously called llama_decode() once per four tokens, paying repeated
+    // scheduler/graph overhead on mobile CPUs.
+    context_params.n_batch = 512;
+    context_params.n_ubatch = 32;
     context_params.n_threads = threads;
     context_params.n_threads_batch = threads;
     context_params.op_offload = false;
@@ -327,40 +332,48 @@ std::string run_inference(
     }
     const int64_t start_us = llama_time_us();
     g_inference_stage.store(STAGE_PROMPT_EVAL, std::memory_order_relaxed);
-    // Smaller batches avoid leaving the UI frozen at one value while a large
-    // prompt batch is evaluated, and make cancellation checks more frequent.
-    constexpr size_t kPromptDecodeChunkTokens = 4;
-    size_t prompt_offset = 0;
-    while (prompt_offset < tokens.size()) {
-        if (g_cancel_requested.load(std::memory_order_relaxed)) {
-            const int64_t elapsed_ms = (llama_time_us() - start_us) / 1000;
-            llama_sampler_free(sampler);
-            g_inference_progress.store(-1, std::memory_order_relaxed);
+    // The native decoder already splits this batch into n_ubatch-sized pieces
+    // and checks abort_callback while evaluating it. Passing the prompt once
+    // avoids repeated tiny llama_decode() calls and lets matrix kernels process
+    // a useful token batch on mobile CPUs.
+    g_inference_progress.store(21, std::memory_order_relaxed);
+    if (g_cancel_requested.load(std::memory_order_relaxed)) {
+        const int64_t elapsed_ms = (llama_time_us() - start_us) / 1000;
+        llama_sampler_free(sampler);
+        g_inference_progress.store(-1, std::memory_order_relaxed);
+        g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
+        return inference_result_json("", 0, "cancelled", elapsed_ms, 0, 0.0f, "prompt_eval",
+                                     static_cast<int>(tokens.size()), 0);
+    }
+
+    const llama_batch prompt_batch = llama_batch_get_one(
+        tokens.data(), static_cast<int32_t>(tokens.size()));
+    const int decode_result = llama_decode(g_engine->context, prompt_batch);
+    const int64_t prompt_decode_end_us = llama_time_us();
+    const llama_pos max_evaluated_position =
+        llama_memory_seq_pos_max(llama_get_memory(g_engine->context), 0);
+    const int evaluated_prompt_tokens = max_evaluated_position < 0 ? 0 :
+        static_cast<int>(std::min<size_t>(
+            tokens.size(), static_cast<size_t>(max_evaluated_position) + 1U));
+
+    if (decode_result != 0 || g_cancel_requested.load(std::memory_order_relaxed)) {
+        const int64_t elapsed_ms = (prompt_decode_end_us - start_us) / 1000;
+        llama_sampler_free(sampler);
+        g_inference_progress.store(-1, std::memory_order_relaxed);
+        const bool cancelled = g_cancel_requested.load(std::memory_order_relaxed) || decode_result == 2;
+        if (cancelled) {
             g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
             return inference_result_json("", 0, "cancelled", elapsed_ms, 0, 0.0f, "prompt_eval",
-                                         static_cast<int>(tokens.size()), static_cast<int>(prompt_offset));
+                                         static_cast<int>(tokens.size()), evaluated_prompt_tokens);
         }
-        const size_t chunk_size = std::min(kPromptDecodeChunkTokens, tokens.size() - prompt_offset);
-        const int active_progress = 21 + static_cast<int>((prompt_offset * 23) / tokens.size());
-        g_inference_progress.store(std::min(44, active_progress), std::memory_order_relaxed);
-        llama_batch batch = llama_batch_get_one(tokens.data() + prompt_offset, static_cast<int32_t>(chunk_size));
-        if (llama_decode(g_engine->context, batch) != 0) {
-            const int64_t elapsed_ms = (llama_time_us() - start_us) / 1000;
-            llama_sampler_free(sampler);
-            g_inference_progress.store(-1, std::memory_order_relaxed);
-            if (g_cancel_requested.load(std::memory_order_relaxed)) {
-                g_inference_stage.store(STAGE_CANCELLED, std::memory_order_relaxed);
-                return inference_result_json("", 0, "cancelled", elapsed_ms, 0, 0.0f, "prompt_eval",
-                                             static_cast<int>(tokens.size()), static_cast<int>(prompt_offset));
-            }
-            g_inference_stage.store(STAGE_ERROR, std::memory_order_relaxed);
-            return error_json("llama.cpp failed while evaluating the OCR prompt");
-        }
-        prompt_offset += chunk_size;
-        const int prompt_progress = 21 + static_cast<int>((prompt_offset * 23) / tokens.size());
-        g_inference_progress.store(std::min(44, prompt_progress), std::memory_order_relaxed);
+        g_inference_stage.store(STAGE_ERROR, std::memory_order_relaxed);
+        return error_json(decode_result == 1
+            ? "llama.cpp could not find a KV-cache slot for the OCR prompt"
+            : "llama.cpp failed while evaluating the OCR prompt");
     }
-    const int64_t prompt_end_us = llama_time_us();
+
+    g_inference_progress.store(44, std::memory_order_relaxed);
+    const int64_t prompt_end_us = prompt_decode_end_us;
     g_inference_progress.store(45, std::memory_order_relaxed);
     g_inference_stage.store(STAGE_GENERATION, std::memory_order_relaxed);
 
