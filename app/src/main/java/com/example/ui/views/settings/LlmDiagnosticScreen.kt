@@ -26,6 +26,7 @@ import com.example.BuildConfig
 import com.example.service.DocRuleRepository
 import com.example.service.LlamaCppInferenceEngine
 import com.example.service.LlmService
+import com.example.service.NativeBuildInfo
 import com.example.ui.DocAnizerViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -156,6 +157,7 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
             "Größe: " + file.length() + " Bytes",
             "GGUF-Signatur: " + signature,
             "ABI: " + android.os.Build.SUPPORTED_ABIS.joinToString(),
+            "Build-Info: " + NativeBuildInfo.describe(context),
             "Java-Heap: " + heap.java + " Bytes",
             "Native-Heap: " + heap.native + " Bytes",
             "Engine geladen: " + engine.nativeEngineLoaded(),
@@ -428,7 +430,7 @@ class LlmDiagnosticRunner(private val context: Context, private val service: Llm
 
     fun report(): String = buildString {
         appendLine("LLM-Diagnose")
-        appendLine("Berichtsversion=3")
+        appendLine("Berichtsversion=4")
         appendLine("Exportzeitpunkt=" + java.time.Instant.now().toString())
         appendLine("Hinweis=Der Bericht darf auch während eines laufenden oder festhängenden Tests exportiert werden.")
         appendLine("Zeitpunkt (Epoch-ms)=" + System.currentTimeMillis())
