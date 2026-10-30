@@ -151,7 +151,10 @@ bool ensure_engine(const std::string & model_path, int threads, std::string & er
     // previously called llama_decode() once per four tokens, paying repeated
     // scheduler/graph overhead on mobile CPUs.
     context_params.n_batch = 512;
-    context_params.n_ubatch = 32;
+    // Keep native cancellation responsive even for very short prompts. With
+    // n_ubatch=32 a 24-token prompt becomes one indivisible compute block, so
+    // the abort callback cannot run until that entire block has finished.
+    context_params.n_ubatch = 1;
     context_params.n_threads = threads;
     context_params.n_threads_batch = threads;
     context_params.op_offload = false;
